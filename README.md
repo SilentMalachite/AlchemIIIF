@@ -194,6 +194,55 @@ docker exec <container_id> /app/bin/migrate
 
 ---
 
+## 📦 OTP リリースビルド
+
+Docker を使わずにローカルでリリースビルドを作成できます。
+
+### 前提条件
+
+- Elixir 1.15+ / Erlang/OTP 24+
+- PostgreSQL 15+
+- libvips / poppler-utils
+- Node.js / npm
+
+### ビルド手順
+
+```bash
+# 1. 本番用依存を取得
+MIX_ENV=prod mix deps.get
+
+# 2. npm 依存をインストール
+cd assets && npm install && cd ..
+
+# 3. アプリケーションをコンパイル
+MIX_ENV=prod mix compile
+
+# 4. アセットをビルド・ダイジェスト
+MIX_ENV=prod mix assets.deploy
+
+# 5. OTP リリースを生成
+MIX_ENV=prod mix release
+```
+
+> **⚠️ 注意**: Phoenix 1.8 の colocated hooks を使用しているため、`mix compile` を `mix assets.deploy` より先に実行する必要があります。
+
+### 起動
+
+```bash
+# 環境変数を設定
+export DATABASE_URL="ecto://user:pass@localhost/alchem_iiif_prod"
+export SECRET_KEY_BASE="$(mix phx.gen.secret)"
+export PHX_HOST="localhost"
+
+# データベースマイグレーション
+_build/prod/rel/alchem_iiif/bin/migrate
+
+# サーバー起動
+_build/prod/rel/alchem_iiif/bin/server
+```
+
+---
+
 ## 📁 ディレクトリ構成
 
 ```
