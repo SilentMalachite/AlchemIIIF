@@ -7,6 +7,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   """
   use AlchemIiifWeb, :live_view
 
+  import AlchemIiifWeb.WizardComponents
+
   alias AlchemIiif.Ingestion
 
   @nudge_amount 5
@@ -28,7 +30,10 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:image_url, image_url)
      |> assign(:crop_data, nil)
      |> assign(:caption, "")
-     |> assign(:label, "")}
+     |> assign(:label, "")
+     |> assign(:site, "")
+     |> assign(:period, "")
+     |> assign(:artifact_type, "")}
   end
 
   @impl true
@@ -52,6 +57,21 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   end
 
   @impl true
+  def handle_event("update_site", %{"site" => site}, socket) do
+    {:noreply, assign(socket, :site, site)}
+  end
+
+  @impl true
+  def handle_event("update_period", %{"period" => period}, socket) do
+    {:noreply, assign(socket, :period, period)}
+  end
+
+  @impl true
+  def handle_event("update_artifact_type", %{"artifact_type" => artifact_type}, socket) do
+    {:noreply, assign(socket, :artifact_type, artifact_type)}
+  end
+
+  @impl true
   def handle_event("finalize_crop", _params, socket) do
     crop_data = socket.assigns.crop_data
 
@@ -63,10 +83,13 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
           geometry: crop_data,
           caption: socket.assigns.caption,
-          label: socket.assigns.label
+          label: socket.assigns.label,
+          site: socket.assigns.site,
+          period: socket.assigns.period,
+          artifact_type: socket.assigns.artifact_type
         })
 
-      {:noreply, push_navigate(socket, to: ~p"/inspector/finalize/#{updated_image.id}")}
+      {:noreply, push_navigate(socket, to: ~p"/lab/finalize/#{updated_image.id}")}
     end
   end
 
@@ -74,7 +97,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   def render(assigns) do
     ~H"""
     <div class="inspector-container">
-      <.wizard_header current_step={3} />
+      <.wizard_header current_step={@current_step} />
 
       <div class="crop-area">
         <h2 class="section-title">図版の範囲を指定してください</h2>
@@ -170,11 +193,53 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
               name="label"
             />
           </div>
+
+          <div class="form-group">
+            <label for="site-input" class="form-label">📍 遺跡名（任意）</label>
+            <input
+              type="text"
+              id="site-input"
+              class="form-input"
+              value={@site}
+              phx-blur="update_site"
+              phx-value-site={@site}
+              placeholder="例: 吉野ヶ里遺跡"
+              name="site"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="period-input" class="form-label">⏳ 時代（任意）</label>
+            <input
+              type="text"
+              id="period-input"
+              class="form-input"
+              value={@period}
+              phx-blur="update_period"
+              phx-value-period={@period}
+              placeholder="例: 縄文時代"
+              name="period"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="artifact-type-input" class="form-label">🏾 遺物種別（任意）</label>
+            <input
+              type="text"
+              id="artifact-type-input"
+              class="form-input"
+              value={@artifact_type}
+              phx-blur="update_artifact_type"
+              phx-value-artifact_type={@artifact_type}
+              placeholder="例: 土器"
+              name="artifact_type"
+            />
+          </div>
         </div>
 
         <div class="action-bar">
           <.link
-            navigate={~p"/inspector/browse/#{@extracted_image.pdf_source_id}"}
+            navigate={~p"/lab/browse/#{@extracted_image.pdf_source_id}"}
             class="btn-secondary btn-large"
           >
             ← 戻る
@@ -190,32 +255,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         </div>
       </div>
     </div>
-    """
-  end
-
-  # ウィザードヘッダーコンポーネント
-  defp wizard_header(assigns) do
-    ~H"""
-    <nav class="wizard-header" aria-label="進捗ステップ">
-      <ol class="wizard-steps">
-        <li class={"wizard-step #{if @current_step >= 1, do: "active", else: ""}"}>
-          <span class="step-number">1</span>
-          <span class="step-label">アップロード</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 2, do: "active", else: ""}"}>
-          <span class="step-number">2</span>
-          <span class="step-label">ページ選択</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 3, do: "active", else: ""}"}>
-          <span class="step-number">3</span>
-          <span class="step-label">クロップ</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 4, do: "active", else: ""}"}>
-          <span class="step-number">4</span>
-          <span class="step-label">保存</span>
-        </li>
-      </ol>
-    </nav>
     """
   end
 end

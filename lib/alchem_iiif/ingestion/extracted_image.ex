@@ -19,6 +19,12 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
     field :label, :string
     # 生成された PTIF のパス
     field :ptif_path, :string
+    # 検索用メタデータ（遺跡名、時代、遺物種別）
+    field :site, :string
+    field :period, :string
+    field :artifact_type, :string
+    # ステータス (draft / pending_review / published)
+    field :status, :string, default: "draft"
 
     belongs_to :pdf_source, AlchemIiif.Ingestion.PdfSource
     has_one :iiif_manifest, AlchemIiif.IIIF.Manifest
@@ -36,9 +42,14 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
       :geometry,
       :caption,
       :label,
-      :ptif_path
+      :ptif_path,
+      :site,
+      :period,
+      :artifact_type,
+      :status
     ])
     |> validate_required([:pdf_source_id, :page_number])
+    |> validate_inclusion(:status, ~w(draft pending_review published))
     |> foreign_key_constraint(:pdf_source_id)
   end
 end

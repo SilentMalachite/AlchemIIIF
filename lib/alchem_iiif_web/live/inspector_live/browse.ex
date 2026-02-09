@@ -6,6 +6,8 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   """
   use AlchemIiifWeb, :live_view
 
+  import AlchemIiifWeb.WizardComponents
+
   alias AlchemIiif.Ingestion
 
   @impl true
@@ -79,7 +81,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
             image_path: image_path
           })
 
-        {:noreply, push_navigate(socket, to: ~p"/inspector/crop/#{extracted_image.id}")}
+        {:noreply, push_navigate(socket, to: ~p"/lab/crop/#{extracted_image.id}")}
     end
   end
 
@@ -87,7 +89,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   def render(assigns) do
     ~H"""
     <div class="inspector-container">
-      <.wizard_header current_step={2} />
+      <.wizard_header current_step={@current_step} />
 
       <div class="browse-area">
         <h2 class="section-title">ページを選択してください</h2>
@@ -116,7 +118,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
         </div>
 
         <div class="action-bar">
-          <.link navigate={~p"/inspector"} class="btn-secondary btn-large">
+          <.link navigate={~p"/lab"} class="btn-secondary btn-large">
             ← 戻る
           </.link>
 
@@ -131,32 +133,6 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
         </div>
       </div>
     </div>
-    """
-  end
-
-  # ウィザードヘッダーコンポーネント
-  defp wizard_header(assigns) do
-    ~H"""
-    <nav class="wizard-header" aria-label="進捗ステップ">
-      <ol class="wizard-steps">
-        <li class={"wizard-step #{if @current_step >= 1, do: "active", else: ""}"}>
-          <span class="step-number">1</span>
-          <span class="step-label">アップロード</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 2, do: "active", else: ""}"}>
-          <span class="step-number">2</span>
-          <span class="step-label">ページ選択</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 3, do: "active", else: ""}"}>
-          <span class="step-number">3</span>
-          <span class="step-label">クロップ</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 4, do: "active", else: ""}"}>
-          <span class="step-number">4</span>
-          <span class="step-label">保存</span>
-        </li>
-      </ol>
-    </nav>
     """
   end
 end

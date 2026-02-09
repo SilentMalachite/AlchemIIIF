@@ -2,8 +2,11 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
   @moduledoc """
   ウィザード Step 4: ファイナライズ画面。
   PTIF生成、メタデータのDB保存、IIIF Manifest の登録を行います。
+  保存完了後に「レビューに提出」ボタンを表示します。
   """
   use AlchemIiifWeb, :live_view
+
+  import AlchemIiifWeb.WizardComponents
 
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.ImageProcessor
@@ -62,7 +65,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
     case result do
       :ok ->
         # ExtractedImage を更新
-        {:ok, _image} =
+        {:ok, updated_image} =
           Ingestion.update_extracted_image(extracted_image, %{ptif_path: ptif_path})
 
         # IIIF Manifest レコードを作成
@@ -88,6 +91,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
          socket
          |> assign(:processing, false)
          |> assign(:completed, true)
+         |> assign(:extracted_image, updated_image)
          |> assign(:manifest_identifier, identifier)
          |> put_flash(:info, "図版の保存が完了しました！")}
 
@@ -100,10 +104,24 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
   end
 
   @impl true
+  def handle_event("submit_for_review", _params, socket) do
+    case Ingestion.submit_for_review(socket.assigns.extracted_image) do
+      {:ok, updated_image} ->
+        {:noreply,
+         socket
+         |> assign(:extracted_image, updated_image)
+         |> put_flash(:info, "レビューに提出しました！管理者の承認をお待ちください。")}
+
+      {:error, :invalid_status_transition} ->
+        {:noreply, put_flash(socket, :error, "この画像はレビューに提出できません。")}
+    end
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
     <div class="inspector-container">
-      <.wizard_header current_step={4} />
+      <.wizard_header current_step={@current_step} />
 
       <div class="finalize-area">
         <%= if @completed do %>
@@ -114,6 +132,13 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
             <p class="section-description">
               図版が正常に処理され、IIIF形式で保存されました。
             </p>
+
+            <%!-- ステータスバッジ --%>
+            <div class="status-badge-container">
+              <span class={"status-badge status-#{@extracted_image.status}"}>
+                {status_label(@extracted_image.status)}
+              </span>
+            </div>
 
             <div class="result-info">
               <div class="info-item">
@@ -129,7 +154,30 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
             </div>
 
             <div class="action-bar">
-              <.link navigate={~p"/inspector"} class="btn-primary btn-large">
+              <%= if @extracted_image.status == "draft" do %>
+                <button
+                  type="button"
+                  class="btn-primary btn-large btn-submit-review"
+                  phx-click="submit_for_review"
+                  aria-label="レビューに提出する"
+                >
+                  📋 レビューに提出
+                </button>
+              <% end %>
+
+              <%= if @extracted_image.status == "pending_review" do %>
+                <div class="review-submitted-notice" role="status">
+                  <span class="notice-icon">⏳</span> レビュー待ちです。管理者の承認をお待ちください。
+                </div>
+              <% end %>
+
+              <%= if @extracted_image.status == "published" do %>
+                <div class="published-notice" role="status">
+                  <span class="notice-icon">🔒</span> この図版は公開済みです。
+                </div>
+              <% end %>
+
+              <.link navigate={~p"/lab"} class="btn-secondary btn-large">
                 📤 新しいPDFをアップロード
               </.link>
             </div>
@@ -183,7 +231,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
 
           <div class="action-bar">
             <.link
-              navigate={~p"/inspector/crop/#{@extracted_image.id}"}
+              navigate={~p"/lab/crop/#{@extracted_image.id}"}
               class="btn-secondary btn-large"
             >
               ← 戻る
@@ -208,29 +256,11 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
     """
   end
 
-  # ウィザードヘッダーコンポーネント
-  defp wizard_header(assigns) do
-    ~H"""
-    <nav class="wizard-header" aria-label="進捗ステップ">
-      <ol class="wizard-steps">
-        <li class={"wizard-step #{if @current_step >= 1, do: "active", else: ""}"}>
-          <span class="step-number">1</span>
-          <span class="step-label">アップロード</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 2, do: "active", else: ""}"}>
-          <span class="step-number">2</span>
-          <span class="step-label">ページ選択</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 3, do: "active", else: ""}"}>
-          <span class="step-number">3</span>
-          <span class="step-label">クロップ</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 4, do: "active", else: ""}"}>
-          <span class="step-number">4</span>
-          <span class="step-label">保存</span>
-        </li>
-      </ol>
-    </nav>
-    """
-  end
+  # --- プライベート関数 ---
+
+  # ステータスラベルの日本語表示
+  defp status_label("draft"), do: "📝 下書き"
+  defp status_label("pending_review"), do: "⏳ レビュー待ち"
+  defp status_label("published"), do: "🔒 公開済み"
+  defp status_label(_), do: "不明"
 end

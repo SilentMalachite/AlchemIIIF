@@ -4,7 +4,7 @@
 
 ---
 
-## [0.1.0] - 2026-02-08
+## [0.1.0] - 2026-02-09
 
 ### 🎉 初回リリース
 
@@ -18,12 +18,24 @@
   - キャプション・ラベル手入力
   - PTIF 自動生成 (vix/libvips)
   - IIIF Manifest 自動登録
+  - 共通ウィザードコンポーネント (`wizard_components.ex`)
 
 - **IIIF サーバー**
   - Image API v3.0 (`/iiif/image/:identifier/...`)
   - Presentation API v3.0 (`/iiif/manifest/:identifier`)
   - info.json エンドポイント
   - タイルキャッシュ機構
+
+- **検索機能**
+  - 全文検索コンテキスト (`AlchemIiif.Search`)
+  - 検索用 LiveView (`SearchLive`)
+  - `extracted_images` への検索フィールド追加マイグレーション
+
+- **Stage-Gate ワークフロー**
+  - Lab (内部) / Museum (公開) の分離
+  - 承認ワークフロー LiveView (`ApprovalLive`)
+  - ギャラリー LiveView (`GalleryLive`)
+  - `extracted_images` へのステータスカラム追加マイグレーション
 
 - **データベース**
   - PostgreSQL + JSONB メタデータ
@@ -34,6 +46,10 @@
   - 高コントラストカラーパレット
   - ウィザードパターンによる線形フロー
   - 即時フィードバック
+
+- **テスト**
+  - コンテキスト・スキーマ・コントローラ・LiveView のテスト
+  - テスト用ファクトリ (`test/support/factory.ex`)
 
 - **デプロイ**
   - マルチステージ Dockerfile (libvips + poppler-utils)

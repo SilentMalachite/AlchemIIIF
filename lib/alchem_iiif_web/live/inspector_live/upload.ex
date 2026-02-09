@@ -5,6 +5,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   """
   use AlchemIiifWeb, :live_view
 
+  import AlchemIiifWeb.WizardComponents
+
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.PdfProcessor
 
@@ -63,7 +65,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
              socket
              |> assign(:uploading, false)
              |> put_flash(:info, "PDF を正常にアップロードしました！（#{page_count}ページ）")
-             |> push_navigate(to: ~p"/inspector/browse/#{pdf_source.id}")}
+             |> push_navigate(to: ~p"/lab/browse/#{pdf_source.id}")}
 
           {:error, reason} ->
             Ingestion.update_pdf_source(pdf_source, %{status: "error"})
@@ -86,7 +88,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   def render(assigns) do
     ~H"""
     <div class="inspector-container">
-      <.wizard_header current_step={1} />
+      <.wizard_header current_step={@current_step} />
 
       <div class="upload-area">
         <h2 class="section-title">PDFファイルをアップロード</h2>
@@ -131,32 +133,6 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
         </form>
       </div>
     </div>
-    """
-  end
-
-  # ウィザードヘッダーコンポーネント
-  defp wizard_header(assigns) do
-    ~H"""
-    <nav class="wizard-header" aria-label="進捗ステップ">
-      <ol class="wizard-steps">
-        <li class={"wizard-step #{if @current_step >= 1, do: "active", else: ""}"}>
-          <span class="step-number">1</span>
-          <span class="step-label">アップロード</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 2, do: "active", else: ""}"}>
-          <span class="step-number">2</span>
-          <span class="step-label">ページ選択</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 3, do: "active", else: ""}"}>
-          <span class="step-number">3</span>
-          <span class="step-label">クロップ</span>
-        </li>
-        <li class={"wizard-step #{if @current_step >= 4, do: "active", else: ""}"}>
-          <span class="step-number">4</span>
-          <span class="step-label">保存</span>
-        </li>
-      </ol>
-    </nav>
     """
   end
 end

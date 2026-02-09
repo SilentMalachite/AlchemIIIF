@@ -27,73 +27,80 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
       manifest ->
         image = Repo.get!(ExtractedImage, manifest.extracted_image_id)
 
-        # 画像の寸法を取得
-        dimensions =
-          if image.ptif_path && File.exists?(image.ptif_path) do
-            case ImageProcessor.get_image_dimensions(image.ptif_path) do
-              {:ok, dims} -> dims
-              _ -> %{width: 1000, height: 1000}
+        # published 以外の画像は非公開
+        if image.status != "published" do
+          conn
+          |> put_status(:forbidden)
+          |> json(%{error: "この画像はまだ公開されていません"})
+        else
+          # 画像の寸法を取得
+          dimensions =
+            if image.ptif_path && File.exists?(image.ptif_path) do
+              case ImageProcessor.get_image_dimensions(image.ptif_path) do
+                {:ok, dims} -> dims
+                _ -> %{width: 1000, height: 1000}
+              end
+            else
+              %{width: 1000, height: 1000}
             end
-          else
-            %{width: 1000, height: 1000}
-          end
 
-        base_url = AlchemIiifWeb.Endpoint.url()
+          base_url = AlchemIiifWeb.Endpoint.url()
 
-        manifest_json = %{
-          "@context" => "http://iiif.io/api/presentation/3/context.json",
-          "id" => "#{base_url}/iiif/manifest/#{identifier}",
-          "type" => "Manifest",
-          "label" => manifest.metadata["label"] || %{"none" => [identifier]},
-          "summary" => manifest.metadata["summary"] || %{"none" => [""]},
-          "metadata" => build_metadata(manifest.metadata),
-          "items" => [
-            %{
-              "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1",
-              "type" => "Canvas",
-              "width" => dimensions.width,
-              "height" => dimensions.height,
-              "label" => manifest.metadata["label"] || %{"none" => [identifier]},
-              "items" => [
-                %{
-                  "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1",
-                  "type" => "AnnotationPage",
-                  "items" => [
-                    %{
-                      "id" =>
-                        "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1/annotation/1",
-                      "type" => "Annotation",
-                      "motivation" => "painting",
-                      "body" => %{
-                        "id" => "#{base_url}/iiif/image/#{identifier}/full/max/0/default.jpg",
-                        "type" => "Image",
-                        "format" => "image/jpeg",
-                        "width" => dimensions.width,
-                        "height" => dimensions.height,
-                        "service" => [
-                          %{
-                            "id" => "#{base_url}/iiif/image/#{identifier}",
-                            "type" => "ImageService3",
-                            "profile" => "level1"
-                          }
-                        ]
-                      },
-                      "target" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
+          manifest_json = %{
+            "@context" => "http://iiif.io/api/presentation/3/context.json",
+            "id" => "#{base_url}/iiif/manifest/#{identifier}",
+            "type" => "Manifest",
+            "label" => manifest.metadata["label"] || %{"none" => [identifier]},
+            "summary" => manifest.metadata["summary"] || %{"none" => [""]},
+            "metadata" => build_metadata(manifest.metadata),
+            "items" => [
+              %{
+                "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1",
+                "type" => "Canvas",
+                "width" => dimensions.width,
+                "height" => dimensions.height,
+                "label" => manifest.metadata["label"] || %{"none" => [identifier]},
+                "items" => [
+                  %{
+                    "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1",
+                    "type" => "AnnotationPage",
+                    "items" => [
+                      %{
+                        "id" =>
+                          "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1/annotation/1",
+                        "type" => "Annotation",
+                        "motivation" => "painting",
+                        "body" => %{
+                          "id" => "#{base_url}/iiif/image/#{identifier}/full/max/0/default.jpg",
+                          "type" => "Image",
+                          "format" => "image/jpeg",
+                          "width" => dimensions.width,
+                          "height" => dimensions.height,
+                          "service" => [
+                            %{
+                              "id" => "#{base_url}/iiif/image/#{identifier}",
+                              "type" => "ImageService3",
+                              "profile" => "level1"
+                            }
+                          ]
+                        },
+                        "target" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
 
-        conn
-        |> put_resp_content_type("application/ld+json")
-        |> put_resp_header(
-          "access-control-allow-origin",
-          "*"
-        )
-        |> json(manifest_json)
+          conn
+          |> put_resp_content_type("application/ld+json")
+          |> put_resp_header(
+            "access-control-allow-origin",
+            "*"
+          )
+          |> json(manifest_json)
+        end
     end
   end
 

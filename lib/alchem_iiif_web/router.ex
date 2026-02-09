@@ -19,11 +19,16 @@ defmodule AlchemIiifWeb.Router do
 
     get "/", PageController, :home
 
-    # Inspector ウィザード (Manual Ingestion Pipeline)
-    live "/inspector", InspectorLive.Upload, :index
-    live "/inspector/browse/:pdf_source_id", InspectorLive.Browse, :browse
-    live "/inspector/crop/:image_id", InspectorLive.Crop, :crop
-    live "/inspector/finalize/:image_id", InspectorLive.Finalize, :finalize
+    # 公開ギャラリー (Museum) — 読み取り専用、published のみ
+    live "/gallery", GalleryLive, :index
+
+    # Lab 名前空間 (Worker Space)
+    live "/lab", InspectorLive.Upload, :index
+    live "/lab/browse/:pdf_source_id", InspectorLive.Browse, :browse
+    live "/lab/crop/:image_id", InspectorLive.Crop, :crop
+    live "/lab/finalize/:image_id", InspectorLive.Finalize, :finalize
+    live "/lab/search", SearchLive, :index
+    live "/lab/approval", ApprovalLive, :index
   end
 
   # IIIF API エンドポイント

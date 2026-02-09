@@ -55,4 +55,48 @@ defmodule AlchemIiif.Ingestion do
     |> ExtractedImage.changeset(attrs)
     |> Repo.update()
   end
+
+  # === ステータス遷移 ===
+
+  @doc "レビュー提出 (draft → pending_review)"
+  def submit_for_review(%ExtractedImage{status: "draft"} = image) do
+    update_extracted_image(image, %{status: "pending_review"})
+  end
+
+  def submit_for_review(_image), do: {:error, :invalid_status_transition}
+
+  @doc "承認して公開 (pending_review → published)"
+  def approve_and_publish(%ExtractedImage{status: "pending_review"} = image) do
+    update_extracted_image(image, %{status: "published"})
+  end
+
+  def approve_and_publish(_image), do: {:error, :invalid_status_transition}
+
+  @doc "差し戻し (pending_review → draft)"
+  def reject_to_draft(%ExtractedImage{status: "pending_review"} = image) do
+    update_extracted_image(image, %{status: "draft"})
+  end
+
+  def reject_to_draft(_image), do: {:error, :invalid_status_transition}
+
+  @doc "レビュー待ちの画像一覧"
+  def list_pending_review_images do
+    from(e in ExtractedImage,
+      where: e.status == "pending_review",
+      where: not is_nil(e.ptif_path),
+      order_by: [desc: e.inserted_at],
+      preload: [:iiif_manifest]
+    )
+    |> Repo.all()
+  end
+
+  @doc "Lab用: 全ステータスの画像一覧（PTIFあり）"
+  def list_all_images_for_lab do
+    from(e in ExtractedImage,
+      where: not is_nil(e.ptif_path),
+      order_by: [desc: e.inserted_at],
+      preload: [:iiif_manifest]
+    )
+    |> Repo.all()
+  end
 end
