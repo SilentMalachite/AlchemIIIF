@@ -1,14 +1,14 @@
 defmodule AlchemIiifWeb.InspectorLive.Upload do
   @moduledoc """
   ウィザード Step 1: PDF アップロード画面。
-  PDFファイルをアップロードし、自動的にPNG画像に変換します。
+  PDFファイルをアップロードし、並列パイプラインで自動的にPNG画像に変換します。
   """
   use AlchemIiifWeb, :live_view
 
   import AlchemIiifWeb.WizardComponents
 
   alias AlchemIiif.Ingestion
-  alias AlchemIiif.Ingestion.PdfProcessor
+  alias AlchemIiif.Pipeline
 
   @impl true
   def mount(_params, _session, socket) do
@@ -50,31 +50,20 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
             status: "converting"
           })
 
-        # PNG変換を実行 (バックグラウンドで)
-        output_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+        # パイプラインIDを生成
+        pipeline_id = Pipeline.generate_pipeline_id()
 
-        case PdfProcessor.convert_to_images(pdf_path, output_dir) do
-          {:ok, %{page_count: page_count}} ->
-            {:ok, _updated} =
-              Ingestion.update_pdf_source(pdf_source, %{
-                page_count: page_count,
-                status: "ready"
-              })
+        # 非同期で並列パイプラインを開始
+        Task.start(fn ->
+          Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id)
+        end)
 
-            {:noreply,
-             socket
-             |> assign(:uploading, false)
-             |> put_flash(:info, "PDF を正常にアップロードしました！（#{page_count}ページ）")
-             |> push_navigate(to: ~p"/lab/browse/#{pdf_source.id}")}
-
-          {:error, reason} ->
-            Ingestion.update_pdf_source(pdf_source, %{status: "error"})
-
-            {:noreply,
-             socket
-             |> assign(:uploading, false)
-             |> assign(:error_message, reason)}
-        end
+        # PipelineLive に遷移して進捗を表示
+        {:noreply,
+         socket
+         |> assign(:uploading, false)
+         |> put_flash(:info, "PDF変換パイプラインを開始しました！")
+         |> push_navigate(to: ~p"/lab/pipeline/#{pipeline_id}")}
 
       _ ->
         {:noreply,

@@ -29,6 +29,7 @@ defmodule AlchemIiifWeb.Router do
     live "/lab/finalize/:image_id", InspectorLive.Finalize, :finalize
     live "/lab/search", SearchLive, :index
     live "/lab/approval", ApprovalLive, :index
+    live "/lab/pipeline/:pipeline_id", PipelineLive, :show
   end
 
   # IIIF API エンドポイント

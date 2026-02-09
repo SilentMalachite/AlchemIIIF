@@ -12,8 +12,8 @@ defmodule AlchemIiif.Application do
       AlchemIiif.Repo,
       {DNSCluster, query: Application.get_env(:alchem_iiif, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: AlchemIiif.PubSub},
-      # Start a worker by calling: AlchemIiif.Worker.start_link(arg)
-      # {AlchemIiif.Worker, arg},
+      # リソース監視 GenServer（CPU/メモリの動的検出）
+      AlchemIiif.Pipeline.ResourceMonitor,
       # Start to serve requests, typically the last entry
       AlchemIiifWeb.Endpoint
     ]
