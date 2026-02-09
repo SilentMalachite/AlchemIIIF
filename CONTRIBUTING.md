@@ -101,6 +101,13 @@ mix test
 
 # 特定のファイル
 mix test test/alchem_iiif/ingestion_test.exs
+mix test test/alchem_iiif/search_test.exs
+
+# LiveView テスト
+mix test test/alchem_iiif_web/live/
+
+# コントローラーテスト
+mix test test/alchem_iiif_web/controllers/
 
 # 特定のテスト (行番号指定)
 mix test test/alchem_iiif/ingestion_test.exs:42
@@ -110,7 +117,10 @@ mix test test/alchem_iiif/ingestion_test.exs:42
 
 - 新機能には必ずテストを追加
 - Ecto スキーマのバリデーションテスト
+- コンテキストモジュールのビジネスロジックテスト
 - コントローラーの統合テスト
+- LiveView のレンダリング・イベントテスト
+- テストデータは `test/support/factory.ex` のファクトリを使用
 - エッジケースのカバー
 
 ---
@@ -168,9 +178,12 @@ Issue を作成する際は、以下の情報を含めてください：
 
 ### 作成前チェックリスト
 
-- [ ] `mix format` を実行した
-- [ ] `mix compile --warnings-as-errors` が通る
-- [ ] `mix test` が全て通る
+```bash
+# 以下のエイリアスで一括チェックが可能です
+mix precommit
+```
+
+- [ ] `mix precommit` が通る（compile, deps, format, test を一括実行）
 - [ ] 必要に応じてドキュメントを更新した
 - [ ] アクセシビリティ要件を満たしている
 

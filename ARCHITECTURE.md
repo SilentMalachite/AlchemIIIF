@@ -3,32 +3,48 @@
 ## 概要
 
 AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用した Elixir/Phoenix アプリケーションです。
-「取り込み (Ingestion)」と「配信 (Delivery)」を明確なモジュール境界で分離しつつ、
+「取り込み (Ingestion)」「検索 (Search)」「配信 (Delivery)」を明確なモジュール境界で分離しつつ、
 単一コードベースの運用効率を維持します。
+
+**Stage-Gate モデル** により、内部作業空間 (Lab) と公開空間 (Museum) を分離し、
+承認フローを通じて品質を管理します。
 
 ---
 
 ## モジュール構成
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    AlchemIIIF                           │
-├──────────────────────┬──────────────────────────────────┤
-│   取り込みモジュール │         配信モジュール            │
-│   (Ingestion)       │         (IIIF Delivery)          │
-├──────────────────────┼──────────────────────────────────┤
-│ • PDF アップロード    │ • Image API v3.0                │
-│ • pdftoppm 変換      │ • Presentation API v3.0         │
-│ • 手動クロップ       │ • タイルキャッシュ               │
-│ • PTIF 生成          │ • JSON-LD Manifest              │
-│ • メタデータ入力     │                                  │
-└──────────┬───────────┴──────────────┬───────────────────┘
-           │                          │
-           ▼                          ▼
-┌──────────────────────────────────────────────────────────┐
-│                  PostgreSQL (JSONB)                      │
-│  pdf_sources | extracted_images | iiif_manifests         │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                         AlchemIIIF                               │
+├──────────────────┬──────────────────┬────────────────────────────┤
+│  取り込みモジュール │  検索モジュール   │       配信モジュール        │
+│  (Ingestion)     │  (Search)        │    (IIIF Delivery)        │
+├──────────────────┼──────────────────┼────────────────────────────┤
+│ • PDF アップロード │ • 全文検索 (FTS) │ • Image API v3.0          │
+│ • pdftoppm 変換   │ • ファセット検索  │ • Presentation API v3.0   │
+│ • 手動クロップ    │ • メタデータ検索  │ • タイルキャッシュ          │
+│ • PTIF 生成       │                  │ • JSON-LD Manifest        │
+│ • メタデータ入力  │                  │                            │
+└────────┬─────────┴────────┬─────────┴──────────────┬─────────────┘
+         │                  │                        │
+         ▼                  ▼                        ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     PostgreSQL (JSONB)                            │
+│  pdf_sources | extracted_images | iiif_manifests                  │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Stage-Gate フロー
+
+```
+Lab (内部)                 承認ゲート              Museum (公開)
+────────────                ──────────              ──────────────
+Upload → Browse →          ApprovalLive            GalleryLive
+Crop → Finalize            (pending_review →       (published のみ表示)
+(status: draft)             published)
+       ↓                       ↓                       ↓
+  SearchLive               ステータス変更          IIIF API 配信
+  (Lab 内検索)
 ```
 
 ---
@@ -39,22 +55,31 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 
 ```
 PDF ファイル
-    │  ① アップロード
+    │  ① アップロード (/lab)
     ▼
 [pdftoppm] ──── 300 DPI PNG 生成
     │
     ▼
-サムネイルグリッド
+サムネイルグリッド (/lab/browse/:id)
     │  ② ユーザーがページ選択
     ▼
-Cropper.js ──── 手動クロップ + Nudge 調整
-    │  ③ メタデータ手入力
+Cropper.js ──── 手動クロップ + Nudge 調整 (/lab/crop/:id)
+    │  ③ メタデータ手入力 (caption, label, site, period, artifact_type)
     ▼
-[vix/libvips] ── クロップ画像 → PTIF 生成
+[vix/libvips] ── クロップ画像 → PTIF 生成 (/lab/finalize/:id)
     │
     ▼
 PostgreSQL ──── geometry(JSONB) + metadata 保存
                 IIIF Manifest レコード登録
+                status: draft
+```
+
+### 承認パイプライン (Stage-Gate)
+
+```
+Lab (draft) → 承認申請 (pending_review) → 承認 (published) → Museum
+                                         ↗
+                 差し戻し → (draft に戻る)
 ```
 
 ### 配信パイプライン (Delivery)
@@ -63,10 +88,10 @@ PostgreSQL ──── geometry(JSONB) + metadata 保存
 IIIF クライアント (Mirador, Universal Viewer 等)
     │
     ▼
-/iiif/manifest/{id} ──── JSON-LD Manifest 返却
+/iiif/manifest/{id} ──── JSON-LD Manifest 返却 (published のみ)
     │
     ▼
-/iiif/image/{id}/{region}/{size}/{rotation}/{quality}.{format}
+/iiif/image/{id}/{region}/{size}/{rotation}/{quality}
     │
     ├── キャッシュあり → priv/static/iiif_cache から配信
     │
@@ -82,21 +107,33 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 ### Entity-Relationship 図
 
 ```
-┌──────────────┐    1:N    ┌───────────────────┐    1:1    ┌────────────────┐
-│ pdf_sources  │ ────────> │ extracted_images  │ ────────> │ iiif_manifests │
-├──────────────┤           ├───────────────────┤           ├────────────────┤
-│ id           │           │ id                │           │ id             │
-│ filename     │           │ pdf_source_id(FK) │           │ extracted_     │
-│ page_count   │           │ page_number       │           │   image_id(FK) │
-│ status       │           │ image_path        │           │ identifier     │
-│ inserted_at  │           │ geometry (JSONB)  │           │ metadata(JSONB)│
-│ updated_at   │           │ caption           │           │ inserted_at    │
-└──────────────┘           │ label             │           │ updated_at     │
-                           │ ptif_path         │           └────────────────┘
-                           │ inserted_at       │
-                           │ updated_at        │
-                           └───────────────────┘
+┌──────────────┐    1:N    ┌────────────────────────┐    1:1    ┌────────────────┐
+│ pdf_sources  │ ────────> │   extracted_images     │ ────────> │ iiif_manifests │
+├──────────────┤           ├────────────────────────┤           ├────────────────┤
+│ id           │           │ id                     │           │ id             │
+│ filename     │           │ pdf_source_id(FK)      │           │ extracted_     │
+│ page_count   │           │ page_number            │           │   image_id(FK) │
+│ status       │           │ image_path             │           │ identifier     │
+│ inserted_at  │           │ geometry (JSONB)       │           │ metadata(JSONB)│
+│ updated_at   │           │ caption                │           │ inserted_at    │
+└──────────────┘           │ label                  │           │ updated_at     │
+                           │ ptif_path              │           └────────────────┘
+                           │ status                 │
+                           │ site                   │
+                           │ period                 │
+                           │ artifact_type          │
+                           │ inserted_at            │
+                           │ updated_at             │
+                           └────────────────────────┘
 ```
+
+### status カラムのライフサイクル
+
+| 値 | 説明 |
+|:---|:---|
+| `draft` | 初期状態（Lab で作成直後） |
+| `pending_review` | 承認申請済み |
+| `published` | 承認済み・公開中 |
 
 ### JSONB カラムの詳細
 
@@ -125,6 +162,24 @@ IIIF クライアント (Mirador, Universal Viewer 等)
   }
 }
 ```
+
+---
+
+## ルーティング構成
+
+| パス | モジュール | 説明 |
+|:---|:---|:---|
+| `/` | `PageController` | トップページ |
+| `/gallery` | `GalleryLive` | 公開ギャラリー (Museum) |
+| `/lab` | `InspectorLive.Upload` | Lab: PDF アップロード |
+| `/lab/browse/:id` | `InspectorLive.Browse` | Lab: ページ選択 |
+| `/lab/crop/:id` | `InspectorLive.Crop` | Lab: クロップ |
+| `/lab/finalize/:id` | `InspectorLive.Finalize` | Lab: 保存 |
+| `/lab/search` | `SearchLive` | Lab: 検索 |
+| `/lab/approval` | `ApprovalLive` | Lab: 承認管理 |
+| `/iiif/image/:id/...` | `ImageController` | IIIF Image API v3.0 |
+| `/iiif/manifest/:id` | `ManifestController` | IIIF Presentation API v3.0 |
+| `/api/health` | `HealthController` | ヘルスチェック |
 
 ---
 
