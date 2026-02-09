@@ -38,7 +38,7 @@ RUN mkdir config
 COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
 
-# assets のビルド
+# ソースコードのコピー
 COPY priv priv
 COPY lib lib
 COPY assets assets
@@ -46,11 +46,13 @@ COPY assets assets
 # npm 依存のインストール (cropperjs)
 RUN cd assets && npm install
 
+# アプリケーションのコンパイル
+# ※ Phoenix 1.8 の colocated hooks を使用するため、
+#   assets.deploy の前に compile が必要
+RUN mix compile
+
 # アセットのデプロイ
 RUN mix assets.deploy
-
-# アプリケーションのコンパイル
-RUN mix compile
 
 # runtime.exs をコピー
 COPY config/runtime.exs config/
@@ -74,6 +76,7 @@ RUN apt-get update -y && \
     ca-certificates \
     libvips \
     poppler-utils \
+    wget \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 # ロケール設定
@@ -102,6 +105,6 @@ USER app
 
 # ヘルスチェック
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-4000}/api/health || exit 1
+    CMD wget -qO- http://localhost:${PORT:-4000}/api/health || exit 1
 
 CMD ["/app/bin/server"]
