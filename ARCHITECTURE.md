@@ -53,11 +53,12 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 ### Stage-Gate フロー
 
 ```
-Lab (内部)                 承認ゲート              Museum (公開)
-────────────                ──────────              ──────────────
-Upload → Browse →          ApprovalLive            GalleryLive
-Crop → Finalize            (pending_review →       (published のみ表示)
-(status: draft)             published)
+Lab (内部)                 承認ゲート                  Museum (公開)
+────────────                ──────────                  ──────────────
+Upload → Browse →          ApprovalLive /              GalleryLive
+Crop → Finalize            ReviewLive (/admin)         (published のみ表示)
+(status: draft)             (pending_review →
+                            published)
        ↓                       ↓                       ↓
   SearchLive               ステータス変更          IIIF API 配信
   (Lab 内検索)
@@ -94,6 +95,7 @@ PostgreSQL ──── geometry(JSONB) + metadata 保存
 
 ```
 Lab (draft) → 承認申請 (pending_review) → 承認 (published) → Museum
+                                         (Admin: /admin/review)
                                          ↗
                  差し戻し → (draft に戻る)
 ```
@@ -193,6 +195,7 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 | `/lab/finalize/:id` | `InspectorLive.Finalize` | Lab: 保存 |
 | `/lab/search` | `SearchLive` | Lab: 検索 |
 | `/lab/approval` | `ApprovalLive` | Lab: 承認管理 |
+| `/admin/review` | `ReviewLive` | Admin: 最終承認 (Review) |
 | `/iiif/image/:id/...` | `ImageController` | IIIF Image API v3.0 |
 | `/iiif/manifest/:id` | `ManifestController` | IIIF Presentation API v3.0 |
 | `/api/health` | `HealthController` | ヘルスチェック |

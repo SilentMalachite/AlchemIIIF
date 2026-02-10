@@ -4,6 +4,19 @@
 
 ---
 
+## [0.1.2] - 2026-02-10
+
+### 🛡️ Admin Review Dashboard
+
+#### 追加
+
+- **管理者レビュー機能 (`/admin/review`)**
+  - 公開前の最終品質ゲートとして機能
+  - Nudge Inspector による詳細確認とクロップ微調整
+  - Validation Badge による自動チェック結果表示
+  - 承認 (`published`) / 差し戻し (`draft`) のステータス管理
+  - Optimistic UI によるスムーズな操作体験
+
 ## [0.1.1] - 2026-02-10
 
 ### 🎨 UI テーマ更新
