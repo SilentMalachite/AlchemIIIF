@@ -2,7 +2,7 @@ import Config
 
 # Configure your database
 config :alchem_iiif, AlchemIiif.Repo,
-  username: "hiro",
+  username: "anchu",
   password: "",
   hostname: "localhost",
   database: "alchem_iiif_dev",

@@ -6,7 +6,7 @@ import Config
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :alchem_iiif, AlchemIiif.Repo,
-  username: "hiro",
+  username: "anchu",
   password: "",
   hostname: "localhost",
   database: "alchem_iiif_test#{System.get_env("MIX_TEST_PARTITION")}",

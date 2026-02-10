@@ -108,6 +108,7 @@ defmodule AlchemIiif.MixProject do
       precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"],
       # Mozilla-Standard レビューゲート（単一コマンドで品質チェック）
       review: [
+        "review.check_db_version",
         "compile --warnings-as-errors",
         "credo --strict",
         "sobelow --config",

@@ -4,6 +4,18 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   公開前の最終品質ゲートとして、status == "pending_review" の画像を
   管理者がレビューし、承認または差し戻しを行う画面です。
 
+  ## PostgreSQL 15+ 要件（VCI 122 Optimized）
+
+  本システムは PostgreSQL 15.0 以上を必須としています。理由は以下の通りです：
+
+  - **JSONB 最適化**: 考古学メタデータ（遺跡名・時代・遺物種別等）を JSONB で
+    格納しており、PostgreSQL 15 で導入された JSONB のパフォーマンス改善
+    （重複キー排除の最適化、`jsonb_path_query` の高速化）を活用しています。
+  - **MERGE ステートメント**: PostgreSQL 15 で標準 SQL 準拠の `MERGE` 文が
+    サポートされ、Upsert 処理の可読性と保守性が向上しています。
+
+  `mix review` パイプラインにてバージョン検証が自動実行されます。
+
   ## 機能
   - 大型カードグリッドで pending_review 画像を一覧表示
   - Nudge Inspector（サイドパネル）でフル画像を確認
