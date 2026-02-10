@@ -4,11 +4,20 @@ defmodule AlchemIiifWeb.IIIF.ImageController do
   エンドポイント: /iiif/image/:identifier/:region/:size/:rotation/:quality.:format
 
   PTIF ファイルから動的にタイルを生成し、キャッシュと共に返します。
+
+  ## なぜこの設計か
+
+  - **ファイルシステムキャッシュ**: 同じタイルリクエストが繰り返される場合
+    （ビューアのズーム/パン操作）、libvips の処理を省略して直接ファイルを
+    返すことで応答速度を大幅に改善します。Varnish や CDN に比べて
+    運用が簡単で、単一サーバー構成に適しています。
+  - **CORS ヘッダー**: IIIF ビューア（Mirador 等）はクロスオリジンで
+    画像を取得するため、`access-control-allow-origin: *` が必須です。
   """
   use AlchemIiifWeb, :controller
 
-  alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Repo
 
   import Ecto.Query

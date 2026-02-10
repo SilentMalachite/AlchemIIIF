@@ -4,12 +4,21 @@ defmodule AlchemIiif.Search do
   PostgreSQL Full-Text Search (FTS) と JSONB フィルタリングによる
   画像メタデータ検索を提供します。
 
-  名前空間分離: 既存の AlchemIiif.Ingestion モジュールには依存しますが、
-  変更は一切行いません。読み取り専用のクエリのみ実行します。
+  ## なぜこの設計か
+
+  - **`simple` 辞書を採用**: PostgreSQL の `english` 辞書はステミング処理が
+    日本語に対応していません。`simple` 辞書はトークンをそのまま保持するため、
+    日本語テキストでも安全に FTS を実行できます。
+  - **LIKE フォールバック**: FTS だけでは部分一致検索ができないため、
+    `ilike` による部分一致を併用しています。ユーザーが遺跡名の一部だけを
+    入力した場合でもヒットするようにするためです。
+  - **名前空間分離**: `AlchemIiif.Ingestion` モジュールのスキーマを参照しますが、
+    変更は一切行いません。Phoenix Contexts の設計思想に従い、読み取り専用の
+    クエリのみ実行することで、責任の境界を明確にしています。
   """
   import Ecto.Query
-  alias AlchemIiif.Repo
   alias AlchemIiif.Ingestion.ExtractedImage
+  alias AlchemIiif.Repo
 
   @doc """
   画像をテキスト検索 + フィルターで検索します。

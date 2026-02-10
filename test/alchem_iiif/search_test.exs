@@ -73,7 +73,7 @@ defmodule AlchemIiif.SearchTest do
       create_test_images()
 
       results = Search.search_images("縄文土器")
-      assert length(results) >= 1
+      assert results != []
       assert Enum.any?(results, &(&1.label == "fig-001"))
     end
 
@@ -81,7 +81,7 @@ defmodule AlchemIiif.SearchTest do
       create_test_images()
 
       results = Search.search_images("fig-002")
-      assert length(results) >= 1
+      assert results != []
       assert Enum.any?(results, &(&1.label == "fig-002"))
     end
 
@@ -89,7 +89,7 @@ defmodule AlchemIiif.SearchTest do
       create_test_images()
 
       results = Search.search_images("登呂遺跡")
-      assert length(results) >= 1
+      assert results != []
       assert Enum.any?(results, &(&1.site == "登呂遺跡"))
     end
 

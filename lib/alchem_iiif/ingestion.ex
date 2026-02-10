@@ -2,10 +2,20 @@ defmodule AlchemIiif.Ingestion do
   @moduledoc """
   取り込みパイプラインのコンテキストモジュール。
   PDFアップロード、ページ画像変換、クロップ、PTIF生成を管理します。
+
+  ## なぜこの設計か
+
+  - **Phoenix Contexts パターン**: LiveView やコントローラーから直接 `Repo` を
+    呼ばず、このコンテキストを経由することで、ビジネスロジックを一箇所に集約します。
+    将来的に内部実装が変わっても、公開 API を維持すれば呼び出し側に影響しません。
+  - **Stage-Gate ステータス遷移**: `draft → pending_review → published` の
+    3段階ステータスは、内部ワークスペース（Lab）と公開ギャラリー（Museum）を
+    分離するための設計です。明示的なステータス遷移関数により、不正な遷移を
+    コンパイル時ではなく実行時にパターンマッチで防ぎます。
   """
   import Ecto.Query
+  alias AlchemIiif.Ingestion.{ExtractedImage, PdfSource}
   alias AlchemIiif.Repo
-  alias AlchemIiif.Ingestion.{PdfSource, ExtractedImage}
 
   # === PdfSource ===
 

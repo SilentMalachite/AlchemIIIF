@@ -6,6 +6,18 @@ defmodule AlchemIiif.Pipeline.ResourceMonitor do
   - macOS / Linux 対応のメモリ検出
   - PTIF 変換の最大同時実行数を計算する「メモリガード」
   - UI レスポンシブネスのための CPU 予約
+
+  ## なぜこの設計か
+
+  - **GenServer で状態保持**: リソース情報を定期的にリフレッシュし、
+    複数のパイプラインリクエスト間で一貫した情報を提供します。
+    毎回 `vm_stat` や `/proc/meminfo` を呼ぶオーバーヘッドを避けます。
+  - **メモリガード**: PTIF 変換は1件あたり約500MB のメモリを消費する
+    重い処理です。利用可能メモリの70%を上限とすることで、BEAM VM や
+    PostgreSQL など他のプロセスのメモリを確保し、スワッピングを防ぎます。
+  - **CPU 1コア予約**: Phoenix LiveView の UI 更新とWebSocket 通信は
+    リアルタイム性が求められます。処理パイプラインに全コアを使うと
+    UI がフリーズするため、最低1コアを Web サーバー用に確保しています。
   """
   use GenServer
   require Logger

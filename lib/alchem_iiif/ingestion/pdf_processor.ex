@@ -1,6 +1,15 @@
 defmodule AlchemIiif.Ingestion.PdfProcessor do
   @moduledoc """
   pdftoppm を使用して PDF ページを高解像度 PNG 画像に変換するモジュール。
+
+  ## なぜこの設計か
+
+  - **pdftoppm を採用**: Poppler スイートの一部であり、フォント埋め込みや
+    日本語レンダリングに優れています。ImageMagick の `convert` コマンドと
+    比較して、PDF 処理に特化しており出力品質が安定しています。
+  - **300 DPI**: 考古学資料の画像では細部の確認が重要です。72 DPI では
+    テキストが不鮮明になり、600 DPI はファイルサイズが過大になるため、
+    300 DPI を品質とサイズのバランス点として選択しています。
   """
 
   @doc """
@@ -30,7 +39,9 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
              "300",
              pdf_path,
              output_prefix
-           ], stderr_to_stdout: true) do
+           ],
+           stderr_to_stdout: true
+         ) do
       {_output, 0} ->
         # 生成された画像ファイルを取得
         image_paths =

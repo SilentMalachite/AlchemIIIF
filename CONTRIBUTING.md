@@ -33,6 +33,12 @@ mix phx.server
 mix test
 ```
 
+4. 品質チェックを実行
+
+```bash
+mix review
+```
+
 ---
 
 ## 📋 開発プロセス
@@ -179,11 +185,13 @@ Issue を作成する際は、以下の情報を含めてください：
 ### 作成前チェックリスト
 
 ```bash
-# 以下のエイリアスで一括チェックが可能です
-mix precommit
+# 以下のコマンドで品質チェックが可能です
+mix review       # 推奨: compile + credo + sobelow + dialyzer を一括実行
+mix precommit    # compile + deps + format + test を一括実行
 ```
 
-- [ ] `mix precommit` が通る（compile, deps, format, test を一括実行）
+- [ ] `mix review` が通る（コンパイル, Credo, Sobelow, Dialyzer）
+- [ ] `mix precommit` が通る（compile, deps, format, test）
 - [ ] 必要に応じてドキュメントを更新した
 - [ ] アクセシビリティ要件を満たしている
 

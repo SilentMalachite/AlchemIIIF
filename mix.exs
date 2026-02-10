@@ -11,7 +11,26 @@ defmodule AlchemIiif.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      # ExDoc 設定
+      name: "AlchemIIIF",
+      source_url: "https://github.com/SilentMalachite/AlchemIIIF",
+      docs: [
+        main: "AlchemIiif",
+        output: "docs",
+        extras: ["README.md", "ARCHITECTURE.md", "IIIF_SPEC.md"],
+        groups_for_modules: [
+          検索: [AlchemIiif.Search],
+          取り込み: [~r/AlchemIiif\.Ingestion/],
+          "配信（IIIF）": [~r/AlchemIiif\.IIIF/, ~r/AlchemIiifWeb\.IIIF/],
+          パイプライン: [~r/AlchemIiif\.Pipeline/],
+          Web: [~r/AlchemIiifWeb/]
+        ]
+      ],
+      # Dialyzer 設定
+      dialyzer: [
+        ignore_warnings: ".dialyzer_ignore.exs"
+      ]
     ]
   end
 
@@ -27,7 +46,7 @@ defmodule AlchemIiif.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :test, review: :dev]
     ]
   end
 
@@ -59,7 +78,12 @@ defmodule AlchemIiif.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       # 画像処理: libvips ラッパー (PTIF生成・タイル切り出し)
-      {:vix, "~> 0.33"}
+      {:vix, "~> 0.33"},
+      # 品質・セキュリティツール
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false}
     ]
   end
 
@@ -81,7 +105,15 @@ defmodule AlchemIiif.MixProject do
         "esbuild alchem_iiif --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warning-as-errors", "deps.unlock --unused", "format", "test"],
+      # Mozilla-Standard レビューゲート（単一コマンドで品質チェック）
+      review: [
+        "compile --warnings-as-errors",
+        "credo --strict",
+        "sobelow --config",
+        "dialyzer",
+        "review.summary"
+      ]
     ]
   end
 end

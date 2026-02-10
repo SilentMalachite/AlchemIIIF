@@ -51,6 +51,18 @@
   - コンテキスト・スキーマ・コントローラ・LiveView のテスト
   - テスト用ファクトリ (`test/support/factory.ex`)
 
+- **並列処理パイプライン**
+  - リソース適応型並列処理 (`AlchemIiif.Pipeline`)
+  - CPU/メモリ自動検出・動的並列度調整 (`AlchemIiif.Pipeline.ResourceMonitor`)
+  - メモリガード（空きメモリ 20% 未満で並列度縮小）
+  - PubSub リアルタイム進捗通知
+
+- **品質チェック (`mix review`)**
+  - Credo コードスタイル検査 (`--strict`)
+  - Sobelow セキュリティ解析
+  - Dialyzer 型チェック
+  - PASS/FAIL サマリータスク (`mix review.summary`)
+
 - **デプロイ**
   - マルチステージ Dockerfile (libvips + poppler-utils)
   - OTP リリースサポート

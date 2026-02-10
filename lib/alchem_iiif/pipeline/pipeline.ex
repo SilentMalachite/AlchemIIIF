@@ -4,12 +4,23 @@ defmodule AlchemIiif.Pipeline do
 
   Task.async_stream を使用して PDF 抽出・PTIF 変換を並列化し、
   PubSub でリアルタイム進捗をブロードキャストします。
+
+  ## なぜこの設計か
+
+  - **Task.async_stream**: GenStage や Broadway と比較して、バッチ処理には
+    Task.async_stream がシンプルで適しています。考古学資料のバッチサイズは
+    通常数十〜数百件のため、バックプレッシャー制御よりも簡潔さを優先しました。
+  - **PubSub リアルタイム進捗**: PTIF 生成は1件あたり数秒〜数十秒かかるため、
+    ユーザーに「処理が進んでいる」フィードバックを返すことが認知的に重要です。
+    LiveView の PubSub 統合により、サーバープッシュで即座に UI を更新します。
+  - **ResourceMonitor 連携**: 同時実行数を動的に制限することで、メモリ不足による
+    OOM Kill を防ぎつつ、利用可能なリソースを最大限活用します。
   """
   require Logger
 
+  alias AlchemIiif.IIIF.Manifest
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.{ImageProcessor, PdfProcessor}
-  alias AlchemIiif.IIIF.Manifest
   alias AlchemIiif.Pipeline.ResourceMonitor
   alias AlchemIiif.Repo
   alias Phoenix.PubSub

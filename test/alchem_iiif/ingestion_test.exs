@@ -2,7 +2,7 @@ defmodule AlchemIiif.IngestionTest do
   use AlchemIiif.DataCase, async: true
 
   alias AlchemIiif.Ingestion
-  alias AlchemIiif.Ingestion.{PdfSource, ExtractedImage}
+  alias AlchemIiif.Ingestion.{ExtractedImage, PdfSource}
   import AlchemIiif.Factory
 
   # === PdfSource テスト ===

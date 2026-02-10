@@ -2,6 +2,16 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
   @moduledoc """
   抽出画像を管理する Ecto スキーマ。
   クロップデータ(JSONB)、キャプション、ラベル、PTIFパスを保持します。
+
+  ## なぜこの設計か
+
+  - **geometry を JSONB で保持**: クロップ領域 `{x, y, width, height}` を
+    マップとして保存することで、将来的に矩形以外のクロップ形状（多角形や
+    円形）にも拡張可能です。専用カラムに分離するよりスキーマ変更が不要です。
+  - **status フィールド**: Stage-Gate ワークフローに対応し、
+    `draft / pending_review / published` の3状態を文字列で管理します。
+    Enum 型ではなく文字列を使うことで、マイグレーションなしに新しい
+    ステータスを追加できる柔軟性を確保しています。
   """
   use Ecto.Schema
   import Ecto.Changeset
