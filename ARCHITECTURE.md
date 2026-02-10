@@ -255,6 +255,19 @@ LiveView (Elixir)              JS Hook (JavaScript)
 4. **破壊的操作の保護**: 確認ダイアログ必須
 5. **線形ナビゲーション**: 前後のみの移動（ジャンプ不可）
 
+### ギャラリーテーマ: 新潟インディゴ＆ハーベストゴールド
+
+公開ギャラリー (`/gallery`) には専用のダークテーマを適用しています。
+CSS 変数で `.gallery-container` スコープにのみ適用し、Lab / Admin 画面に影響しません。
+
+| 役割 | 変数名 | HEX | 用途 |
+|:---|:---|:---|:---|
+| Base Layer | `--gallery-bg` | `#1A2C42` | ギャラリー背景 |
+| Accent | `--gallery-accent` | `#E6B422` | ボタン、アクティブボーダー、ホバー |
+| Typography | `--gallery-text` | `#E0E0E0` | 本文テキスト (コントラスト比 ≈ 10.4:1) |
+| Surface | `--gallery-surface` | `#243B55` | カード背景 |
+| Muted | `--gallery-text-muted` | `#A0AEC0` | 補助テキスト、メタ情報 |
+
 ---
 
 ## 品質チェックパイプライン

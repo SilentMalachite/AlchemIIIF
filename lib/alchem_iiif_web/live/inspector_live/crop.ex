@@ -1,9 +1,9 @@
 defmodule AlchemIiifWeb.InspectorLive.Crop do
   @moduledoc """
-  ウィザード Step 3: マニュアルクロップ画面。
+  ウィザード Step 3: クロップ専用画面。
   Cropper.js を使用して図版の範囲を定義し、
-  Nudge コントロールで微調整を行います。
-  キャプションとラベルの手動入力も行います。
+  Nudge コントロール（上下左右 + 拡大/縮小）で微調整を行います。
+  Undo 機能と Auto-Save を搭載。
   """
   use AlchemIiifWeb, :live_view
 
@@ -28,69 +28,96 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:current_step, 3)
      |> assign(:extracted_image, extracted_image)
      |> assign(:image_url, image_url)
-     |> assign(:crop_data, nil)
-     |> assign(:caption, "")
-     |> assign(:label, "")
-     |> assign(:site, "")
-     |> assign(:period, "")
-     |> assign(:artifact_type, "")}
+     |> assign(:crop_data, extracted_image.geometry)
+     |> assign(:undo_stack, [])
+     |> assign(:save_state, :idle)}
   end
 
   @impl true
   def handle_event("update_crop_data", crop_data, socket) do
-    {:noreply, assign(socket, :crop_data, crop_data)}
+    # 現在の値を Undo スタックに保存
+    undo_stack =
+      case socket.assigns.crop_data do
+        nil -> socket.assigns.undo_stack
+        current -> [current | socket.assigns.undo_stack] |> Enum.take(20)
+      end
+
+    {:noreply,
+     socket
+     |> assign(:crop_data, crop_data)
+     |> assign(:undo_stack, undo_stack)
+     |> auto_save_crop(crop_data)}
   end
 
   @impl true
   def handle_event("nudge", %{"direction" => direction}, socket) do
-    {:noreply, push_event(socket, "nudge_crop", %{direction: direction, amount: @nudge_amount})}
+    # 現在の値を Undo スタックに保存
+    undo_stack =
+      case socket.assigns.crop_data do
+        nil -> socket.assigns.undo_stack
+        current -> [current | socket.assigns.undo_stack] |> Enum.take(20)
+      end
+
+    {:noreply,
+     socket
+     |> assign(:undo_stack, undo_stack)
+     |> push_event("nudge_crop", %{direction: direction, amount: @nudge_amount})}
   end
 
   @impl true
-  def handle_event("update_caption", %{"caption" => caption}, socket) do
-    {:noreply, assign(socket, :caption, caption)}
+  def handle_event("undo", _params, socket) do
+    case socket.assigns.undo_stack do
+      [previous | rest] ->
+        {:noreply,
+         socket
+         |> assign(:crop_data, previous)
+         |> assign(:undo_stack, rest)
+         |> push_event("restore_crop", %{crop_data: previous})
+         |> auto_save_crop(previous)}
+
+      [] ->
+        {:noreply, put_flash(socket, :info, "元に戻す操作はありません")}
+    end
   end
 
   @impl true
-  def handle_event("update_label", %{"label" => label}, socket) do
-    {:noreply, assign(socket, :label, label)}
-  end
-
-  @impl true
-  def handle_event("update_site", %{"site" => site}, socket) do
-    {:noreply, assign(socket, :site, site)}
-  end
-
-  @impl true
-  def handle_event("update_period", %{"period" => period}, socket) do
-    {:noreply, assign(socket, :period, period)}
-  end
-
-  @impl true
-  def handle_event("update_artifact_type", %{"artifact_type" => artifact_type}, socket) do
-    {:noreply, assign(socket, :artifact_type, artifact_type)}
-  end
-
-  @impl true
-  def handle_event("finalize_crop", _params, socket) do
+  def handle_event("proceed_to_label", _params, socket) do
     crop_data = socket.assigns.crop_data
 
     if is_nil(crop_data) do
       {:noreply, put_flash(socket, :error, "クロップ範囲を指定してください")}
     else
-      # 抽出画像を更新
-      {:ok, updated_image} =
+      # クロップデータを保存してラベリング画面に遷移
+      {:ok, _updated_image} =
         Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-          geometry: crop_data,
-          caption: socket.assigns.caption,
-          label: socket.assigns.label,
-          site: socket.assigns.site,
-          period: socket.assigns.period,
-          artifact_type: socket.assigns.artifact_type
+          geometry: crop_data
         })
 
-      {:noreply, push_navigate(socket, to: ~p"/lab/finalize/#{updated_image.id}")}
+      {:noreply, push_navigate(socket, to: ~p"/lab/label/#{socket.assigns.extracted_image.id}")}
     end
+  end
+
+  @impl true
+  def handle_info(:auto_save_complete, socket) do
+    {:noreply, assign(socket, :save_state, :saved)}
+  end
+
+  # Auto-Save ヘルパー — draft ステータスのまま DB に保存
+  defp auto_save_crop(socket, crop_data) do
+    socket = assign(socket, :save_state, :saving)
+
+    # 非同期で保存（UIをブロックしない）
+    lv_pid = self()
+
+    Task.start(fn ->
+      Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
+        geometry: crop_data
+      })
+
+      send(lv_pid, :auto_save_complete)
+    end)
+
+    socket
   end
 
   @impl true
@@ -100,10 +127,13 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       <.wizard_header current_step={@current_step} />
 
       <div class="crop-area">
-        <h2 class="section-title">図版の範囲を指定してください</h2>
+        <h2 class="section-title">✂️ 図版の範囲を指定してください</h2>
         <p class="section-description">
           画像上でドラッグして図版の範囲を選択します。<br /> 方向ボタンで微調整できます。
         </p>
+
+        <%!-- Auto-Save ステータス --%>
+        <.auto_save_indicator state={@save_state} />
 
         <%!-- Cropper.js 統合エリア --%>
         <div id="cropper-container" phx-hook="ImageInspectorHook" class="cropper-container">
@@ -115,7 +145,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           />
         </div>
 
-        <%!-- Nudge コントロール (アクセシビリティ対応: 最小60x60px) --%>
+        <%!-- Nudge コントロール (D-pad: 上下左右 + 拡大/縮小) --%>
         <div class="nudge-controls" role="group" aria-label="クロップ範囲の微調整">
           <div class="nudge-row">
             <button
@@ -138,7 +168,24 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
             >
               ←
             </button>
-            <div class="nudge-spacer"></div>
+            <button
+              type="button"
+              class="nudge-btn nudge-shrink"
+              phx-click="nudge"
+              phx-value-direction="shrink"
+              aria-label="縮小"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              class="nudge-btn nudge-expand"
+              phx-click="nudge"
+              phx-value-direction="expand"
+              aria-label="拡大"
+            >
+              ＋
+            </button>
             <button
               type="button"
               class="nudge-btn"
@@ -162,79 +209,20 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           </div>
         </div>
 
-        <%!-- メタデータ入力フォーム --%>
-        <div class="metadata-form">
-          <h3 class="form-title">図版の情報を入力してください</h3>
-
-          <div class="form-group">
-            <label for="caption-input" class="form-label">キャプション（図の説明）</label>
-            <input
-              type="text"
-              id="caption-input"
-              class="form-input"
-              value={@caption}
-              phx-blur="update_caption"
-              phx-value-caption={@caption}
-              placeholder="例: 第3図 土器出土状況"
-              name="caption"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="label-input" class="form-label">ラベル（短い識別名）</label>
-            <input
-              type="text"
-              id="label-input"
-              class="form-input"
-              value={@label}
-              phx-blur="update_label"
-              phx-value-label={@label}
-              placeholder="例: fig-003"
-              name="label"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="site-input" class="form-label">📍 遺跡名（任意）</label>
-            <input
-              type="text"
-              id="site-input"
-              class="form-input"
-              value={@site}
-              phx-blur="update_site"
-              phx-value-site={@site}
-              placeholder="例: 吉野ヶ里遺跡"
-              name="site"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="period-input" class="form-label">⏳ 時代（任意）</label>
-            <input
-              type="text"
-              id="period-input"
-              class="form-input"
-              value={@period}
-              phx-blur="update_period"
-              phx-value-period={@period}
-              placeholder="例: 縄文時代"
-              name="period"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="artifact-type-input" class="form-label">🏾 遺物種別（任意）</label>
-            <input
-              type="text"
-              id="artifact-type-input"
-              class="form-input"
-              value={@artifact_type}
-              phx-blur="update_artifact_type"
-              phx-value-artifact_type={@artifact_type}
-              placeholder="例: 土器"
-              name="artifact_type"
-            />
-          </div>
+        <%!-- Undo ボタン --%>
+        <div class="undo-bar">
+          <button
+            type="button"
+            class="btn-undo"
+            phx-click="undo"
+            disabled={@undo_stack == []}
+            aria-label="元に戻す"
+          >
+            ↩️ 元に戻す
+            <%= if @undo_stack != [] do %>
+              <span class="undo-count">({length(@undo_stack)})</span>
+            <% end %>
+          </button>
         </div>
 
         <div class="action-bar">
@@ -248,9 +236,9 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           <button
             type="button"
             class="btn-primary btn-large"
-            phx-click="finalize_crop"
+            phx-click="proceed_to_label"
           >
-            次へ: 保存 →
+            次へ: ラベリング →
           </button>
         </div>
       </div>

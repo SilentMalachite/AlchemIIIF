@@ -30,7 +30,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
     {:ok,
      socket
      |> assign(:page_title, "保存の確認")
-     |> assign(:current_step, 4)
+     |> assign(:current_step, 5)
      |> assign(:extracted_image, extracted_image)
      |> assign(:pipeline_id, pipeline_id)
      |> assign(:system_info, system_info)
@@ -197,7 +197,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
           </div>
         <% else %>
           <%!-- 確認画面 --%>
-          <h2 class="section-title">保存内容の確認</h2>
+          <h2 class="section-title">✅ 保存内容の確認</h2>
           <p class="section-description">
             以下の内容で図版を保存します。問題がなければ「保存する」を押してください。
           </p>
@@ -281,7 +281,7 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
 
           <div class="action-bar">
             <.link
-              navigate={~p"/lab/crop/#{@extracted_image.id}"}
+              navigate={~p"/lab/label/#{@extracted_image.id}"}
               class="btn-secondary btn-large"
             >
               ← 戻る

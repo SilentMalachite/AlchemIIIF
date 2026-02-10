@@ -75,9 +75,22 @@ defmodule AlchemIiif.Ingestion do
 
   def submit_for_review(_image), do: {:error, :invalid_status_transition}
 
-  @doc "承認して公開 (pending_review → published)"
+  @doc "承認して公開 (pending_review → published)。PubSub で IIIF コレクション更新を通知。"
   def approve_and_publish(%ExtractedImage{status: "pending_review"} = image) do
-    update_extracted_image(image, %{status: "published"})
+    case update_extracted_image(image, %{status: "published"}) do
+      {:ok, updated} ->
+        # IIIF コレクション更新をバックグラウンドワーカーに通知
+        Phoenix.PubSub.broadcast(
+          AlchemIiif.PubSub,
+          "iiif:collection",
+          {:image_published, updated.id}
+        )
+
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   def approve_and_publish(_image), do: {:error, :invalid_status_transition}
@@ -89,13 +102,27 @@ defmodule AlchemIiif.Ingestion do
 
   def reject_to_draft(_image), do: {:error, :invalid_status_transition}
 
-  @doc "レビュー待ちの画像一覧"
+  @doc "差し戻し（理由メモ付き） (pending_review → draft)"
+  def reject_to_draft_with_note(%ExtractedImage{status: "pending_review"} = image, note) do
+    # Note はキャプションに追記（将来的に専用カラムへ移行可能）
+    caption_with_note =
+      case image.caption do
+        nil -> "[差し戻し] #{note}"
+        existing -> "#{existing}\n[差し戻し] #{note}"
+      end
+
+    update_extracted_image(image, %{status: "draft", caption: caption_with_note})
+  end
+
+  def reject_to_draft_with_note(_image, _note), do: {:error, :invalid_status_transition}
+
+  @doc "レビュー待ちの画像一覧（Admin Review Dashboard 用）"
   def list_pending_review_images do
     from(e in ExtractedImage,
       where: e.status == "pending_review",
       where: not is_nil(e.ptif_path),
       order_by: [desc: e.inserted_at],
-      preload: [:iiif_manifest]
+      preload: [:iiif_manifest, :pdf_source]
     )
     |> Repo.all()
   end
@@ -108,5 +135,24 @@ defmodule AlchemIiif.Ingestion do
       preload: [:iiif_manifest]
     )
     |> Repo.all()
+  end
+
+  # === バリデーション（Admin Review Dashboard 用） ===
+
+  @doc "画像データの技術的妥当性を検証（Validation Badge 用）"
+  def validate_image_data(%ExtractedImage{} = image) do
+    checks = [
+      {:image_file, not is_nil(image.image_path) and image.image_path != ""},
+      {:ptif_file, not is_nil(image.ptif_path) and image.ptif_path != ""},
+      {:geometry, is_map(image.geometry) and map_size(image.geometry) > 0},
+      {:metadata, not is_nil(image.label) and image.label != ""}
+    ]
+
+    failed = Enum.filter(checks, fn {_name, result} -> not result end)
+
+    case failed do
+      [] -> {:ok, :valid}
+      _ -> {:error, Enum.map(failed, fn {name, _} -> name end)}
+    end
   end
 end
