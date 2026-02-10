@@ -168,7 +168,8 @@ Cropper.js を使用して、ページ上の図版の範囲を指定します。
 
 ### 5. 承認・公開
 
-`/lab/approval` で管理者が内容を確認し、承認すると `/gallery` に公開されます。
+1. `/lab/approval` で作業者がアイテムを「レビュー依頼」として提出します。
+2. `/admin/review` で管理者が内容を確認し、承認すると `/gallery` に公開されます。
 
 ### 6. 検索
 
@@ -296,6 +297,8 @@ AlchemIIIF/
 │       │   ├── search_live.ex           # 検索 LiveView
 │       │   ├── approval_live.ex         # 承認 LiveView
 │       │   └── gallery_live.ex          # 公開ギャラリー LiveView
+│       ├── admin/
+│       │   └── review_live.ex           # 管理者レビュー LiveView
 │       └── controllers/iiif/           # IIIF API
 │           ├── image_controller.ex      # Image API v3.0
 │           └── manifest_controller.ex   # Presentation API v3.0
