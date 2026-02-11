@@ -25,7 +25,8 @@ config :alchem_iiif, AlchemIiifWeb.Endpoint,
   debug_errors: true,
   secret_key_base: "aBYzTRoCRTooU8B5v1b7CDMWJE3ED+vh3YjV+i5p/nt6JKmHMf1a92zWPb3IymdM",
   watchers: [
-    esbuild: {Esbuild, :install_and_run, [:alchem_iiif, ~w(--sourcemap=inline --watch)]}
+    esbuild: {Esbuild, :install_and_run, [:alchem_iiif, ~w(--sourcemap=inline --watch)]},
+    tailwind: {Tailwind, :install_and_run, [:alchem_iiif, ~w(--watch)]}
   ]
 
 # ## SSL Support
