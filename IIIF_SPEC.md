@@ -26,18 +26,18 @@ Ecto schemas will focus on the following core entities:
 | `extracted_images` | Figure Assets | `image_path`, `geometry`, `status`, `site`, `period`, `artifact_type` | `:string`, `:map`, `:string`, `:string`... |
 | `iiif_manifests` | Manifest Entities | `identifier`, `metadata` | `:string`, `:map` (JSONB) |
 
-## 4. Stage-Gate Workflow (Laboratory vs Museum)
+## 4. Stage-Gate Workflow (Laboratory vs Gallery)
 
 To ensure quality control and separate internal workflows from public access, the system implements a strict Stage-Gate model.
 
 ### 4.1 Concept
 - **Laboratory (Internal):** A private workspace for archaeologists/researchers to upload, crop, and annotate images. Content here is in `draft` or `pending_review` status.
-- **Museum (Public):** The public-facing gallery and IIIF endpoints. Only content with `published` status is accessible here.
+- **Gallery (Public):** The public-facing gallery and IIIF endpoints. Only content with `published` status is accessible here.
 
 ### 4.2 Status Lifecycle
 1. **Draft:** Initial creation logic (Ingestion).
 2. **Pending Review:** Submitted for approval.
-3. **Published:** Approved and visible in the Museum.
+3. **Published:** Approved and visible in the Gallery.
 
 ## 5. Search & Discovery
 

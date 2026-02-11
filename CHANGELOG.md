@@ -82,7 +82,7 @@
   - `extracted_images` への検索フィールド追加マイグレーション
 
 - **Stage-Gate ワークフロー**
-  - Lab (内部) / Museum (公開) の分離
+  - Lab (内部) / Gallery (公開) の分離
   - 承認ワークフロー LiveView (`ApprovalLive`)
   - ギャラリー LiveView (`GalleryLive`)
   - `extracted_images` へのステータスカラム追加マイグレーション

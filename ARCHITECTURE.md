@@ -6,7 +6,7 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 「取り込み (Ingestion)」「検索 (Search)」「配信 (Delivery)」を明確なモジュール境界で分離しつつ、
 単一コードベースの運用効率を維持します。
 
-**Stage-Gate モデル** により、内部作業空間 (Lab) と公開空間 (Museum) を分離し、
+**Stage-Gate モデル** により、内部作業空間 (Lab) と公開空間 (Gallery) を分離し、
 承認フローを通じて品質を管理します。
 
 ---
@@ -53,7 +53,7 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 ### Stage-Gate フロー
 
 ```
-Lab (内部 — 全5ステップ)     承認ゲート                  Museum (公開)
+Lab (内部 — 全5ステップ)     承認ゲート                  Gallery (公開)
 ─────────────────────        ──────────                  ──────────────
 Upload → Browse →           ApprovalLive /              GalleryLive
 Crop → Label → Finalize    ReviewLive (/admin)         (published のみ表示)
@@ -97,7 +97,7 @@ PostgreSQL ──── geometry(JSONB) + metadata 保存
 ### 承認パイプライン (Stage-Gate)
 
 ```
-Lab (draft) → 承認申請 (pending_review) → 承認 (published) → Museum
+Lab (draft) → 承認申請 (pending_review) → 承認 (published) → Gallery
                                          (Admin: /admin/review)
                                          ↗
                  差し戻し → (draft に戻る)
@@ -191,7 +191,7 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 | パス | モジュール | 説明 |
 |:---|:---|:---|
 | `/` | `PageController` | トップページ |
-| `/gallery` | `GalleryLive` | 公開ギャラリー (Museum) |
+| `/gallery` | `GalleryLive` | 公開ギャラリー (Gallery) |
 | `/lab` | `InspectorLive.Upload` | Lab: Step 1 — PDF アップロード |
 | `/lab/browse/:id` | `InspectorLive.Browse` | Lab: Step 2 — ページ選択 |
 | `/lab/crop/:id` | `InspectorLive.Crop` | Lab: Step 3 — クロップ |
