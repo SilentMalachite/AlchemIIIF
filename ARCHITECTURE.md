@@ -53,10 +53,10 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 ### Stage-Gate フロー
 
 ```
-Lab (内部)                 承認ゲート                  Museum (公開)
-────────────                ──────────                  ──────────────
-Upload → Browse →          ApprovalLive /              GalleryLive
-Crop → Finalize            ReviewLive (/admin)         (published のみ表示)
+Lab (内部 — 全5ステップ)     承認ゲート                  Museum (公開)
+─────────────────────        ──────────                  ──────────────
+Upload → Browse →           ApprovalLive /              GalleryLive
+Crop → Label → Finalize    ReviewLive (/admin)         (published のみ表示)
 (status: draft)             (pending_review →
                             published)
        ↓                       ↓                       ↓
@@ -72,19 +72,22 @@ Crop → Finalize            ReviewLive (/admin)         (published のみ表示
 
 ```
 PDF ファイル
-    │  ① アップロード (/lab)
+    │  Step 1: アップロード (/lab)
     ▼
 [pdftoppm] ──── 300 DPI PNG 生成
     │
     ▼
 サムネイルグリッド (/lab/browse/:id)
-    │  ② ユーザーがページ選択
+    │  Step 2: ユーザーがページ選択
     ▼
 Cropper.js ──── 手動クロップ + Nudge 調整 (/lab/crop/:id)
-    │  ③ メタデータ手入力 (caption, label, site, period, artifact_type)
+    │  Step 3: 図版の範囲を指定
+    ▼
+メタデータ入力フォーム (/lab/label/:id)
+    │  Step 4: caption, label, site, period, artifact_type を手入力
     ▼
 [vix/libvips] ── クロップ画像 → PTIF 生成 (/lab/finalize/:id)
-    │
+    │  Step 5: レビュー提出
     ▼
 PostgreSQL ──── geometry(JSONB) + metadata 保存
                 IIIF Manifest レコード登録
@@ -189,10 +192,11 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 |:---|:---|:---|
 | `/` | `PageController` | トップページ |
 | `/gallery` | `GalleryLive` | 公開ギャラリー (Museum) |
-| `/lab` | `InspectorLive.Upload` | Lab: PDF アップロード |
-| `/lab/browse/:id` | `InspectorLive.Browse` | Lab: ページ選択 |
-| `/lab/crop/:id` | `InspectorLive.Crop` | Lab: クロップ |
-| `/lab/finalize/:id` | `InspectorLive.Finalize` | Lab: 保存 |
+| `/lab` | `InspectorLive.Upload` | Lab: Step 1 — PDF アップロード |
+| `/lab/browse/:id` | `InspectorLive.Browse` | Lab: Step 2 — ページ選択 |
+| `/lab/crop/:id` | `InspectorLive.Crop` | Lab: Step 3 — クロップ |
+| `/lab/label/:id` | `InspectorLive.Label` | Lab: Step 4 — ラベリング |
+| `/lab/finalize/:id` | `InspectorLive.Finalize` | Lab: Step 5 — レビュー提出 |
 | `/lab/search` | `SearchLive` | Lab: 検索 |
 | `/lab/approval` | `ApprovalLive` | Lab: 承認管理 |
 | `/admin/review` | `ReviewLive` | Admin: 最終承認 (Review) |

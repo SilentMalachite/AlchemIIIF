@@ -40,14 +40,12 @@
 
 #### 追加
 
-- **Manual Inspector ウィザード**
-  - PDF アップロード + 自動 PNG 変換 (pdftoppm 300 DPI)
-  - サムネイルグリッドによるページ選択
-  - Cropper.js によるマニュアルクロップ
-  - Nudge コントロール (方向ボタンによる微調整)
-  - キャプション・ラベル手入力
-  - PTIF 自動生成 (vix/libvips)
-  - IIIF Manifest 自動登録
+- **Manual Inspector ウィザード（全5ステップ）**
+  - Step 1: PDF アップロード + 自動 PNG 変換 (pdftoppm 300 DPI)
+  - Step 2: サムネイルグリッドによるページ選択
+  - Step 3: Cropper.js によるマニュアルクロップ + Nudge コントロール
+  - Step 4: ラベリング（キャプション・ラベル・遺跡名・時代・遺物種別の手入力）
+  - Step 5: レビュー提出（PTIF 自動生成 + IIIF Manifest 登録）
   - 共通ウィザードコンポーネント (`wizard_components.ex`)
 
 - **IIIF サーバー**

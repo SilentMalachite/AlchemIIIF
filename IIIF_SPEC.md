@@ -68,11 +68,12 @@ To support academic research, specific archaeological metadata fields are indexe
 
 To ensure a stress-free user experience, the ingestion process is strictly divided into human-driven, sequential steps (Wizard pattern).
 
-### 7.1 Wizard-Style Flow
-1. **Upload:** Submit the PDF. The system automatically converts all pages into high-resolution PNGs for inspection.
-2. **Browse & Select:** User browses a grid of page thumbnails and manually selects a page containing a figure/illustration.
-3. **Manual Crop:** User defines figure boundaries. Captions and labels are entered manually to ensure 100% accuracy.
-4. **Finalize:** The system generates the PTIF, saves the crop geometry, and registers the metadata in PostgreSQL.
+### 7.1 Wizard-Style Flow (5 Steps)
+1. **Upload (📄 アップロード):** Submit the PDF. The system automatically converts all pages into high-resolution PNGs for inspection.
+2. **Browse & Select (🔍 ページ選択):** User browses a grid of page thumbnails and manually selects a page containing a figure/illustration.
+3. **Manual Crop (✂️ クロップ):** User defines figure boundaries using Cropper.js with Nudge controls for fine adjustments.
+4. **Labeling (🏷️ ラベリング):** Captions, labels, and archaeological metadata (site, period, artifact type) are entered manually to ensure 100% accuracy.
+5. **Review & Submit (✅ レビュー提出):** The system generates the PTIF, saves the crop geometry, and registers the metadata in PostgreSQL.
 
 ### 7.2 Accessibility Feature: "Nudge" Controls
 The UI provides large (min 60x60px) directional buttons (Up, Down, Left, Right) to allow users to incrementally adjust the crop area. This reduces the cognitive and motor load associated with precise pointer movements.

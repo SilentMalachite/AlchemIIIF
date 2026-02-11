@@ -1,6 +1,6 @@
 defmodule AlchemIiifWeb.InspectorLive.Finalize do
   @moduledoc """
-  ウィザード Step 4: ファイナライズ画面。
+  ウィザード Step 5: ファイナライズ（レビュー提出）画面。
   Pipeline モジュールを使用して PTIF 生成・IIIF Manifest 登録を非同期で実行し、
   PubSub でリアルタイム進捗を表示します。
   保存完了後に「レビューに提出」ボタンを表示します。
