@@ -14,23 +14,27 @@ defmodule AlchemIiifWeb.Router do
     plug :accepts, ["json"]
   end
 
+  # ── 公開スコープ (Public) ───────────────────────────────
   scope "/", AlchemIiifWeb do
     pipe_through :browser
 
     get "/", PageController, :home
-
-    # 公開ギャラリー (Museum) — 読み取り専用、published のみ
     live "/gallery", GalleryLive, :index
+  end
 
-    # Lab 名前空間 (Worker Space)
-    live "/lab", InspectorLive.Upload, :index
-    live "/lab/browse/:pdf_source_id", InspectorLive.Browse, :browse
-    live "/lab/crop/:image_id", InspectorLive.Crop, :crop
-    live "/lab/label/:image_id", InspectorLive.Label, :label
-    live "/lab/finalize/:image_id", InspectorLive.Finalize, :finalize
-    live "/lab/search", SearchLive, :index
-    live "/lab/approval", ApprovalLive, :index
-    live "/lab/pipeline/:pipeline_id", PipelineLive, :show
+  # ── 内部スコープ (Lab) ─────────────────────────────────
+  # TODO: 認証プラグを追加予定
+  scope "/lab", AlchemIiifWeb do
+    pipe_through :browser
+
+    live "/", InspectorLive.Upload, :index
+    live "/browse/:pdf_source_id", InspectorLive.Browse, :browse
+    live "/crop/:image_id", InspectorLive.Crop, :crop
+    live "/label/:image_id", InspectorLive.Label, :label
+    live "/finalize/:image_id", InspectorLive.Finalize, :finalize
+    live "/search", SearchLive, :index
+    live "/approval", ApprovalLive, :index
+    live "/pipeline/:pipeline_id", PipelineLive, :show
   end
 
   # Admin 名前空間

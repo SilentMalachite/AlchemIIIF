@@ -1,4 +1,6 @@
 /* AlchemIIIF メインスタイルシート */
 /* Tailwind CSS v4 + DaisyUI v5 */
 @import "tailwindcss";
+@source "../../lib/alchem_iiif_web";
+@source "../../lib/alchem_iiif_web/**/*.{ex,heex}";
 @plugin "daisyui";
