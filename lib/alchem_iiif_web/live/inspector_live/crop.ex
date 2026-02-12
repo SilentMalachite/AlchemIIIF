@@ -24,7 +24,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       |> String.replace_leading("priv/static/", "/")
 
     # 既存の geometry、または空のデフォルト値
-    crop_data =
+    crop_rect =
       case extracted_image.geometry do
         %{"x" => _, "y" => _, "width" => _, "height" => _} = geo -> geo
         _ -> nil
@@ -36,15 +36,16 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:current_step, 3)
      |> assign(:extracted_image, extracted_image)
      |> assign(:image_url, image_url)
-     |> assign(:crop_data, crop_data)
+     |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, [])
-     |> assign(:save_state, :idle)}
+     |> assign(:save_state, :idle)
+     |> assign(:save_timer, nil)}
   end
 
   # JS Hook からのドラッグ選択イベント
   @impl true
   def handle_event("update_crop", params, socket) do
-    crop_data = %{
+    crop_rect = %{
       "x" => to_int(params["x"]),
       "y" => to_int(params["y"]),
       "width" => to_int(params["width"]),
@@ -52,25 +53,25 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     }
 
     # 現在の値を Undo スタックに保存
-    undo_stack = push_undo(socket.assigns.crop_data, socket.assigns.undo_stack)
+    undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
 
     {:noreply,
      socket
-     |> assign(:crop_data, crop_data)
+     |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, undo_stack)
-     |> auto_save_crop(crop_data)}
+     |> auto_save_crop(crop_rect)}
   end
 
   # 旧イベント名の後方互換性（update_crop_data）
   @impl true
-  def handle_event("update_crop_data", crop_data, socket) do
-    undo_stack = push_undo(socket.assigns.crop_data, socket.assigns.undo_stack)
+  def handle_event("update_crop_data", crop_rect, socket) do
+    undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
 
     {:noreply,
      socket
-     |> assign(:crop_data, crop_data)
+     |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, undo_stack)
-     |> auto_save_crop(crop_data)}
+     |> auto_save_crop(crop_rect)}
   end
 
   @impl true
@@ -78,7 +79,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     amount = to_int(params["amount"] || @nudge_amount)
 
     # 現在の値を Undo スタックに保存
-    undo_stack = push_undo(socket.assigns.crop_data, socket.assigns.undo_stack)
+    undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
 
     {:noreply,
      socket
@@ -92,7 +93,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       [previous | rest] ->
         {:noreply,
          socket
-         |> assign(:crop_data, previous)
+         |> assign(:crop_rect, previous)
          |> assign(:undo_stack, rest)
          |> push_event("restore_crop", %{crop_data: previous})
          |> auto_save_crop(previous)}
@@ -104,15 +105,15 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
   @impl true
   def handle_event("proceed_to_label", _params, socket) do
-    crop_data = socket.assigns.crop_data
+    crop_rect = socket.assigns.crop_rect
 
-    if is_nil(crop_data) do
+    if is_nil(crop_rect) do
       {:noreply, put_flash(socket, :error, "クロップ範囲を指定してください")}
     else
       # クロップデータを保存してラベリング画面に遷移
       {:ok, _updated_image} =
         Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-          geometry: crop_data
+          geometry: crop_rect
         })
 
       {:noreply, push_navigate(socket, to: ~p"/lab/label/#{socket.assigns.extracted_image.id}")}
@@ -122,6 +123,31 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   @impl true
   def handle_info(:auto_save_complete, socket) do
     {:noreply, assign(socket, :save_state, :saved)}
+  end
+
+  # デバウンスタイマー発火 — 最終値のみ DB に保存
+  @impl true
+  def handle_info(:debounced_save, socket) do
+    crop_rect = socket.assigns.crop_rect
+
+    if crop_rect do
+      lv_pid = self()
+
+      Task.start(fn ->
+        Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
+          geometry: crop_rect
+        })
+
+        send(lv_pid, :auto_save_complete)
+      end)
+
+      {:noreply,
+       socket
+       |> assign(:save_state, :saving)
+       |> assign(:save_timer, nil)}
+    else
+      {:noreply, assign(socket, :save_timer, nil)}
+    end
   end
 
   # Undo スタックにプッシュ（最大20件）
@@ -141,25 +167,19 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
   defp to_int(_), do: 0
 
-  # Auto-Save ヘルパー — draft ステータスのまま DB に保存
-  defp auto_save_crop(socket, crop_data) do
-    socket = assign(socket, :save_state, :saving)
+  # Auto-Save ヘルパー — デバウンス方式で最終値のみ DB に保存（500ms）
+  defp auto_save_crop(socket, _crop_rect) do
+    # 前回のタイマーをキャンセル
+    if socket.assigns.save_timer do
+      Process.cancel_timer(socket.assigns.save_timer)
+    end
 
-    # 非同期で保存（UIをブロックしない）
-    lv_pid = self()
-
-    Task.start(fn ->
-      Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-        geometry: crop_data
-      })
-
-      send(lv_pid, :auto_save_complete)
-    end)
-
-    socket
+    # 500ms 後に最終値を保存（連続操作中は前のタイマーがキャンセルされる）
+    timer = Process.send_after(self(), :debounced_save, 500)
+    assign(socket, :save_timer, timer)
   end
 
-  # crop_data からSVGオーバーレイ用の値を安全に取得
+  # crop_rect からSVGオーバーレイ用の値を安全に取得
   defp crop_x(nil), do: 0
   defp crop_x(%{"x" => x}), do: x
   defp crop_x(_), do: 0
@@ -202,41 +222,41 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           <%!-- 初期クロップデータ（JS に渡すための data 属性） --%>
           <span
             class="crop-init-data"
-            data-crop-x={crop_x(@crop_data)}
-            data-crop-y={crop_y(@crop_data)}
-            data-crop-w={crop_w(@crop_data)}
-            data-crop-h={crop_h(@crop_data)}
+            data-crop-x={crop_x(@crop_rect)}
+            data-crop-y={crop_y(@crop_rect)}
+            data-crop-w={crop_w(@crop_rect)}
+            data-crop-h={crop_h(@crop_rect)}
             style="display:none;"
           />
-          <%!-- SVG オーバーレイ --%>
-          <svg class="crop-overlay" preserveAspectRatio="xMidYMid meet">
-            <defs>
-              <mask id="crop-dim-mask">
-                <rect class="dim-mask" fill="white" x="0" y="0" width="100%" height="100%" />
-                <rect class="dim-cutout" fill="black"
-                  x={crop_x(@crop_data)} y={crop_y(@crop_data)}
-                  width={crop_w(@crop_data)} height={crop_h(@crop_data)}
-                />
-              </mask>
-            </defs>
-            <%!-- 半透明の暗転マスク --%>
-            <rect
-              class="dim-overlay"
-              x="0" y="0" width="100%" height="100%"
-              fill="rgba(0,0,0,0.45)"
-              mask="url(#crop-dim-mask)"
-            />
-            <%!-- 選択範囲の枠線 --%>
-            <rect
-              class="selection-rect"
-              x={crop_x(@crop_data)} y={crop_y(@crop_data)}
-              width={crop_w(@crop_data)} height={crop_h(@crop_data)}
-              fill="none"
-              stroke="#E6B422"
-              stroke-width="3"
-              stroke-dasharray="8 4"
-            />
-          </svg>
+          <%!-- SVG オーバーレイ（JS Hook が制御するため phx-update="ignore"） --%>
+          <div id="crop-svg-container" phx-update="ignore">
+            <svg class="crop-overlay" preserveAspectRatio="none">
+              <defs>
+                <mask id="crop-dim-mask">
+                  <rect class="dim-mask" fill="white" x="0" y="0" width="100%" height="100%" />
+                  <rect class="dim-cutout" fill="black" x="0" y="0" width="0" height="0" />
+                </mask>
+              </defs>
+              <%!-- 半透明の暗転マスク --%>
+              <rect
+                class="dim-overlay"
+                x="0" y="0" width="100%" height="100%"
+                fill="rgba(0,0,0,0.45)"
+                mask="url(#crop-dim-mask)"
+              />
+              <%!-- 選択範囲の枠線（Harvest Gold テーマ） --%>
+              <rect
+                class="selection-rect"
+                x="0" y="0" width="0" height="0"
+                fill="#E6B422"
+                fill-opacity="0.2"
+                stroke="#E6B422"
+                stroke-width="2"
+                stroke-dasharray="8 4"
+                style="display:none;"
+              />
+            </svg>
+          </div>
         </div>
 
         <%!-- Nudge コントロール (D-pad: 上下左右 + 拡大/縮小) --%>

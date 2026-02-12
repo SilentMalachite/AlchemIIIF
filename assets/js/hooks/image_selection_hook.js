@@ -35,10 +35,10 @@ const ImageSelection = {
     this.handleEvent("nudge_crop", ({ direction, amount }) => {
       const amt = parseInt(amount, 10) || 5;
       switch (direction) {
-        case "up":     this.selection.y = Math.max(0, this.selection.y - amt); break;
-        case "down":   this.selection.y += amt; break;
-        case "left":   this.selection.x = Math.max(0, this.selection.x - amt); break;
-        case "right":  this.selection.x += amt; break;
+        case "up": this.selection.y = Math.max(0, this.selection.y - amt); break;
+        case "down": this.selection.y += amt; break;
+        case "left": this.selection.x = Math.max(0, this.selection.x - amt); break;
+        case "right": this.selection.x += amt; break;
         case "expand":
           // 各方向に amt ピクセル拡大
           this.selection.x = Math.max(0, this.selection.x - amt);
@@ -78,8 +78,15 @@ const ImageSelection = {
     this._removeEventListeners();
   },
 
-  // 初期クロップデータがあれば読み込み
+  // 初期クロップデータがあれば読み込み、viewBox を必ず初期化
   _loadInitialCrop() {
+    // viewBox を画像の自然サイズで初期化（座標系を確立）
+    if (this.image && this.svg && this.image.naturalWidth > 0) {
+      const nw = this.image.naturalWidth;
+      const nh = this.image.naturalHeight;
+      this.svg.setAttribute('viewBox', `0 0 ${nw} ${nh}`);
+    }
+
     const dataEl = this.el.querySelector('[data-crop-x]');
     if (dataEl) {
       const x = parseInt(dataEl.dataset.cropX || 0, 10);
@@ -162,7 +169,7 @@ const ImageSelection = {
     this.startY = coords.y;
   },
 
-  // ドラッグ中
+  // ドラッグ中（JS側でSVGオーバーレイをリアルタイム更新、サーバー送信はドラッグ終了時のみ）
   _handleMove(e, clientX, clientY) {
     if (!this.isDragging) return;
     e.preventDefault();
