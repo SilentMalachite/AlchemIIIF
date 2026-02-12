@@ -202,5 +202,61 @@ defmodule AlchemIiifWeb.PipelineLiveTest do
       html = render(view)
       assert html =~ "完了 — 次へ進む"
     end
+
+    test "pdf_source_id付き完了イベントでBrowseページへ遷移する", %{conn: conn} do
+      # PDFソースを作成
+      {:ok, pdf_source} =
+        AlchemIiif.Ingestion.create_pdf_source(%{
+          filename: "test.pdf",
+          status: "ready"
+        })
+
+      pipeline_id = Pipeline.generate_pipeline_id()
+      {:ok, view, _html} = live(conn, ~p"/lab/pipeline/#{pipeline_id}")
+
+      # pdf_source_id を含む完了イベントを送信
+      Phoenix.PubSub.broadcast(@pubsub, Pipeline.topic(pipeline_id), {
+        :pipeline_progress,
+        %{
+          event: :pipeline_complete,
+          phase: :pdf_extraction,
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          pdf_source_id: pdf_source.id
+        }
+      })
+
+      html = render(view)
+      assert html =~ "完了 — 次へ進む"
+
+      # 「次へ進む」ボタンをクリックすると Browse へ遷移
+      assert {:error, {:live_redirect, %{to: path}}} =
+               view |> element("button", "完了 — 次へ進む") |> render_click()
+
+      assert path =~ "/lab/browse/#{pdf_source.id}"
+    end
+
+    test "pdf_source_id無しの完了イベントでは/labへフォールバック", %{conn: conn} do
+      pipeline_id = Pipeline.generate_pipeline_id()
+      {:ok, view, _html} = live(conn, ~p"/lab/pipeline/#{pipeline_id}")
+
+      # pdf_source_id を含まない完了イベント
+      Phoenix.PubSub.broadcast(@pubsub, Pipeline.topic(pipeline_id), {
+        :pipeline_progress,
+        %{
+          event: :pipeline_complete,
+          phase: :pdf_extraction,
+          total: 1,
+          succeeded: 1,
+          failed: 0
+        }
+      })
+
+      render(view)
+
+      assert {:error, {:live_redirect, %{to: "/lab"}}} =
+               view |> element("button", "完了 — 次へ進む") |> render_click()
+    end
   end
 end

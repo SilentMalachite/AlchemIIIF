@@ -6,9 +6,9 @@ import Config
 # to provide built-in test partitioning in CI environment.
 # Run `mix help test` for more information.
 config :alchem_iiif, AlchemIiif.Repo,
-  username: "anchu",
-  password: "",
-  hostname: "localhost",
+  username: System.get_env("DB_USERNAME") || "hiro",
+  password: System.get_env("DB_PASSWORD") || "postgres",
+  hostname: System.get_env("DB_HOST") || "localhost",
   database: "alchem_iiif_test#{System.get_env("MIX_TEST_PARTITION")}",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2

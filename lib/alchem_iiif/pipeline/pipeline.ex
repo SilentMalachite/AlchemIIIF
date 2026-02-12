@@ -54,6 +54,7 @@ defmodule AlchemIiif.Pipeline do
     })
 
     output_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+    Logger.info("[Pipeline] PDF extraction started: #{pdf_path} -> #{output_dir}")
 
     case PdfProcessor.convert_to_images(pdf_path, output_dir) do
       {:ok, %{page_count: page_count, image_paths: image_paths}} ->
@@ -106,7 +107,8 @@ defmodule AlchemIiif.Pipeline do
           phase: :pdf_extraction,
           total: page_count,
           succeeded: length(images),
-          failed: 0
+          failed: 0,
+          pdf_source_id: pdf_source.id
         })
 
         {:ok, %{page_count: page_count, images: images}}

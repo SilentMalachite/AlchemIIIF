@@ -2,9 +2,9 @@ import Config
 
 # Configure your database
 config :alchem_iiif, AlchemIiif.Repo,
-  username: "anchu",
-  password: "",
-  hostname: "localhost",
+  username: System.get_env("DB_USERNAME") || "hiro",
+  password: System.get_env("DB_PASSWORD") || "postgres",
+  hostname: System.get_env("DB_HOST") || "localhost",
   database: "alchem_iiif_dev",
   stacktrace: true,
   show_sensitive_data_on_connection_error: true,

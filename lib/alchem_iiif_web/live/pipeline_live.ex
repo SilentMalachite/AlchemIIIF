@@ -98,6 +98,7 @@ defmodule AlchemIiifWeb.PipelineLive do
       failed: payload.failed
     })
     |> assign(:phase_message, "処理が完了しました！")
+    |> assign(:redirect_to, build_redirect_path(payload))
   end
 
   defp process_pipeline_event(%{event: :pipeline_error} = payload, socket) do
@@ -107,6 +108,13 @@ defmodule AlchemIiifWeb.PipelineLive do
   end
 
   defp process_pipeline_event(_payload, socket), do: socket
+
+  # pdf_source_id が含まれている場合、Browse ページへの遷移パスを構築
+  defp build_redirect_path(%{pdf_source_id: pdf_source_id}) when not is_nil(pdf_source_id) do
+    ~p"/lab/browse/#{pdf_source_id}"
+  end
+
+  defp build_redirect_path(_), do: nil
 
   # ステータスに応じた絵文字
   defp status_emoji(:pending), do: "⏳"

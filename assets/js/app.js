@@ -25,10 +25,10 @@ import { LiveSocket } from "phoenix_live_view"
 import { hooks as colocatedHooks } from "phoenix-colocated/alchem_iiif"
 import topbar from "../vendor/topbar"
 
-import ImageInspectorHook from "./hooks/image_inspector_hook"
+import ImageSelection from "./hooks/image_selection_hook"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-const customHooks = { ImageInspectorHook }
+const customHooks = { ImageSelection }
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },

@@ -1,4 +1,6 @@
 defmodule AlchemIiif.Ingestion.PdfProcessor do
+  require Logger
+
   @moduledoc """
   pdftoppm を使用して PDF ページを高解像度 PNG 画像に変換するモジュール。
 
@@ -31,30 +33,58 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     output_prefix = Path.join(output_dir, "page")
 
     # pdftoppm で PDF→PNG 変換 (300 DPI)
-    case System.cmd(
-           "pdftoppm",
-           [
-             "-png",
-             "-r",
-             "300",
-             pdf_path,
-             output_prefix
-           ],
-           stderr_to_stdout: true
-         ) do
-      {_output, 0} ->
-        # 生成された画像ファイルを取得
-        image_paths =
-          output_dir
-          |> File.ls!()
-          |> Enum.filter(&String.ends_with?(&1, ".png"))
-          |> Enum.sort()
-          |> Enum.map(&Path.join(output_dir, &1))
+    # 絶対パスに変換して実行ディレクトリに依存しないようにする
+    abs_pdf_path = Path.expand(pdf_path)
+    abs_output_prefix = Path.expand(output_prefix)
 
-        {:ok, %{page_count: length(image_paths), image_paths: image_paths}}
+    # コマンドと引数を準備
+    cmd = "pdftoppm"
 
-      {error_output, _exit_code} ->
-        {:error, "PDF変換に失敗しました: #{error_output}"}
+    args = [
+      "-png",
+      "-r",
+      "300",
+      abs_pdf_path,
+      abs_output_prefix
+    ]
+
+    Logger.info("[PdfProcessor] Executing: #{cmd} #{Enum.join(args, " ")}")
+
+    try do
+      case System.cmd(cmd, args, stderr_to_stdout: true) do
+        {_output, 0} ->
+          # 生成された画像ファイルを取得
+          image_paths =
+            output_dir
+            |> File.ls!()
+            |> Enum.filter(&String.ends_with?(&1, ".png"))
+            |> Enum.sort()
+            |> Enum.map(&Path.join(output_dir, &1))
+
+          if Enum.empty?(image_paths) do
+            Logger.error("[PdfProcessor] No images generated despite exit code 0")
+            {:error, "画像が生成されませんでした (exit code 0)"}
+          else
+            Logger.info("[PdfProcessor] Successfully generated #{length(image_paths)} images")
+            {:ok, %{page_count: length(image_paths), image_paths: image_paths}}
+          end
+
+        {error_output, exit_code} ->
+          Logger.error(
+            "[PdfProcessor] Command failed with exit code #{exit_code}: #{error_output}"
+          )
+
+          {:error, "PDF変換に失敗しました (exit code #{exit_code}): #{error_output}"}
+      end
+    rescue
+      e in ErlangError ->
+        if e.original == :enoent do
+          Logger.error("[PdfProcessor] pdftoppm not found")
+          {:error, "pdftoppm コマンドが見つかりません。Poppler がインストールされているか確認してください。"}
+        else
+          Logger.error("[PdfProcessor] System error: #{inspect(e)}")
+          {:error, "システムエラーが発生しました: #{inspect(e)}"}
+        end
     end
   end
 

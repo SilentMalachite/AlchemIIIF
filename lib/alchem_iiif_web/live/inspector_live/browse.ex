@@ -12,42 +12,90 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
 
   @impl true
   def mount(%{"pdf_source_id" => pdf_source_id}, _session, socket) do
-    pdf_source = Ingestion.get_pdf_source!(pdf_source_id)
-    pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
-
-    # ページ画像のリストを取得
-    page_images =
-      if File.dir?(pages_dir) do
-        pages_dir
-        |> File.ls!()
-        |> Enum.filter(&String.ends_with?(&1, ".png"))
-        |> Enum.sort()
-        |> Enum.with_index(1)
-        |> Enum.map(fn {filename, index} ->
-          %{
-            filename: filename,
-            page_number: index,
-            # 静的ファイルとして配信するパス
-            url: "/uploads/pages/#{pdf_source.id}/#{filename}"
-          }
-        end)
-      else
-        []
+    pdf_source =
+      try do
+        Ingestion.get_pdf_source!(pdf_source_id)
+      rescue
+        Ecto.NoResultsError -> nil
       end
 
-    {:ok,
-     socket
-     |> assign(:page_title, "ページを選択")
-     |> assign(:current_step, 2)
-     |> assign(:pdf_source, pdf_source)
-     |> assign(:page_images, page_images)
-     |> assign(:selected_page, nil)}
+    if is_nil(pdf_source) do
+      {:ok,
+       socket
+       |> put_flash(:error, "指定されたPDFソースが見つかりません（ID: #{pdf_source_id}）")
+       |> push_navigate(to: ~p"/lab")}
+    else
+      pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+
+      # ページ画像のリストを取得
+      page_images =
+        if File.dir?(pages_dir) do
+          pages_dir
+          |> File.ls!()
+          |> Enum.filter(&String.ends_with?(&1, ".png"))
+          |> Enum.sort()
+          |> Enum.with_index(1)
+          |> Enum.map(fn {filename, index} ->
+            %{
+              filename: filename,
+              page_number: index,
+              # 静的ファイルとして配信するパス
+              url: "/uploads/pages/#{pdf_source.id}/#{filename}"
+            }
+          end)
+        else
+          []
+        end
+
+      {:ok,
+       socket
+       |> assign(:page_title, "ページを選択")
+       |> assign(:current_step, 2)
+       |> assign(:pdf_source, pdf_source)
+       |> assign(:page_images, page_images)
+       |> assign(:selected_page, nil)}
+    end
   end
 
   @impl true
-  def handle_event("select_page", %{"page" => page_number}, socket) do
-    page_number = String.to_integer(page_number)
-    {:noreply, assign(socket, :selected_page, page_number)}
+  def handle_event("select_page", %{"page" => page_str}, socket) do
+    case Integer.parse(to_string(page_str)) do
+      {page_number, _} ->
+        # 選択されたページの画像情報を取得
+        page_image =
+          Enum.find(socket.assigns.page_images, &(&1.page_number == page_number))
+
+        if page_image do
+          pdf_source = socket.assigns.pdf_source
+
+          image_path =
+            Path.join([
+              "priv",
+              "static",
+              "uploads",
+              "pages",
+              "#{pdf_source.id}",
+              page_image.filename
+            ])
+
+          {:ok, extracted_image} =
+            Ingestion.create_extracted_image(%{
+              pdf_source_id: pdf_source.id,
+              page_number: page_number,
+              image_path: image_path
+            })
+
+          {:noreply,
+           socket
+           |> assign(:selected_page, page_number)
+           |> push_navigate(to: ~p"/lab/crop/#{extracted_image.id}")}
+        else
+          {:noreply, put_flash(socket, :error, "指定されたページが見つかりません")}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "無効なページ番号です")}
+    end
   end
 
   @impl true
@@ -92,47 +140,110 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
       <.wizard_header current_step={@current_step} />
 
       <div class="browse-area">
-        <h2 class="section-title">ページを選択してください</h2>
-        <p class="section-description">
-          「{@pdf_source.filename}」のページ一覧です。<br /> 図版や挿絵が含まれているページをクリックして選択してください。
-        </p>
+        <%= cond do %>
+          <% @pdf_source.status == "error" -> %>
+            <div class="error-state">
+              <div class="error-icon-large">❌</div>
+              <h2 class="error-title">PDFの処理中にエラーが発生しました</h2>
+              <p class="error-description">
+                申し訳ありませんが、PDFファイルの変換に失敗しました。<br /> ログを確認するか、別のファイルをお試しください。
+              </p>
+              <div class="action-bar-center">
+                <.link navigate={~p"/lab"} class="btn-primary btn-large">
+                  最初に戻る
+                </.link>
+              </div>
+            </div>
+          <% @pdf_source.status == "ready" and Enum.empty?(@page_images) -> %>
+            <div class="warning-state">
+              <div class="warning-icon-large">⚠️</div>
+              <h2 class="warning-title">画像が見つかりませんでした</h2>
+              <p class="warning-description">
+                処理は完了しましたが、ページ画像が生成されませんでした。<br /> PDFファイルが破損しているか、ページが含まれていない可能性があります。
+              </p>
+              <div class="action-bar-center">
+                <.link navigate={~p"/lab"} class="btn-secondary btn-large">
+                  戻る
+                </.link>
+              </div>
+            </div>
+          <% true -> %>
+            <h2 class="section-title">ページを選択してください</h2>
+            <p class="section-description">
+              「{@pdf_source.filename}」のページ一覧です。<br /> 図版や挿絵が含まれているページをクリックして選択してください。
+            </p>
 
-        <div class="page-grid">
-          <%= for page <- @page_images do %>
-            <button
-              type="button"
-              class={"page-thumbnail #{if @selected_page == page.page_number, do: "selected", else: ""}"}
-              phx-click="select_page"
-              phx-value-page={page.page_number}
-              aria-label={"ページ #{page.page_number}"}
-              aria-pressed={@selected_page == page.page_number}
-            >
-              <img
-                src={page.url}
-                alt={"ページ #{page.page_number}"}
-                loading="lazy"
-              />
-              <span class="page-label">ページ {page.page_number}</span>
-            </button>
-          <% end %>
-        </div>
+            <div class="page-grid">
+              <%= for page <- @page_images do %>
+                <button
+                  type="button"
+                  class={"page-thumbnail #{if @selected_page == page.page_number, do: "selected", else: ""}"}
+                  phx-click="select_page"
+                  phx-value-page={page.page_number}
+                  aria-label={"ページ #{page.page_number}"}
+                  aria-pressed={@selected_page == page.page_number}
+                >
+                  <img
+                    src={page.url}
+                    alt={"ページ #{page.page_number}"}
+                    loading="lazy"
+                  />
+                  <span class="page-label">ページ {page.page_number}</span>
+                </button>
+              <% end %>
+            </div>
 
-        <div class="action-bar">
-          <.link navigate={~p"/lab"} class="btn-secondary btn-large">
-            ← 戻る
-          </.link>
+            <div class="action-bar">
+              <.link navigate={~p"/lab"} class="btn-secondary btn-large">
+                ← 戻る
+              </.link>
 
-          <button
-            type="button"
-            class="btn-primary btn-large"
-            phx-click="proceed_to_crop"
-            disabled={@selected_page == nil}
-          >
-            次へ: クロップ →
-          </button>
-        </div>
+              <button
+                type="button"
+                class="btn-primary btn-large"
+                phx-click="proceed_to_crop"
+                disabled={@selected_page == nil}
+              >
+                次へ: クロップ →
+              </button>
+            </div>
+        <% end %>
       </div>
     </div>
+
+    <style>
+      .error-state, .warning-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        background: #fdf2f8;
+        border-radius: 12px;
+        margin-top: 2rem;
+      }
+      .warning-state {
+        background: #fffbeb;
+      }
+      .error-icon-large, .warning-icon-large {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+      }
+      .error-title, .warning-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #be123c;
+        margin-bottom: 0.5rem;
+      }
+      .warning-title {
+        color: #b45309;
+      }
+      .error-description, .warning-description {
+        color: #374151;
+        margin-bottom: 2rem;
+      }
+      .action-bar-center {
+        display: flex;
+        justify-content: center;
+      }
+    </style>
     """
   end
 end
