@@ -80,8 +80,8 @@ PDF ファイル
 サムネイルグリッド (/lab/browse/:id)
     │  Step 2: ユーザーがページ選択
     ▼
-ImageSelection Hook ──── 手動クロップ + Nudge 調整 (/lab/crop/:id)
-    │  Step 3: 図版の範囲を指定
+ImageSelection Hook ──── D-Pad による手動クロップ (10px 単位) + 矢印キー連携 (/lab/crop/:id)
+    │  Step 3: 図版の範囲を指定。物理キーボードやコントローラーの D-Pad を意識した UI。
     ▼
 メタデータ入力フォーム (/lab/label/:id)
     │  Step 4: caption, label, site, period, artifact_type を手入力
@@ -262,10 +262,10 @@ LiveView (Elixir)              JS Hook (JavaScript)
 4. **破壊的操作の保護**: 確認ダイアログ必須
 5. **線形ナビゲーション**: 前後のみの移動（ジャンプ不可）
 
-### ギャラリーテーマ: 新潟インディゴ＆ハーベストゴールド
+### ギャラリー & 管理画面テーマ: 新潟インディゴ＆ハーベストゴールド
 
-公開ギャラリー (`/gallery`) には専用のダークテーマを適用しています。
-CSS 変数で `.gallery-container` スコープにのみ適用し、Lab / Admin 画面に影響しません。
+公開ギャラリー (`/gallery`) および 管理者レビュー画面 (`/admin/review`) には専用のダークテーマを適用しています。
+CSS 変数で `.gallery-container` または `.admin-review-container` スコープに適用し、Lab 画面の基本 UI に影響を与えないように設計されています。
 
 | 役割 | 変数名 | HEX | 用途 |
 |:---|:---|:---|:---|
