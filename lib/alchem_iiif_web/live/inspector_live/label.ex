@@ -76,18 +76,26 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   @impl true
-  def handle_event("proceed_to_finalize", _params, socket) do
-    # 全メタデータを保存してファイナライズ画面に遷移
-    {:ok, _updated_image} =
-      Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-        caption: socket.assigns.caption,
-        label: socket.assigns.label,
-        site: socket.assigns.site,
-        period: socket.assigns.period,
-        artifact_type: socket.assigns.artifact_type
-      })
+  def handle_event("save", %{"action" => action}, socket) do
+    case save_metadata(socket) do
+      {:ok, _updated} ->
+        route =
+          case action do
+            "continue" ->
+              ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"
 
-    {:noreply, push_navigate(socket, to: ~p"/lab/finalize/#{socket.assigns.extracted_image.id}")}
+            _finish ->
+              ~p"/lab"
+          end
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "✅ ラベルを保存しました！")
+         |> push_navigate(to: route)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+    end
   end
 
   @impl true
@@ -134,6 +142,17 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     end)
 
     socket
+  end
+
+  # 全メタデータを一括保存する共通関数
+  defp save_metadata(socket) do
+    Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
+      caption: socket.assigns.caption,
+      label: socket.assigns.label,
+      site: socket.assigns.site,
+      period: socket.assigns.period,
+      artifact_type: socket.assigns.artifact_type
+    })
   end
 
   # ジオメトリデータからクロッププレビュー用の CSS インラインスタイルを生成
@@ -281,7 +300,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
           </button>
         </div>
 
-        <div class="action-bar">
+        <div class="action-bar-split">
           <.link
             navigate={~p"/lab/crop/#{@extracted_image.id}"}
             class="btn-secondary btn-large"
@@ -289,13 +308,29 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             ← 戻る
           </.link>
 
-          <button
-            type="button"
-            class="btn-primary btn-large"
-            phx-click="proceed_to_finalize"
-          >
-            次へ: 保存 →
-          </button>
+          <div class="action-buttons">
+            <button
+              type="button"
+              class="btn-save-continue"
+              phx-click="save"
+              phx-value-action="continue"
+              aria-label="保存して次の図版へ"
+            >
+              <span class="btn-icon">🔄</span>
+              <span>保存して次の図版へ</span>
+            </button>
+
+            <button
+              type="button"
+              class="btn-save-finish"
+              phx-click="save"
+              phx-value-action="finish"
+              aria-label="保存して終了"
+            >
+              <span class="btn-icon">✅</span>
+              <span>保存して終了</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

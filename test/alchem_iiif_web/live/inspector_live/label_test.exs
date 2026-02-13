@@ -77,12 +77,40 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert html =~ "/lab/crop/#{image.id}"
     end
 
-    test "次へボタンが表示される", %{conn: conn} do
+    test "保存して次の図版へボタンが表示される", %{conn: conn} do
       image = insert_extracted_image()
 
       {:ok, _view, html} = live(conn, ~p"/lab/label/#{image.id}")
 
-      assert html =~ "次へ: 保存 →"
+      assert html =~ "保存して次の図版へ"
+    end
+
+    test "保存して終了ボタンが表示される", %{conn: conn} do
+      image = insert_extracted_image()
+
+      {:ok, _view, html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      assert html =~ "保存して終了"
+    end
+
+    test "save continue で Browse 画面に遷移する", %{conn: conn} do
+      image = insert_extracted_image()
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      assert {:error, {:live_redirect, %{to: path}}} =
+               view |> element(".btn-save-continue") |> render_click()
+
+      assert path =~ "/lab/browse/#{image.pdf_source_id}"
+    end
+
+    test "save finish で Lab ダッシュボードに遷移する", %{conn: conn} do
+      image = insert_extracted_image()
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      assert {:error, {:live_redirect, %{to: "/lab"}}} =
+               view |> element(".btn-save-finish") |> render_click()
     end
   end
 
