@@ -27,6 +27,9 @@ defmodule AlchemIiifWeb.IIIF.ImageController do
   @doc """
   IIIF Image API v3.0 リクエストを処理します。
   """
+  # セキュリティ注記: format_to_mime は固定マッピング（jpg/png/webp のみ）、
+  # cache_path は @cache_dir 定数 + 内部生成キー、
+  # image_data は libvips のバイナリ出力でありユーザー入力ではない。
   def show(conn, %{
         "identifier" => identifier,
         "region" => region_str,

@@ -2,6 +2,7 @@
 /* Tailwind CSS v4 + DaisyUI v5 */
 @import "tailwindcss";
 @import "./inspector.css";
+@import "./admin-review.css";
 @source "../../lib/alchem_iiif_web";
 @source "../../lib/alchem_iiif_web/**/*.{ex,heex}";
 @plugin "daisyui";

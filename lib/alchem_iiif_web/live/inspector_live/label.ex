@@ -9,6 +9,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   import AlchemIiifWeb.WizardComponents
 
   alias AlchemIiif.Ingestion
+  alias AlchemIiif.Ingestion.ImageProcessor
 
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
@@ -19,8 +20,8 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       extracted_image.image_path
       |> String.replace_leading("priv/static/", "/")
 
-    # ジオメトリに基づくクロッププレビュー用スタイルを計算
-    crop_style = compute_crop_style(extracted_image.geometry)
+    # 元画像の寸法を取得（Vix はヘッダーのみ遅延読み込み）
+    {orig_w, orig_h} = read_source_dimensions(extracted_image.image_path)
 
     {:ok,
      socket
@@ -28,7 +29,9 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
      |> assign(:current_step, 4)
      |> assign(:extracted_image, extracted_image)
      |> assign(:image_url, image_url)
-     |> assign(:crop_style, crop_style)
+     |> assign(:orig_w, orig_w)
+     |> assign(:orig_h, orig_h)
+     |> assign(:geo, extracted_image.geometry)
      |> assign(:has_crop, extracted_image.geometry != nil)
      |> assign(:caption, extracted_image.caption || "")
      |> assign(:label, extracted_image.label || "")
@@ -77,20 +80,27 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   @impl true
   def handle_event("save", %{"action" => action}, socket) do
-    case save_metadata(socket) do
+    # "finish" の場合は status を pending_review に遷移させる
+    save_result =
+      case action do
+        "finish" -> save_metadata(socket, %{status: "pending_review"})
+        _other -> save_metadata(socket)
+      end
+
+    case save_result do
       {:ok, _updated} ->
-        route =
+        {flash_msg, route} =
           case action do
             "continue" ->
-              ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"
+              {"✅ ラベルを保存しました！", ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
 
             _finish ->
-              ~p"/lab"
+              {"✅ レビューに提出しました！（このアイテムはロックされます）", ~p"/lab"}
           end
 
         {:noreply,
          socket
-         |> put_flash(:info, "✅ ラベルを保存しました！")
+         |> put_flash(:info, flash_msg)
          |> push_navigate(to: route)}
 
       {:error, _changeset} ->
@@ -145,41 +155,28 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   # 全メタデータを一括保存する共通関数
-  defp save_metadata(socket) do
-    Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
+  defp save_metadata(socket, extra_attrs \\ %{}) do
+    base_attrs = %{
       caption: socket.assigns.caption,
       label: socket.assigns.label,
       site: socket.assigns.site,
       period: socket.assigns.period,
       artifact_type: socket.assigns.artifact_type
-    })
+    }
+
+    Ingestion.update_extracted_image(
+      socket.assigns.extracted_image,
+      Map.merge(base_attrs, extra_attrs)
+    )
   end
 
-  # ジオメトリデータからクロッププレビュー用の CSS インラインスタイルを生成
-  # コンテナサイズ 480×360 に収まるようスケールを計算する
-  @preview_max_w 480
-  @preview_max_h 360
-  defp compute_crop_style(nil), do: ""
-
-  defp compute_crop_style(%{"width" => w, "height" => h} = geo) when w > 0 and h > 0 do
-    x = Map.get(geo, "x", 0)
-    y = Map.get(geo, "y", 0)
-    scale = min(@preview_max_w / w, @preview_max_h / h)
-
-    # 表示上のオフセット（px）
-    offset_x = round(x * scale)
-    offset_y = round(y * scale)
-
-    # 表示上のクロップ領域サイズ
-    display_w = round(w * scale)
-    display_h = round(h * scale)
-
-    "width:#{display_w}px;height:#{display_h}px;" <>
-      "object-fit:none;" <>
-      "object-position:-#{offset_x}px -#{offset_y}px;"
+  # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
+  defp read_source_dimensions(image_path) do
+    case ImageProcessor.get_image_dimensions(image_path) do
+      {:ok, %{width: w, height: h}} -> {w, h}
+      _error -> {0, 0}
+    end
   end
-
-  defp compute_crop_style(_), do: ""
 
   @impl true
   def render(assigns) do
@@ -198,12 +195,21 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
         <%!-- クロッププレビュー画像 --%>
         <div class={if @has_crop, do: "label-crop-preview", else: "label-preview"}>
-          <img
-            src={@image_url}
-            alt="選択した図版"
-            class={if @has_crop, do: "label-crop-image", else: "label-preview-image"}
-            style={@crop_style}
-          />
+          <%= if @has_crop do %>
+            <svg
+              viewBox={"#{@geo["x"]} #{@geo["y"]} #{@geo["width"]} #{@geo["height"]}"}
+              class="label-crop-svg"
+              preserveAspectRatio="xMidYMid meet"
+            >
+              <image
+                href={@image_url}
+                width={@orig_w}
+                height={@orig_h}
+              />
+            </svg>
+          <% else %>
+            <img src={@image_url} alt="選択した図版" class="label-preview-image" />
+          <% end %>
         </div>
 
         <%!-- メタデータ入力フォーム --%>

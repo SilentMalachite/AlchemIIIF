@@ -209,7 +209,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               <%= for item <- @pending_images do %>
                 <div
                   id={"review-card-#{item.image.id}"}
-                  class={"review-card #{if @selected_image && @selected_image.image.id == item.image.id, do: "selected", else: ""} #{if MapSet.member?(@fading_ids, item.image.id), do: "card-fade-out", else: ""}"}
+                  class={"review-card status-pending #{if @selected_image && @selected_image.image.id == item.image.id, do: "selected", else: ""} #{if MapSet.member?(@fading_ids, item.image.id), do: "card-fade-out", else: ""}"}
                   phx-click="select_image"
                   phx-value-id={item.image.id}
                   role="button"

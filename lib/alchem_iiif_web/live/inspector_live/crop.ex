@@ -12,7 +12,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
   alias AlchemIiif.Ingestion
 
-  @nudge_amount 5
+  @nudge_amount 10
 
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
@@ -87,6 +87,23 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> push_event("nudge_crop", %{direction: direction, amount: amount})}
   end
 
+  # キーボード矢印キー対応（D-Pad 物理キー互換）
+  @impl true
+  def handle_event("keydown", %{"key" => key}, socket) do
+    direction = arrow_key_to_direction(key)
+
+    if direction do
+      undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
+
+      {:noreply,
+       socket
+       |> assign(:undo_stack, undo_stack)
+       |> push_event("nudge_crop", %{direction: direction, amount: @nudge_amount})}
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_event("undo", _params, socket) do
     case socket.assigns.undo_stack do
@@ -154,6 +171,13 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   defp push_undo(nil, stack), do: stack
   defp push_undo(current, stack), do: [current | stack] |> Enum.take(20)
 
+  # 矢印キー → 方向文字列変換
+  defp arrow_key_to_direction("ArrowUp"), do: "up"
+  defp arrow_key_to_direction("ArrowDown"), do: "down"
+  defp arrow_key_to_direction("ArrowLeft"), do: "left"
+  defp arrow_key_to_direction("ArrowRight"), do: "right"
+  defp arrow_key_to_direction(_), do: nil
+
   # 安全な整数変換
   defp to_int(val) when is_integer(val), do: val
   defp to_int(val) when is_float(val), do: round(val)
@@ -199,7 +223,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="inspector-container">
+    <div class="inspector-container" phx-window-keydown="keydown">
       <.wizard_header current_step={@current_step} />
 
       <div class="crop-area">
@@ -211,138 +235,152 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         <%!-- Auto-Save ステータス --%>
         <.auto_save_indicator state={@save_state} />
 
-        <%!-- 画像 + SVG オーバーレイ --%>
-        <div id="cropper-container" phx-hook="ImageSelection" class="cropper-container">
-          <img
-            id="inspect-target"
-            src={@image_url}
-            alt="クロップ対象の画像"
-            class="crop-image"
-          />
-          <%!-- 初期クロップデータ（JS に渡すための data 属性） --%>
-          <span
-            class="crop-init-data"
-            data-crop-x={crop_x(@crop_rect)}
-            data-crop-y={crop_y(@crop_rect)}
-            data-crop-w={crop_w(@crop_rect)}
-            data-crop-h={crop_h(@crop_rect)}
-            style="display:none;"
-          />
-          <%!-- SVG オーバーレイ（JS Hook が制御するため phx-update="ignore"） --%>
-          <div id="crop-svg-container" phx-update="ignore">
-            <svg class="crop-overlay" preserveAspectRatio="none">
-              <defs>
-                <mask id="crop-dim-mask">
-                  <rect class="dim-mask" fill="white" x="0" y="0" width="100%" height="100%" />
-                  <rect class="dim-cutout" fill="black" x="0" y="0" width="0" height="0" />
-                </mask>
-              </defs>
-              <%!-- 半透明の暗転マスク --%>
-              <rect
-                class="dim-overlay"
-                x="0" y="0" width="100%" height="100%"
-                fill="rgba(0,0,0,0.45)"
-                mask="url(#crop-dim-mask)"
+        <%!-- 2カラムレイアウト: 画像(左) + コントロール(右) --%>
+        <div class="crop-layout">
+          <%!-- 左カラム: 画像 + SVG オーバーレイ --%>
+          <div class="crop-main">
+            <div id="cropper-container" phx-hook="ImageSelection" class="cropper-container">
+              <img
+                id="inspect-target"
+                src={@image_url}
+                alt="クロップ対象の画像"
+                class="crop-image"
               />
-              <%!-- 選択範囲の枠線（Harvest Gold テーマ） --%>
-              <rect
-                class="selection-rect"
-                x="0" y="0" width="0" height="0"
-                fill="#E6B422"
-                fill-opacity="0.2"
-                stroke="#E6B422"
-                stroke-width="2"
-                stroke-dasharray="8 4"
+              <%!-- 初期クロップデータ（JS に渡すための data 属性） --%>
+              <span
+                class="crop-init-data"
+                data-crop-x={crop_x(@crop_rect)}
+                data-crop-y={crop_y(@crop_rect)}
+                data-crop-w={crop_w(@crop_rect)}
+                data-crop-h={crop_h(@crop_rect)}
                 style="display:none;"
               />
-            </svg>
+              <%!-- SVG オーバーレイ（JS Hook が制御するため phx-update="ignore"） --%>
+              <div id="crop-svg-container" phx-update="ignore">
+                <svg class="crop-overlay" preserveAspectRatio="none">
+                  <defs>
+                    <mask id="crop-dim-mask">
+                      <rect class="dim-mask" fill="white" x="0" y="0" width="100%" height="100%" />
+                      <rect class="dim-cutout" fill="black" x="0" y="0" width="0" height="0" />
+                    </mask>
+                  </defs>
+                  <%!-- 半透明の暗転マスク --%>
+                  <rect
+                    class="dim-overlay"
+                    x="0"
+                    y="0"
+                    width="100%"
+                    height="100%"
+                    fill="rgba(0,0,0,0.45)"
+                    mask="url(#crop-dim-mask)"
+                  />
+                  <%!-- 選択範囲の枠線（Harvest Gold テーマ） --%>
+                  <rect
+                    class="selection-rect"
+                    x="0"
+                    y="0"
+                    width="0"
+                    height="0"
+                    fill="#E6B422"
+                    fill-opacity="0.2"
+                    stroke="#E6B422"
+                    stroke-width="2"
+                    stroke-dasharray="8 4"
+                    style="display:none;"
+                  />
+                </svg>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <%!-- Nudge コントロール (D-pad: 上下左右 + 拡大/縮小) --%>
-        <div class="nudge-controls" role="group" aria-label="クロップ範囲の微調整">
-          <div class="nudge-row">
-            <button
-              type="button"
-              class="nudge-btn"
-              phx-click="nudge"
-              phx-value-direction="up"
-              phx-value-amount="5"
-              aria-label="上に移動"
+          <%!-- 右カラム: D-Pad コントロール (sticky サイドバー) --%>
+          <div class="crop-sidebar">
+            <div class="sidebar-label">D-Pad 微調整</div>
+            <%!-- D-Pad 3×3 Grid --%>
+            <div
+              class="nudge-controls"
+              role="group"
+              aria-label="クロップ範囲の微調整（矢印キーでも操作可能）"
             >
-              <.icon name="hero-arrow-up-solid" class="nudge-icon" />
-            </button>
-          </div>
-          <div class="nudge-row">
-            <button
-              type="button"
-              class="nudge-btn"
-              phx-click="nudge"
-              phx-value-direction="left"
-              phx-value-amount="5"
-              aria-label="左に移動"
-            >
-              <.icon name="hero-arrow-left-solid" class="nudge-icon" />
-            </button>
-            <button
-              type="button"
-              class="nudge-btn nudge-shrink"
-              phx-click="nudge"
-              phx-value-direction="shrink"
-              phx-value-amount="5"
-              aria-label="縮小"
-            >
-              <.icon name="hero-arrows-pointing-in-solid" class="nudge-icon" />
-            </button>
-            <button
-              type="button"
-              class="nudge-btn nudge-expand"
-              phx-click="nudge"
-              phx-value-direction="expand"
-              phx-value-amount="5"
-              aria-label="拡大"
-            >
-              <.icon name="hero-arrows-pointing-out-solid" class="nudge-icon" />
-            </button>
-            <button
-              type="button"
-              class="nudge-btn"
-              phx-click="nudge"
-              phx-value-direction="right"
-              phx-value-amount="5"
-              aria-label="右に移動"
-            >
-              <.icon name="hero-arrow-right-solid" class="nudge-icon" />
-            </button>
-          </div>
-          <div class="nudge-row">
-            <button
-              type="button"
-              class="nudge-btn"
-              phx-click="nudge"
-              phx-value-direction="down"
-              phx-value-amount="5"
-              aria-label="下に移動"
-            >
-              <.icon name="hero-arrow-down-solid" class="nudge-icon" />
-            </button>
-          </div>
-        </div>
+              <%!-- Row 1: [縮小] [↑] [拡大] --%>
+              <button
+                type="button"
+                class="nudge-btn nudge-shrink dpad-shrink"
+                phx-click="nudge"
+                phx-value-direction="shrink"
+                phx-value-amount="10"
+                aria-label="縮小"
+              >
+                <.icon name="hero-arrows-pointing-in-solid" class="nudge-icon" />
+              </button>
+              <button
+                type="button"
+                class="nudge-btn dpad-up"
+                phx-click="nudge"
+                phx-value-direction="up"
+                phx-value-amount="10"
+                aria-label="上に移動"
+              >
+                <.icon name="hero-chevron-up-solid" class="nudge-icon" />
+              </button>
+              <button
+                type="button"
+                class="nudge-btn nudge-expand dpad-expand"
+                phx-click="nudge"
+                phx-value-direction="expand"
+                phx-value-amount="10"
+                aria-label="拡大"
+              >
+                <.icon name="hero-arrows-pointing-out-solid" class="nudge-icon" />
+              </button>
 
-        <%!-- Undo ボタン --%>
-        <div class="undo-bar">
-          <button
-            type="button"
-            class="btn-undo"
-            phx-click="undo"
-            disabled={@undo_stack == []}
-            aria-label="元に戻す"
-          >
-            ↩️ 元に戻す
-            <%= if @undo_stack != [] do %>
-              <span class="undo-count">({length(@undo_stack)})</span>
-            <% end %>
-          </button>
+              <%!-- Row 2: [←] [UNDO] [→] --%>
+              <button
+                type="button"
+                class="nudge-btn dpad-left"
+                phx-click="nudge"
+                phx-value-direction="left"
+                phx-value-amount="10"
+                aria-label="左に移動"
+              >
+                <.icon name="hero-chevron-left-solid" class="nudge-icon" />
+              </button>
+              <button
+                type="button"
+                class="dpad-undo-btn dpad-center"
+                phx-click="undo"
+                disabled={@undo_stack == []}
+                aria-label="元に戻す"
+              >
+                <.icon name="hero-arrow-uturn-left-solid" class="dpad-undo-icon" />
+                <%= if @undo_stack != [] do %>
+                  <span class="dpad-undo-count">{length(@undo_stack)}</span>
+                <% end %>
+              </button>
+              <button
+                type="button"
+                class="nudge-btn dpad-right"
+                phx-click="nudge"
+                phx-value-direction="right"
+                phx-value-amount="10"
+                aria-label="右に移動"
+              >
+                <.icon name="hero-chevron-right-solid" class="nudge-icon" />
+              </button>
+
+              <%!-- Row 3: [ ] [↓] [ ] --%>
+              <button
+                type="button"
+                class="nudge-btn dpad-down"
+                phx-click="nudge"
+                phx-value-direction="down"
+                phx-value-amount="10"
+                aria-label="下に移動"
+              >
+                <.icon name="hero-chevron-down-solid" class="nudge-icon" />
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="action-bar">

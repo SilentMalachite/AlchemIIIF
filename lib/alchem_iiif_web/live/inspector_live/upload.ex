@@ -27,6 +27,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   @impl true
+  # セキュリティ注記: upload_dir は固定パス（priv/static/uploads/pdfs）、
+  # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
   def handle_event("upload_pdf", _params, socket) do
     socket = assign(socket, :uploading, true)
 

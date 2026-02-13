@@ -246,79 +246,218 @@
   }
 }
 
-/* === ナッジコントロール — 60x60px Harvest Gold テーマ === */
-.nudge-controls {
+/* === D-Pad ナッジコントロール — 64px Deep Indigo + Harvest Gold === */
+
+/* 2カラムレイアウト: 画像(左) + コントロール(右) */
+.crop-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+/* 左カラム: 画像エリア */
+.crop-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 右カラム: コントロールサイドバー */
+.crop-sidebar {
+  width: 14rem;
+  flex-shrink: 0;
+  position: sticky;
+  top: 2rem;
+  align-self: flex-start;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  margin: 1.5rem auto;
+  gap: 1rem;
 }
 
-.nudge-row {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: center;
+/* サイドバーラベル */
+.sidebar-label {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #E6B422;
+  margin-bottom: 0.25rem;
+  opacity: 0.9;
 }
 
+/* --- D-Pad 3×3 Grid --- */
+.nudge-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  grid-template-rows: repeat(3, 64px);
+  gap: 6px;
+}
+
+/* Grid 配置: [縮小][↑][拡大] / [←][UNDO][→] / [ ][↓][ ] */
+.dpad-shrink {
+  grid-area: 1 / 1;
+}
+
+.dpad-up {
+  grid-area: 1 / 2;
+}
+
+.dpad-expand {
+  grid-area: 1 / 3;
+}
+
+.dpad-left {
+  grid-area: 2 / 1;
+}
+
+.dpad-center {
+  grid-area: 2 / 2;
+}
+
+.dpad-right {
+  grid-area: 2 / 3;
+}
+
+.dpad-down {
+  grid-area: 3 / 2;
+}
+
+/* --- D-Pad ボタン共通 --- */
 .nudge-btn {
-  width: 60px;
-  height: 60px;
+  width: 64px;
+  height: 64px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: #1A2C42;
+  color: #E6B422;
   border: 2px solid #E6B422;
-  background: linear-gradient(145deg, #E6B422, #d4a31e);
-  color: #1a1a2e;
-  border-radius: 12px;
+  border-radius: 14px;
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 8px rgba(230, 180, 34, 0.25);
-  min-height: 44px;
-  /* WM 70 タッチターゲット */
+  transition: all 0.12s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(230, 180, 34, 0.1);
+  min-height: 64px;
+  min-width: 64px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .nudge-btn:hover {
-  background: linear-gradient(145deg, #f0c040, #E6B422);
+  background: #22354D;
+  border-color: #f0c040;
+  color: #f0c040;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(230, 180, 34, 0.4);
+  box-shadow: 0 4px 16px rgba(230, 180, 34, 0.25),
+    inset 0 1px 0 rgba(230, 180, 34, 0.15);
 }
 
+/* Active 反転: Gold 背景 + Indigo テキスト */
 .nudge-btn:active {
-  transform: translateY(1px) scale(0.96);
-  box-shadow: 0 1px 4px rgba(230, 180, 34, 0.3);
+  background: #E6B422;
+  color: #1A2C42;
+  border-color: #E6B422;
+  transform: scale(0.94);
+  box-shadow: 0 1px 4px rgba(230, 180, 34, 0.4),
+    inset 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .nudge-btn:focus-visible {
   outline: 3px solid #E6B422;
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
+/* D-Pad アイコン */
 .nudge-icon {
   width: 28px;
   height: 28px;
 }
 
+/* --- 拡大/縮小ボタン: アクセントカラー --- */
 .nudge-expand {
-  background: linear-gradient(145deg, #2ecc71, #27ae60);
-  border-color: #27ae60;
-  color: #fff;
+  background: rgba(46, 125, 50, 0.15);
+  border-color: #2E7D32;
+  color: #4CAF50;
 }
 
 .nudge-expand:hover {
-  background: linear-gradient(145deg, #3dd87a, #2ecc71);
-  box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+  background: rgba(46, 125, 50, 0.25);
+  border-color: #43A047;
+  color: #66BB6A;
+}
+
+.nudge-expand:active {
+  background: #2E7D32;
+  color: #fff;
+  border-color: #2E7D32;
 }
 
 .nudge-shrink {
-  background: linear-gradient(145deg, #e74c3c, #c0392b);
-  border-color: #c0392b;
-  color: #fff;
+  background: rgba(198, 40, 40, 0.15);
+  border-color: #C62828;
+  color: #EF5350;
 }
 
 .nudge-shrink:hover {
-  background: linear-gradient(145deg, #f05a4b, #e74c3c);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+  background: rgba(198, 40, 40, 0.25);
+  border-color: #E53935;
+  color: #EF5350;
+}
+
+.nudge-shrink:active {
+  background: #C62828;
+  color: #fff;
+  border-color: #C62828;
+}
+
+/* --- D-Pad 中央: Undo ボタン --- */
+.dpad-undo-btn {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #A0AEC0;
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-size: 0.6rem;
+  font-weight: 600;
+  min-height: 64px;
+  min-width: 64px;
+  user-select: none;
+}
+
+.dpad-undo-btn:hover:not(:disabled) {
+  background: rgba(230, 180, 34, 0.1);
+  border-color: rgba(230, 180, 34, 0.4);
+  color: #E6B422;
+}
+
+.dpad-undo-btn:active:not(:disabled) {
+  background: rgba(230, 180, 34, 0.2);
+  transform: scale(0.94);
+}
+
+.dpad-undo-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.dpad-undo-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.dpad-undo-count {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  line-height: 1;
 }
 
 /* === ラベル画面クロッププレビュー === */
@@ -328,15 +467,16 @@
   /* Harvest Gold ボーダー */
   border-radius: 12px;
   max-width: 480px;
-  max-height: 360px;
+  aspect-ratio: 4 / 3;
   margin: 0 auto 1.5rem;
   background: #1a1a2e;
   box-shadow: 0 4px 16px rgba(230, 180, 34, 0.15);
 }
 
-.label-crop-image {
+.label-crop-svg {
   display: block;
-  /* object-fit / object-position / width / height はインラインスタイルで動的設定 */
+  width: 100%;
+  height: 100%;
 }
 
 /* フォールバック：ジオメトリなしの従来表示 */
@@ -493,5 +633,63 @@
   .btn-save-continue,
   .btn-save-finish {
     width: 100%;
+  }
+}
+
+/* レスポンシブ: モバイルでは D-Pad を下部固定配置 */
+@media (max-width: 768px) {
+  .crop-layout {
+    flex-direction: column;
+  }
+
+  .crop-sidebar {
+    width: 100%;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    z-index: 50;
+    background: rgba(26, 44, 66, 0.95);
+    backdrop-filter: blur(8px);
+    padding: 0.75rem;
+    border-top: 1px solid rgba(230, 180, 34, 0.2);
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .nudge-controls {
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 56px);
+    gap: 4px;
+  }
+
+  .nudge-btn {
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    min-height: 56px;
+  }
+
+  .dpad-undo-btn {
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    min-height: 56px;
+  }
+
+  .sidebar-label {
+    display: none;
+  }
+
+  /* 画像エリアの max-width 制限を解除 + 下部余白 */
+  .cropper-container {
+    max-width: 100%;
+  }
+
+  /* D-Pad 分の下部余白を確保 */
+  .crop-area {
+    padding-bottom: 220px;
   }
 }

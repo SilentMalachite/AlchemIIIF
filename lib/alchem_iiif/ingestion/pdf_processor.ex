@@ -27,6 +27,8 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     - {:error, reason}
   """
   def convert_to_images(pdf_path, output_dir) do
+    # セキュリティ注記: output_dir は内部生成パス（priv/static/uploads/pages/{id}）、
+    # cmd は固定文字列 "pdftoppm" — 外部入力由来ではないため安全。
     # 出力ディレクトリを作成
     File.mkdir_p!(output_dir)
 
