@@ -19,12 +19,17 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       extracted_image.image_path
       |> String.replace_leading("priv/static/", "/")
 
+    # ジオメトリに基づくクロッププレビュー用スタイルを計算
+    crop_style = compute_crop_style(extracted_image.geometry)
+
     {:ok,
      socket
      |> assign(:page_title, "ラベリング")
      |> assign(:current_step, 4)
      |> assign(:extracted_image, extracted_image)
      |> assign(:image_url, image_url)
+     |> assign(:crop_style, crop_style)
+     |> assign(:has_crop, extracted_image.geometry != nil)
      |> assign(:caption, extracted_image.caption || "")
      |> assign(:label, extracted_image.label || "")
      |> assign(:site, extracted_image.site || "")
@@ -131,6 +136,32 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     socket
   end
 
+  # ジオメトリデータからクロッププレビュー用の CSS インラインスタイルを生成
+  # コンテナサイズ 480×360 に収まるようスケールを計算する
+  @preview_max_w 480
+  @preview_max_h 360
+  defp compute_crop_style(nil), do: ""
+
+  defp compute_crop_style(%{"width" => w, "height" => h} = geo) when w > 0 and h > 0 do
+    x = Map.get(geo, "x", 0)
+    y = Map.get(geo, "y", 0)
+    scale = min(@preview_max_w / w, @preview_max_h / h)
+
+    # 表示上のオフセット（px）
+    offset_x = round(x * scale)
+    offset_y = round(y * scale)
+
+    # 表示上のクロップ領域サイズ
+    display_w = round(w * scale)
+    display_h = round(h * scale)
+
+    "width:#{display_w}px;height:#{display_h}px;" <>
+      "object-fit:none;" <>
+      "object-position:-#{offset_x}px -#{offset_y}px;"
+  end
+
+  defp compute_crop_style(_), do: ""
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -146,9 +177,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
         <%!-- Auto-Save ステータス --%>
         <.auto_save_indicator state={@save_state} />
 
-        <%!-- プレビュー画像（サムネイル） --%>
-        <div class="label-preview">
-          <img src={@image_url} alt="選択した図版" class="label-preview-image" />
+        <%!-- クロッププレビュー画像 --%>
+        <div class={if @has_crop, do: "label-crop-preview", else: "label-preview"}>
+          <img
+            src={@image_url}
+            alt="選択した図版"
+            class={if @has_crop, do: "label-crop-image", else: "label-preview-image"}
+            style={@crop_style}
+          />
         </div>
 
         <%!-- メタデータ入力フォーム --%>
