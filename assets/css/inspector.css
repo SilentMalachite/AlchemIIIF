@@ -235,15 +235,43 @@
   pointer-events: none;
 }
 
-/* 選択範囲の枠線アニメーション */
+/* 選択範囲の枠線アニメーション（デフォルト: 未保存 dashed） */
 .selection-rect {
   animation: dash-march 0.8s linear infinite;
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
 }
 
 @keyframes dash-march {
   to {
     stroke-dashoffset: -12;
   }
+}
+
+/* ダブルクリック保存ヒント */
+.crop-save-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: #FFD700;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(4px);
+}
+
+/* ドラフト（未保存）インジケーターカラー */
+.save-draft {
+  color: #E6B422;
+  border-color: rgba(230, 180, 34, 0.2);
+  background: rgba(230, 180, 34, 0.1);
 }
 
 /* === D-Pad ナッジコントロール — 64px Deep Indigo + Harvest Gold === */
@@ -291,7 +319,7 @@
   display: grid;
   grid-template-columns: repeat(3, 64px);
   grid-template-rows: repeat(3, 64px);
-  gap: 6px;
+  gap: 8px;
 }
 
 /* Grid 配置: [縮小][↑][拡大] / [←][UNDO][→] / [ ][↓][ ] */
@@ -374,42 +402,8 @@
   height: 28px;
 }
 
-/* --- 拡大/縮小ボタン: アクセントカラー --- */
-.nudge-expand {
-  background: rgba(46, 125, 50, 0.15);
-  border-color: #2E7D32;
-  color: #4CAF50;
-}
-
-.nudge-expand:hover {
-  background: rgba(46, 125, 50, 0.25);
-  border-color: #43A047;
-  color: #66BB6A;
-}
-
-.nudge-expand:active {
-  background: #2E7D32;
-  color: #fff;
-  border-color: #2E7D32;
-}
-
-.nudge-shrink {
-  background: rgba(198, 40, 40, 0.15);
-  border-color: #C62828;
-  color: #EF5350;
-}
-
-.nudge-shrink:hover {
-  background: rgba(198, 40, 40, 0.25);
-  border-color: #E53935;
-  color: #EF5350;
-}
-
-.nudge-shrink:active {
-  background: #C62828;
-  color: #fff;
-  border-color: #C62828;
-}
+/* --- 拡大/縮小ボタン: Indigo & Gold テーマ統一 --- */
+/* .nudge-btn の共通スタイル (Deep Indigo + Gold) がそのまま適用されます */
 
 /* --- D-Pad 中央: Undo ボタン --- */
 .dpad-undo-btn {

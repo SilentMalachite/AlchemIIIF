@@ -88,26 +88,41 @@ defmodule AlchemIiifWeb.WizardComponents do
   end
 
   @doc """
-  Auto-Save インジケーター。
+  保存状態インジケーター。
 
   ## 属性
-    - state: :saved | :saving | :idle
+    - state: :saved | :draft | :saving | :idle
   """
   attr :state, :atom, default: :idle
 
-  def auto_save_indicator(assigns) do
+  def save_state_indicator(assigns) do
     ~H"""
     <div class={"auto-save-indicator save-#{@state}"} role="status" aria-live="polite">
       <%= case @state do %>
         <% :saved -> %>
           <span class="save-icon">💾</span>
           <span class="save-text">保存済み</span>
+        <% :draft -> %>
+          <span class="save-icon">✏️</span>
+          <span class="save-text">未保存</span>
         <% :saving -> %>
           <span class="save-icon spinning">⏳</span>
           <span class="save-text">保存中...</span>
         <% _ -> %>
       <% end %>
     </div>
+    """
+  end
+
+  @doc """
+  Auto-Save インジケーター（後方互換性）。
+  save_state_indicator に委譲します。
+  """
+  attr :state, :atom, default: :idle
+
+  def auto_save_indicator(assigns) do
+    ~H"""
+    <.save_state_indicator state={@state} />
     """
   end
 end

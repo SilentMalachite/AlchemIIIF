@@ -235,12 +235,19 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
                   <%!-- 画像サムネイル --%>
                   <div class="review-card-image-container">
-                    <img
-                      src={image_thumbnail_url(item.image)}
-                      alt={item.image.caption || "図版"}
-                      class="review-card-image"
-                      loading="lazy"
-                    />
+                    <%= if is_nil(item.image.ptif_path) do %>
+                      <div class="review-card-processing">
+                        <span class="processing-icon">⏳</span>
+                        <span class="processing-text">画像処理中...</span>
+                      </div>
+                    <% else %>
+                      <img
+                        src={image_thumbnail_url(item.image)}
+                        alt={item.image.caption || "図版"}
+                        class="review-card-image"
+                        loading="lazy"
+                      />
+                    <% end %>
                   </div>
 
                   <%!-- メタデータ --%>
@@ -263,9 +270,10 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                   <div class="review-card-actions">
                     <button
                       type="button"
-                      class="btn-approve btn-large"
+                      class={"btn-approve btn-large #{if is_nil(item.image.ptif_path), do: "btn-disabled", else: ""}"}
                       phx-click="approve"
                       phx-value-id={item.image.id}
+                      disabled={is_nil(item.image.ptif_path)}
                       aria-label={"「#{item.image.label || "名称未設定"}」を承認して公開"}
                     >
                       ✅ 承認

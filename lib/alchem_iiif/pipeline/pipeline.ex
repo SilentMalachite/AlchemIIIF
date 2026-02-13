@@ -310,9 +310,13 @@ defmodule AlchemIiif.Pipeline do
 
   # --- プライベート関数 ---
 
-  # 単一画像のPTIF生成（クロップ処理込み）
-  # セキュリティ注記: ptif_dir / cropped_path は内部生成パス（priv/static/iiif_images）で安全。
-  defp generate_single_ptif(extracted_image) do
+  @doc """
+  単一画像のPTIF生成（クロップ処理込み）。
+  Label 提出時のバックグラウンド呼び出しにも使用されます。
+
+  セキュリティ注記: ptif_dir / cropped_path は内部生成パス（priv/static/iiif_images）で安全。
+  """
+  def generate_single_ptif(extracted_image) do
     ptif_dir = Path.join(["priv", "static", "iiif_images"])
     File.mkdir_p!(ptif_dir)
 

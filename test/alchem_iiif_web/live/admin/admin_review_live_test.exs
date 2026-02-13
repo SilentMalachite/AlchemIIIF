@@ -53,6 +53,19 @@ defmodule AlchemIiifWeb.Admin.ReviewLiveTest do
 
       refute html =~ "公開済み画像"
     end
+
+    test "PTIF なしの pending_review 画像には処理中プレースホルダーが表示される", %{conn: conn} do
+      insert_extracted_image(%{
+        ptif_path: nil,
+        status: "pending_review",
+        label: "PTIF処理待ち画像"
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/admin/review")
+
+      assert html =~ "PTIF処理待ち画像"
+      assert html =~ "画像処理中..."
+    end
   end
 
   describe "Validation Badge" do

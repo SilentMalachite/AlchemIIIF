@@ -183,20 +183,21 @@ defmodule AlchemIiif.IngestionTest do
   end
 
   describe "list_pending_review_images/0" do
-    test "pending_review かつ PTIF ありの画像のみを返す" do
+    test "pending_review の画像を返す（PTIF の有無を問わない）" do
       _draft = insert_extracted_image(%{status: "draft", ptif_path: "/path/to/test.tif"})
 
-      pending =
+      pending_with_ptif =
         insert_extracted_image(%{status: "pending_review", ptif_path: "/path/to/test2.tif"})
 
       _published = insert_extracted_image(%{status: "published", ptif_path: "/path/to/test3.tif"})
-      _no_ptif = insert_extracted_image(%{status: "pending_review", ptif_path: nil})
+      pending_no_ptif = insert_extracted_image(%{status: "pending_review", ptif_path: nil})
 
       result = Ingestion.list_pending_review_images()
       ids = Enum.map(result, & &1.id)
 
-      assert pending.id in ids
-      assert length(result) == 1
+      assert pending_with_ptif.id in ids
+      assert pending_no_ptif.id in ids
+      assert length(result) == 2
     end
   end
 

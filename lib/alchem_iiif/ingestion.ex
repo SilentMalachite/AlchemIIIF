@@ -120,7 +120,6 @@ defmodule AlchemIiif.Ingestion do
   def list_pending_review_images do
     from(e in ExtractedImage,
       where: e.status == "pending_review",
-      where: not is_nil(e.ptif_path),
       order_by: [desc: e.inserted_at],
       preload: [:iiif_manifest, :pdf_source]
     )

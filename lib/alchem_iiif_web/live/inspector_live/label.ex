@@ -89,13 +89,22 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
     case save_result do
       {:ok, _updated} ->
+        # "finish" 時は PTIF をバックグラウンド生成
+        if action == "finish" do
+          updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+
+          Task.start(fn ->
+            AlchemIiif.Pipeline.generate_single_ptif(updated_image)
+          end)
+        end
+
         {flash_msg, route} =
           case action do
             "continue" ->
               {"✅ ラベルを保存しました！", ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
 
             _finish ->
-              {"✅ レビューに提出しました！（このアイテムはロックされます）", ~p"/lab"}
+              {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
           end
 
         {:noreply,

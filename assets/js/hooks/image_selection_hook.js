@@ -1,5 +1,6 @@
 // assets/js/hooks/image_selection_hook.js
 // カスタム ImageSelection Hook — マウス/タッチドラッグによる範囲選択と SVG オーバーレイ
+// ダブルクリック（ダブルタップ）で明示的に保存する方式
 
 const ImageSelection = {
   mounted() {
@@ -18,6 +19,12 @@ const ImageSelection = {
 
     // 現在の選択範囲（画像の自然サイズベース）
     this.selection = { x: 0, y: 0, w: 0, h: 0 };
+
+    // 保存状態フラグ（ボーダースタイル切替用）
+    this._isSaved = false;
+
+    // ダブルタップ検出用タイムスタンプ
+    this._lastTapTime = 0;
 
     // 画像読み込み完了後にイベントリスナーを登録
     const init = () => {
@@ -55,8 +62,9 @@ const ImageSelection = {
           break;
       }
       this._clampSelection();
+      this._markDraft();
       this._updateOverlay();
-      this._pushCropData();
+      this._pushPreviewData();
     });
 
     // LiveView からの Undo/復元イベントを処理
@@ -70,6 +78,13 @@ const ImageSelection = {
         };
         this._updateOverlay();
       }
+    });
+
+    // LiveView から保存成功通知を受信
+    this.handleEvent("save_confirmed", () => {
+      this._isSaved = true;
+      this._updateSelectionStyle();
+      this._flashSaveSuccess();
     });
   },
 
@@ -95,17 +110,30 @@ const ImageSelection = {
       const h = parseInt(dataEl.dataset.cropH || 0, 10);
       if (w > 0 && h > 0) {
         this.selection = { x, y, w, h };
+        // DB に保存済みのデータがあれば saved 状態で表示
+        this._isSaved = true;
         this._updateOverlay();
+        this._updateSelectionStyle();
       }
     }
   },
 
-  // マウス/タッチイベントリスナーを登録
+  // マウス/タッチ/ダブルクリックイベントリスナーを登録
   _setupEventListeners() {
     // マウスイベント
     this._onMouseDown = (e) => this._handleStart(e, e.clientX, e.clientY);
     this._onMouseMove = (e) => this._handleMove(e, e.clientX, e.clientY);
     this._onMouseUp = (e) => this._handleEnd(e);
+
+    // ダブルクリック → 保存
+    this._onDblClick = (e) => {
+      // ナッジボタンやアクションバーを除外
+      if (e.target.closest('.nudge-controls') || e.target.closest('.action-bar')) return;
+      e.preventDefault();
+      if (this.selection.w > 5 && this.selection.h > 5) {
+        this._pushSaveCrop();
+      }
+    };
 
     // タッチイベント（ROG Ally X 対応）
     this._onTouchStart = (e) => {
@@ -118,11 +146,16 @@ const ImageSelection = {
         this._handleMove(e, e.touches[0].clientX, e.touches[0].clientY);
       }
     };
-    this._onTouchEnd = (e) => this._handleEnd(e);
+    this._onTouchEnd = (e) => {
+      this._handleEnd(e);
+      // ダブルタップ検出（300ms 以内に2回タップ）
+      this._detectDoubleTap();
+    };
 
     this.el.addEventListener('mousedown', this._onMouseDown);
     document.addEventListener('mousemove', this._onMouseMove);
     document.addEventListener('mouseup', this._onMouseUp);
+    this.el.addEventListener('dblclick', this._onDblClick);
 
     this.el.addEventListener('touchstart', this._onTouchStart, { passive: false });
     document.addEventListener('touchmove', this._onTouchMove, { passive: false });
@@ -135,10 +168,28 @@ const ImageSelection = {
       document.removeEventListener('mousemove', this._onMouseMove);
       document.removeEventListener('mouseup', this._onMouseUp);
     }
+    if (this._onDblClick) {
+      this.el.removeEventListener('dblclick', this._onDblClick);
+    }
     if (this._onTouchStart) {
       this.el.removeEventListener('touchstart', this._onTouchStart);
       document.removeEventListener('touchmove', this._onTouchMove);
       document.removeEventListener('touchend', this._onTouchEnd);
+    }
+  },
+
+  // ダブルタップ検出（タッチ端末用）
+  _detectDoubleTap() {
+    const now = Date.now();
+    const elapsed = now - this._lastTapTime;
+    if (elapsed < 300 && elapsed > 0) {
+      // ダブルタップ検出 → 保存
+      if (this.selection.w > 5 && this.selection.h > 5) {
+        this._pushSaveCrop();
+      }
+      this._lastTapTime = 0;
+    } else {
+      this._lastTapTime = now;
     }
   },
 
@@ -188,15 +239,22 @@ const ImageSelection = {
     this._updateOverlay();
   },
 
-  // ドラッグ終了
+  // ドラッグ終了 — プレビューのみ送信（DB保存なし）
   _handleEnd(_e) {
     if (!this.isDragging) return;
     this.isDragging = false;
 
     // 最小サイズチェック（偶発的なクリックを無視）
     if (this.selection.w > 5 && this.selection.h > 5) {
-      this._pushCropData();
+      this._markDraft();
+      this._pushPreviewData();
     }
+  },
+
+  // 未保存（ドラフト）状態にマーク
+  _markDraft() {
+    this._isSaved = false;
+    this._updateSelectionStyle();
   },
 
   // 選択範囲を画像の境界内にクランプ
@@ -247,9 +305,42 @@ const ImageSelection = {
     }
   },
 
-  // クロップデータを LiveView に送信
-  _pushCropData() {
-    this.pushEvent("update_crop", {
+  // 選択枠のスタイルを切替（dashed=未保存 / solid=保存済み）
+  _updateSelectionStyle() {
+    if (!this.selectionRect) return;
+    if (this._isSaved) {
+      this.selectionRect.setAttribute('stroke-dasharray', 'none');
+      this.selectionRect.setAttribute('stroke', '#4CAF50');
+    } else {
+      this.selectionRect.setAttribute('stroke-dasharray', '8 4');
+      this.selectionRect.setAttribute('stroke', '#E6B422');
+    }
+  },
+
+  // 保存成功フラッシュ — 枠が一瞬 Bright Gold に光る
+  _flashSaveSuccess() {
+    if (!this.selectionRect) return;
+    this.selectionRect.setAttribute('stroke', '#FFD700');
+    this.selectionRect.setAttribute('stroke-width', '4');
+    setTimeout(() => {
+      this.selectionRect.setAttribute('stroke', '#4CAF50');
+      this.selectionRect.setAttribute('stroke-width', '2');
+    }, 600);
+  },
+
+  // プレビューデータを LiveView に送信（DB保存なし）
+  _pushPreviewData() {
+    this.pushEvent("preview_crop", {
+      x: this.selection.x,
+      y: this.selection.y,
+      width: this.selection.w,
+      height: this.selection.h
+    });
+  },
+
+  // 保存リクエストを LiveView に送信（DB保存あり）
+  _pushSaveCrop() {
+    this.pushEvent("save_crop", {
       x: this.selection.x,
       y: this.selection.y,
       width: this.selection.w,

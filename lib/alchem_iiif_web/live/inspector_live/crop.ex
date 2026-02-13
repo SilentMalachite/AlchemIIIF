@@ -4,7 +4,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   カスタム ImageSelection Hook を使用して図版の範囲を定義し、
   Nudge コントロール（上下左右 + 拡大/縮小）で微調整を行います。
   SVG オーバーレイで選択範囲を可視化。
-  Undo 機能と Auto-Save を搭載。
+  Undo 機能を搭載。ダブルクリック（ダブルタップ）で明示的に保存。
   """
   use AlchemIiifWeb, :live_view
 
@@ -30,6 +30,9 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         _ -> nil
       end
 
+    # DB に保存済みデータがあれば :saved、なければ :idle
+    initial_state = if crop_rect, do: :saved, else: :idle
+
     {:ok,
      socket
      |> assign(:page_title, "図版をクロップ")
@@ -38,13 +41,12 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:image_url, image_url)
      |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, [])
-     |> assign(:save_state, :idle)
-     |> assign(:save_timer, nil)}
+     |> assign(:save_state, initial_state)}
   end
 
-  # JS Hook からのドラッグ選択イベント
+  # JS Hook からのプレビューイベント（DB保存なし、UIのみ更新）
   @impl true
-  def handle_event("update_crop", params, socket) do
+  def handle_event("preview_crop", params, socket) do
     crop_rect = %{
       "x" => to_int(params["x"]),
       "y" => to_int(params["y"]),
@@ -59,7 +61,38 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      socket
      |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, undo_stack)
-     |> auto_save_crop(crop_rect)}
+     |> assign(:save_state, :draft)}
+  end
+
+  # ダブルクリック/ダブルタップによる明示的保存
+  @impl true
+  def handle_event("save_crop", params, socket) do
+    crop_rect = %{
+      "x" => to_int(params["x"]),
+      "y" => to_int(params["y"]),
+      "width" => to_int(params["width"]),
+      "height" => to_int(params["height"])
+    }
+
+    case Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
+           geometry: crop_rect
+         }) do
+      {:ok, _updated_image} ->
+        {:noreply,
+         socket
+         |> assign(:crop_rect, crop_rect)
+         |> assign(:save_state, :saved)
+         |> push_event("save_confirmed", %{})}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+    end
+  end
+
+  # 旧イベント名の後方互換性（update_crop → preview_crop として動作）
+  @impl true
+  def handle_event("update_crop", params, socket) do
+    handle_event("preview_crop", params, socket)
   end
 
   # 旧イベント名の後方互換性（update_crop_data）
@@ -71,7 +104,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      socket
      |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, undo_stack)
-     |> auto_save_crop(crop_rect)}
+     |> assign(:save_state, :draft)}
   end
 
   @impl true
@@ -112,8 +145,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
          socket
          |> assign(:crop_rect, previous)
          |> assign(:undo_stack, rest)
-         |> push_event("restore_crop", %{crop_data: previous})
-         |> auto_save_crop(previous)}
+         |> assign(:save_state, :draft)
+         |> push_event("restore_crop", %{crop_data: previous})}
 
       [] ->
         {:noreply, put_flash(socket, :info, "元に戻す操作はありません")}
@@ -134,36 +167,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         })
 
       {:noreply, push_navigate(socket, to: ~p"/lab/label/#{socket.assigns.extracted_image.id}")}
-    end
-  end
-
-  @impl true
-  def handle_info(:auto_save_complete, socket) do
-    {:noreply, assign(socket, :save_state, :saved)}
-  end
-
-  # デバウンスタイマー発火 — 最終値のみ DB に保存
-  @impl true
-  def handle_info(:debounced_save, socket) do
-    crop_rect = socket.assigns.crop_rect
-
-    if crop_rect do
-      lv_pid = self()
-
-      Task.start(fn ->
-        Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-          geometry: crop_rect
-        })
-
-        send(lv_pid, :auto_save_complete)
-      end)
-
-      {:noreply,
-       socket
-       |> assign(:save_state, :saving)
-       |> assign(:save_timer, nil)}
-    else
-      {:noreply, assign(socket, :save_timer, nil)}
     end
   end
 
@@ -190,18 +193,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   end
 
   defp to_int(_), do: 0
-
-  # Auto-Save ヘルパー — デバウンス方式で最終値のみ DB に保存（500ms）
-  defp auto_save_crop(socket, _crop_rect) do
-    # 前回のタイマーをキャンセル
-    if socket.assigns.save_timer do
-      Process.cancel_timer(socket.assigns.save_timer)
-    end
-
-    # 500ms 後に最終値を保存（連続操作中は前のタイマーがキャンセルされる）
-    timer = Process.send_after(self(), :debounced_save, 500)
-    assign(socket, :save_timer, timer)
-  end
 
   # crop_rect からSVGオーバーレイ用の値を安全に取得
   defp crop_x(nil), do: 0
@@ -232,8 +223,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           画像上でドラッグして図版の範囲を選択します。<br /> 方向ボタンで微調整できます。
         </p>
 
-        <%!-- Auto-Save ステータス --%>
-        <.auto_save_indicator state={@save_state} />
+        <%!-- Save ステータス --%>
+        <.save_state_indicator state={@save_state} />
 
         <%!-- 2カラムレイアウト: 画像(左) + コントロール(右) --%>
         <div class="crop-layout">
@@ -289,6 +280,10 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
                     style="display:none;"
                   />
                 </svg>
+              </div>
+              <%!-- ダブルクリックヒント --%>
+              <div class="crop-save-hint" role="status">
+                💾 選択範囲をダブルクリックで保存
               </div>
             </div>
           </div>
