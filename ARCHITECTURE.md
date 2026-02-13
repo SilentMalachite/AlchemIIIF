@@ -80,7 +80,7 @@ PDF ファイル
 サムネイルグリッド (/lab/browse/:id)
     │  Step 2: ユーザーがページ選択
     ▼
-Cropper.js ──── 手動クロップ + Nudge 調整 (/lab/crop/:id)
+ImageSelection Hook ──── 手動クロップ + Nudge 調整 (/lab/crop/:id)
     │  Step 3: 図版の範囲を指定
     ▼
 メタデータ入力フォーム (/lab/label/:id)
@@ -247,7 +247,7 @@ Canvas、AnnotationPage、Annotation の階層構造を含みます。
 ```
 LiveView (Elixir)              JS Hook (JavaScript)
 ────────────────               ──────────────────────
-  ↓ push_event                   ↓ Cropper.js 初期化
+  ↓ push_event                   ↓ Hook インストール (ImageSelection)
   "nudge_crop"  ─────────────>  setData() で位置調整
                                    ↓ cropend イベント
   handle_event  <─────────────  pushEvent("update_crop_data")
