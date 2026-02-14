@@ -117,6 +117,47 @@ brew install elixir postgresql@15 vips poppler node
 sudo apt install elixir erlang postgresql libvips-dev poppler-utils nodejs npm
 ```
 
+#### Windows (ネイティブ)
+
+以下のソフトウェアをインストールしてください：
+
+| ソフトウェア | 説明 | ダウンロード |
+|:---|:---|:---|
+| **Elixir & Erlang/OTP** | プリコンパイル済み Windows インストーラーを使用 | [Elixir Installer](https://elixir-lang.org/install.html#windows) |
+| **PostgreSQL 15+** | 公式 Windows インストーラー | [PostgreSQL Downloads](https://www.postgresql.org/download/windows/) |
+| **Visual Studio Build Tools** | vix/libvips NIF のコンパイルに**必須** | [VS Build Tools](https://visualstudio.microsoft.com/ja/visual-cpp-build-tools/) |
+| **Git for Windows** | バージョン管理 | [Git for Windows](https://gitforwindows.org/) |
+| **poppler-utils** | PDF 変換 (pdftoppm) | [poppler releases](https://github.com/osber/poppler-win/releases) |
+
+> [!IMPORTANT]
+> **Visual Studio Build Tools** のインストール時に「**C++ によるデスクトップ開発**」ワークロードを必ず選択してください。
+> これがないと `vix` (libvips) NIF のコンパイルに失敗します。
+
+> [!TIP]
+> PostgreSQL インストール後、`C:\Program Files\PostgreSQL\15\bin` を **システム環境変数 PATH** に追加してください。
+> コマンドプロンプトで `psql --version` が実行できれば設定完了です。
+
+**セットアップ手順 (PowerShell / コマンドプロンプト):**
+
+```powershell
+# 1. リポジトリをクローン
+git clone https://github.com/SilentMalachite/AlchemIIIF.git
+cd AlchemIIIF
+
+# 2. 依存パッケージをインストール
+mix deps.get
+
+# 3. データベースのセットアップ
+mix ecto.setup
+
+# 4. 開発サーバーを起動
+mix phx.server
+```
+
+> [!NOTE]
+> **vix 関連のエラーが発生した場合**: Visual Studio Build Tools の「C++ によるデスクトップ開発」が正しくインストールされていることを確認してください。
+> インストール後は**コマンドプロンプトを再起動**する必要があります。
+
 ### インストール手順
 
 ```bash
@@ -253,7 +294,7 @@ MIX_ENV=prod mix release
 
 > **⚠️ 注意**: Phoenix 1.8 の colocated hooks を使用しているため、`mix compile` を `mix assets.deploy` より先に実行する必要があります。
 
-### 起動
+### 起動 (Linux / macOS)
 
 ```bash
 # 環境変数を設定
@@ -267,6 +308,34 @@ _build/prod/rel/alchem_iiif/bin/migrate
 # サーバー起動
 _build/prod/rel/alchem_iiif/bin/server
 ```
+
+### 起動 (Windows)
+
+Windows では `.bat` スクリプトを使用します：
+
+```powershell
+# 環境変数を設定
+$env:DATABASE_URL = "ecto://user:pass@localhost/alchem_iiif_prod"
+$env:SECRET_KEY_BASE = "your-secret-key-base"
+$env:PHX_HOST = "localhost"
+
+# リリースディレクトリに移動
+cd _build\prod\rel\alchem_iiif\bin
+
+# データベースマイグレーション
+.\alchem_iiif.bat eval "AlchemIiif.Release.migrate"
+
+# サーバー起動
+.\alchem_iiif.bat start
+```
+
+> [!TIP]
+> `SECRET_KEY_BASE` は事前に `mix phx.gen.secret` で生成した値を使用してください。
+
+> [!NOTE]
+> **Windows サービスとして登録**: OTP リリースは Windows サービスとしてインストールすることも可能です。
+> `alchem_iiif.bat install` コマンドでサービスとして登録でき、OS 起動時に自動的にサーバーが立ち上がるようになります。
+> 詳細は `alchem_iiif.bat help` を参照してください。
 
 ---
 
