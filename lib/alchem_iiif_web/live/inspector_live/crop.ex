@@ -5,6 +5,10 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   Nudge コントロール（上下左右 + 拡大/縮小）で微調整を行います。
   SVG オーバーレイで選択範囲を可視化。
   Undo 機能を搭載。ダブルクリック（ダブルタップ）で明示的に保存。
+
+  ## Write-on-Action ポリシー
+  ExtractedImage レコードは save_crop 時に初めて作成されます。
+  Browse からはレコードIDを受け取らず、pdf_source_id と page_number で動作します。
   """
   use AlchemIiifWeb, :live_view
 
@@ -15,18 +19,38 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   @nudge_amount 10
 
   @impl true
-  def mount(%{"image_id" => image_id}, _session, socket) do
-    extracted_image = Ingestion.get_extracted_image!(image_id)
+  def mount(
+        %{"pdf_source_id" => pdf_source_id, "page_number" => page_number_str},
+        _session,
+        socket
+      ) do
+    {page_number, _} = Integer.parse(page_number_str)
+    pdf_source = Ingestion.get_pdf_source!(pdf_source_id)
 
-    # 画像のURLを生成（priv/static からの相対パス）
+    # この pdf_source_id + page_number に既存レコードがあるかチェック
+    existing_image = Ingestion.find_extracted_image_by_page(pdf_source.id, page_number)
+
+    # ページ画像のパスとURLを構築
+    pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+
+    page_filename =
+      if File.dir?(pages_dir) do
+        pages_dir
+        |> File.ls!()
+        |> Enum.filter(&String.ends_with?(&1, ".png"))
+        |> Enum.sort()
+        |> Enum.at(page_number - 1)
+      end
+
+    image_path = if page_filename, do: Path.join(pages_dir, page_filename), else: nil
+
     image_url =
-      extracted_image.image_path
-      |> String.replace_leading("priv/static/", "/")
+      if page_filename, do: "/uploads/pages/#{pdf_source.id}/#{page_filename}", else: nil
 
-    # 既存の geometry、または空のデフォルト値
+    # 既存レコードがある場合はそのクロップデータをロード
     crop_rect =
-      case extracted_image.geometry do
-        %{"x" => _, "y" => _, "width" => _, "height" => _} = geo -> geo
+      case existing_image do
+        %{geometry: %{"x" => _, "y" => _, "width" => _, "height" => _} = geo} -> geo
         _ -> nil
       end
 
@@ -37,7 +61,10 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      socket
      |> assign(:page_title, "図版をクロップ")
      |> assign(:current_step, 3)
-     |> assign(:extracted_image, extracted_image)
+     |> assign(:pdf_source, pdf_source)
+     |> assign(:page_number, page_number)
+     |> assign(:extracted_image, existing_image)
+     |> assign(:image_path, image_path)
      |> assign(:image_url, image_url)
      |> assign(:crop_rect, crop_rect)
      |> assign(:undo_stack, [])
@@ -64,7 +91,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:save_state, :draft)}
   end
 
-  # ダブルクリック/ダブルタップによる明示的保存
+  # ダブルクリック/ダブルタップによる明示的保存（Write-on-Action: レコードの遅延作成）
   @impl true
   def handle_event("save_crop", params, socket) do
     crop_rect = %{
@@ -74,12 +101,27 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       "height" => to_int(params["height"])
     }
 
-    case Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-           geometry: crop_rect
-         }) do
-      {:ok, _updated_image} ->
+    result =
+      case socket.assigns.extracted_image do
+        nil ->
+          # 新規作成（Write-on-Action: 初めてここでレコードを作成）
+          Ingestion.create_extracted_image(%{
+            pdf_source_id: socket.assigns.pdf_source.id,
+            page_number: socket.assigns.page_number,
+            image_path: socket.assigns.image_path,
+            geometry: crop_rect
+          })
+
+        existing ->
+          # 既存レコードの更新
+          Ingestion.update_extracted_image(existing, %{geometry: crop_rect})
+      end
+
+    case result do
+      {:ok, updated_image} ->
         {:noreply,
          socket
+         |> assign(:extracted_image, updated_image)
          |> assign(:crop_rect, crop_rect)
          |> assign(:save_state, :saved)
          |> push_event("save_confirmed", %{})}
@@ -156,17 +198,24 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   @impl true
   def handle_event("proceed_to_label", _params, socket) do
     crop_rect = socket.assigns.crop_rect
+    extracted_image = socket.assigns.extracted_image
 
-    if is_nil(crop_rect) do
-      {:noreply, put_flash(socket, :error, "クロップ範囲を指定してください")}
-    else
-      # クロップデータを保存してラベリング画面に遷移
-      {:ok, _updated_image} =
-        Ingestion.update_extracted_image(socket.assigns.extracted_image, %{
-          geometry: crop_rect
-        })
+    cond do
+      is_nil(crop_rect) ->
+        {:noreply, put_flash(socket, :error, "クロップ範囲を指定してください")}
 
-      {:noreply, push_navigate(socket, to: ~p"/lab/label/#{socket.assigns.extracted_image.id}")}
+      is_nil(extracted_image) ->
+        # まだ保存されていないのでブロック
+        {:noreply, put_flash(socket, :error, "先にクロップ範囲を保存してください（ダブルクリック）")}
+
+      true ->
+        # クロップデータを最終保存してラベリング画面に遷移
+        {:ok, _updated_image} =
+          Ingestion.update_extracted_image(extracted_image, %{
+            geometry: crop_rect
+          })
+
+        {:noreply, push_navigate(socket, to: ~p"/lab/label/#{extracted_image.id}")}
     end
   end
 
@@ -353,7 +402,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
         <div class="action-bar">
           <.link
-            navigate={~p"/lab/browse/#{@extracted_image.pdf_source_id}"}
+            navigate={~p"/lab/browse/#{@pdf_source.id}"}
             class="btn-secondary btn-large"
           >
             ← 戻る

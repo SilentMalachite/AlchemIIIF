@@ -168,7 +168,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   # 全メタデータを一括保存する共通関数
-  defp save_metadata(socket, extra_attrs \\ %{}) do
+  defp save_metadata(socket, extra_attrs) do
     base_attrs = %{
       caption: socket.assigns.caption,
       label: socket.assigns.label,
@@ -184,40 +184,42 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   # 保存ロジック（重複チェック通過後に呼ばれる）
+  # 全アクション（finish / continue）で status を pending_review に昇格する
   defp do_save(socket, action) do
-    save_result =
-      case action do
-        "finish" -> save_metadata(socket, %{status: "pending_review"})
-        _other -> save_metadata(socket)
-      end
+    # geometry が nil の場合は保存をブロック
+    if is_nil(socket.assigns.extracted_image.geometry) and is_nil(socket.assigns.geo) do
+      {:noreply, put_flash(socket, :error, "⚠️ クロップ範囲が設定されていません。先にクロップ画面で範囲を指定してください。")}
+    else
+      # 全保存パスで status: "pending_review" を強制設定
+      save_result = save_metadata(socket, %{status: "pending_review"})
 
-    case save_result do
-      {:ok, _updated} ->
-        # "finish" 時は PTIF をバックグラウンド生成
-        if action == "finish" do
+      case save_result do
+        {:ok, _updated} ->
+          # PTIF をバックグラウンド生成（全アクション共通）
           updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
 
           Task.start(fn ->
             AlchemIiif.Pipeline.generate_single_ptif(updated_image)
           end)
-        end
 
-        {flash_msg, route} =
-          case action do
-            "continue" ->
-              {"✅ ラベルを保存しました！", ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
+          {flash_msg, route} =
+            case action do
+              "continue" ->
+                {"✅ レビューに提出しました！次の図版を選択してください。",
+                 ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
 
-            _finish ->
-              {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
-          end
+              _finish ->
+                {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
+            end
 
-        {:noreply,
-         socket
-         |> put_flash(:info, flash_msg)
-         |> push_navigate(to: route)}
+          {:noreply,
+           socket
+           |> put_flash(:info, flash_msg)
+           |> push_navigate(to: route)}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+      end
     end
   end
 
@@ -396,7 +398,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
         <div class="action-bar-split">
           <.link
-            navigate={~p"/lab/crop/#{@extracted_image.id}"}
+            navigate={~p"/lab/crop/#{@extracted_image.pdf_source_id}/#{@extracted_image.page_number}"}
             class="btn-secondary btn-large"
           >
             ← 戻る

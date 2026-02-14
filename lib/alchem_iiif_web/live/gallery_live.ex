@@ -21,7 +21,7 @@ defmodule AlchemIiifWeb.GalleryLive do
 
     # 公開済み画像のみ表示
     results = Search.search_published_images()
-    result_count = length(results)
+    match_count = Search.count_published_results()
     dims_map = build_dims_map(results)
 
     {:ok,
@@ -31,20 +31,21 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filters, %{})
      |> assign(:filter_options, filter_options)
      |> assign(:results, results)
-     |> assign(:result_count, result_count)
+     |> assign(:match_count, match_count)
      |> assign(:dims_map, dims_map)}
   end
 
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
     results = Search.search_published_images(query, socket.assigns.filters)
+    match_count = Search.count_published_results(query, socket.assigns.filters)
     dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:query, query)
      |> assign(:results, results)
-     |> assign(:result_count, length(results))
+     |> assign(:match_count, match_count)
      |> assign(:dims_map, dims_map)}
   end
 
@@ -61,26 +62,28 @@ defmodule AlchemIiifWeb.GalleryLive do
       end
 
     results = Search.search_published_images(socket.assigns.query, updated_filters)
+    match_count = Search.count_published_results(socket.assigns.query, updated_filters)
     dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, updated_filters)
      |> assign(:results, results)
-     |> assign(:result_count, length(results))
+     |> assign(:match_count, match_count)
      |> assign(:dims_map, dims_map)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     results = Search.search_published_images(socket.assigns.query, %{})
+    match_count = Search.count_published_results(socket.assigns.query, %{})
     dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, %{})
      |> assign(:results, results)
-     |> assign(:result_count, length(results))
+     |> assign(:match_count, match_count)
      |> assign(:dims_map, dims_map)}
   end
 
@@ -194,32 +197,46 @@ defmodule AlchemIiifWeb.GalleryLive do
 
       <%!-- 検索結果 --%>
       <div class="results-count">
-        {result_text(@result_count)}
+        {result_text(@match_count)}
       </div>
 
-      <%= if @results == [] do %>
-        <div class="no-results">
-          <span class="no-results-icon">📭</span>
-          <p class="section-description">
+      <%= if @match_count == 0 do %>
+        <div class="no-results-container">
+          <div class="no-results-card">
+            <div class="no-results-icon-box">
+              <.icon name="hero-magnifying-glass" class="w-16 h-16 text-[#A0AEC0] opacity-40" />
+            </div>
+            <h2 class="no-results-title">条件に一致する図版はありませんでした。</h2>
+            <p class="section-description">
+              <%= if @query != "" || @filters != %{} do %>
+                検索キーワードやフィルターを変更してみてください。
+              <% else %>
+                まだ公開済みの図版がありません。
+              <% end %>
+            </p>
             <%= if @query != "" || @filters != %{} do %>
-              条件に一致する図版が見つかりませんでした。<br /> 検索キーワードやフィルターを変更してみてください。
-            <% else %>
-              まだ公開済みの図版がありません。
+              <button
+                type="button"
+                class="btn-reset-filters"
+                phx-click="clear_filters"
+              >
+                <.icon name="hero-arrow-path" class="w-5 h-5" /> 検索条件をリセット
+              </button>
             <% end %>
-          </p>
+          </div>
         </div>
       <% else %>
-        <div class="results-grid">
+        <div class="results-grid columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
           <%= for image <- @results do %>
-            <div class="result-card">
+            <div class="result-card break-inside-avoid mb-4">
               <a href={manifest_url(image)} class="result-card-link" target="_blank">
                 <%= if image.geometry do %>
                   <% geo = image.geometry %>
                   <% {orig_w, orig_h} = Map.get(@dims_map, image.id, {0, 0}) %>
-                  <div class="relative w-full h-64 bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                  <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
                     <svg
                       viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
-                      class="max-w-full max-h-full"
+                      class="w-full h-auto"
                       preserveAspectRatio="xMidYMid meet"
                     >
                       <image

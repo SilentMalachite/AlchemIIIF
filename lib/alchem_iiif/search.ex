@@ -81,6 +81,18 @@ defmodule AlchemIiif.Search do
     |> Repo.aggregate(:count, :id)
   end
 
+  @doc """
+  公開済み検索結果の総件数を取得します（Gallery用）。
+  """
+  def count_published_results(query_text \\ "", filters \\ %{}) do
+    ExtractedImage
+    |> where([e], e.status == "published" and e.status != "deleted")
+    |> where([e], not is_nil(e.ptif_path) and e.ptif_path != "")
+    |> apply_text_search(query_text)
+    |> apply_filters(filters)
+    |> Repo.aggregate(:count, :id)
+  end
+
   # --- プライベート関数 ---
 
   # テキスト検索（PostgreSQL FTS）の適用

@@ -256,11 +256,11 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               </p>
             </div>
           <% else %>
-            <div class="review-grid">
+            <div class="review-grid columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
               <%= for item <- @pending_images do %>
                 <div
                   id={"review-card-#{item.image.id}"}
-                  class={"review-card status-pending #{if @selected_image && @selected_image.image.id == item.image.id, do: "selected", else: ""} #{if MapSet.member?(@fading_ids, item.image.id), do: "card-fade-out", else: ""}"}
+                  class={"review-card break-inside-avoid mb-4 status-pending #{if @selected_image && @selected_image.image.id == item.image.id, do: "selected", else: ""} #{if MapSet.member?(@fading_ids, item.image.id), do: "card-fade-out", else: ""}"}
                   phx-click="select_image"
                   phx-value-id={item.image.id}
                   role="button"
@@ -295,10 +295,10 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                       <%= if item.image.geometry do %>
                         <% geo = item.image.geometry %>
                         <% {orig_w, orig_h} = Map.get(@dims_map, item.image.id, {0, 0}) %>
-                        <div class="relative w-full h-48 bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                        <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
                           <svg
                             viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
-                            class="max-w-full max-h-full"
+                            class="w-full h-auto"
                             preserveAspectRatio="xMidYMid meet"
                           >
                             <image
@@ -513,8 +513,13 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
       <%!-- 差し戻しモーダル --%>
       <%= if @show_reject_modal do %>
-        <div class="modal-overlay" phx-click="close_reject_modal">
-          <div class="modal-content" phx-click-away="close_reject_modal">
+        <div class="modal-overlay">
+          <div
+            class="modal-content"
+            phx-click-away="close_reject_modal"
+            phx-window-keydown="close_reject_modal"
+            phx-key="escape"
+          >
             <h3 class="modal-title">↩️ 差し戻し理由</h3>
             <p class="modal-description">
               差し戻しの理由を記入してください（任意）。

@@ -52,6 +52,18 @@ defmodule AlchemIiif.Ingestion do
   @doc "IDで抽出画像を取得"
   def get_extracted_image!(id), do: Repo.get!(ExtractedImage, id)
 
+  @doc "pdf_source_id と page_number で既存の抽出画像を検索（Write-on-Action 用）"
+  def find_extracted_image_by_page(pdf_source_id, page_number) do
+    from(e in ExtractedImage,
+      where: e.pdf_source_id == ^pdf_source_id,
+      where: e.page_number == ^page_number,
+      where: e.status != "deleted",
+      order_by: [desc: e.updated_at],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
   @doc "抽出画像を作成"
   def create_extracted_image(attrs \\ %{}) do
     %ExtractedImage{}
@@ -151,6 +163,8 @@ defmodule AlchemIiif.Ingestion do
   def list_pending_review_images do
     from(e in ExtractedImage,
       where: e.status == "pending_review",
+      where: not is_nil(e.image_path),
+      where: not is_nil(e.geometry),
       order_by: [desc: e.inserted_at],
       preload: [:iiif_manifest, :pdf_source]
     )

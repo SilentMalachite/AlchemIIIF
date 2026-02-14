@@ -74,7 +74,7 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       {:ok, _view, html} = live(conn, ~p"/lab/label/#{image.id}")
 
       assert html =~ "← 戻る"
-      assert html =~ "/lab/crop/#{image.id}"
+      assert html =~ "/lab/crop/#{image.pdf_source_id}/#{image.page_number}"
     end
 
     test "保存して次の図版へボタンが表示される", %{conn: conn} do
@@ -93,7 +93,7 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert html =~ "保存して終了"
     end
 
-    test "save continue で Browse 画面に遷移する", %{conn: conn} do
+    test "save continue で Browse 画面に遷移し status が pending_review になる", %{conn: conn} do
       image = insert_extracted_image()
 
       {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
@@ -102,6 +102,10 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
                view |> element(".btn-save-continue") |> render_click()
 
       assert path =~ "/lab/browse/#{image.pdf_source_id}"
+
+      # DB 上で status が pending_review に更新されていることを確認
+      updated = AlchemIiif.Ingestion.get_extracted_image!(image.id)
+      assert updated.status == "pending_review"
     end
 
     test "save finish で Lab ダッシュボードに遷移する", %{conn: conn} do
@@ -111,6 +115,23 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       assert {:error, {:live_redirect, %{to: "/lab"}}} =
                view |> element(".btn-save-finish") |> render_click()
+    end
+
+    test "geometry nil の場合、保存がブロックされる", %{conn: conn} do
+      image = insert_extracted_image(%{geometry: nil})
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      # 保存しようとするとブロックされる（ページ遷移しない）
+      view |> element(".btn-save-finish") |> render_click()
+
+      # ページ遷移せず同じ画面に留まることを検証
+      html = render(view)
+      assert html =~ "図版の情報を入力してください"
+
+      # DB 上の status が draft のまま（pending_review に変更されていない）
+      unchanged = AlchemIiif.Ingestion.get_extracted_image!(image.id)
+      assert unchanged.status == "draft"
     end
   end
 

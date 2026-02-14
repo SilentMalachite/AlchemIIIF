@@ -61,34 +61,12 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   def handle_event("select_page", %{"page" => page_str}, socket) do
     case Integer.parse(to_string(page_str)) do
       {page_number, _} ->
-        # 選択されたページの画像情報を取得
+        # ページの存在確認のみ行い、レコードは作成しない（Write-on-Action）
         page_image =
           Enum.find(socket.assigns.page_images, &(&1.page_number == page_number))
 
         if page_image do
-          pdf_source = socket.assigns.pdf_source
-
-          image_path =
-            Path.join([
-              "priv",
-              "static",
-              "uploads",
-              "pages",
-              "#{pdf_source.id}",
-              page_image.filename
-            ])
-
-          {:ok, extracted_image} =
-            Ingestion.create_extracted_image(%{
-              pdf_source_id: pdf_source.id,
-              page_number: page_number,
-              image_path: image_path
-            })
-
-          {:noreply,
-           socket
-           |> assign(:selected_page, page_number)
-           |> push_navigate(to: ~p"/lab/crop/#{extracted_image.id}")}
+          {:noreply, assign(socket, :selected_page, page_number)}
         else
           {:noreply, put_flash(socket, :error, "指定されたページが見つかりません")}
         end
@@ -107,29 +85,8 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
       page_number ->
         pdf_source = socket.assigns.pdf_source
 
-        # 選択されたページの画像パスを取得
-        page_image =
-          Enum.find(socket.assigns.page_images, &(&1.page_number == page_number))
-
-        # ExtractedImageレコードを作成
-        image_path =
-          Path.join([
-            "priv",
-            "static",
-            "uploads",
-            "pages",
-            "#{pdf_source.id}",
-            page_image.filename
-          ])
-
-        {:ok, extracted_image} =
-          Ingestion.create_extracted_image(%{
-            pdf_source_id: pdf_source.id,
-            page_number: page_number,
-            image_path: image_path
-          })
-
-        {:noreply, push_navigate(socket, to: ~p"/lab/crop/#{extracted_image.id}")}
+        # レコードを作成せず、pdf_source_id と page_number のみでナビゲート
+        {:noreply, push_navigate(socket, to: ~p"/lab/crop/#{pdf_source.id}/#{page_number}")}
     end
   end
 
