@@ -3,6 +3,7 @@
 @import "tailwindcss";
 @import "./inspector.css";
 @import "./admin-review.css";
+@import "./gallery.css";
 @source "../../lib/alchem_iiif_web";
 @source "../../lib/alchem_iiif_web/**/*.{ex,heex}";
 @plugin "daisyui";

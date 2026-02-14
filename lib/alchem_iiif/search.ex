@@ -49,8 +49,8 @@ defmodule AlchemIiif.Search do
   """
   def search_published_images(query_text \\ "", filters \\ %{}) do
     ExtractedImage
-    |> where([e], not is_nil(e.ptif_path))
-    |> where([e], e.status == "published")
+    |> where([e], e.status == "published" and e.status != "deleted")
+    |> where([e], not is_nil(e.ptif_path) and e.ptif_path != "")
     |> apply_text_search(query_text)
     |> apply_filters(filters)
     |> order_by([e], desc: e.inserted_at)

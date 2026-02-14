@@ -39,6 +39,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
      |> assign(:period, extracted_image.period || "")
      |> assign(:artifact_type, extracted_image.artifact_type || "")
      |> assign(:undo_stack, [])
+     |> assign(:duplicate_record, check_duplicate_label(extracted_image))
      |> assign(:save_state, :idle)}
   end
 
@@ -52,11 +53,28 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
     field_atom = String.to_existing_atom(field)
 
-    {:noreply,
-     socket
-     |> assign(field_atom, value)
-     |> assign(:undo_stack, undo_stack)
-     |> auto_save_field(field, value)}
+    socket =
+      socket
+      |> assign(field_atom, value)
+      |> assign(:undo_stack, undo_stack)
+      |> auto_save_field(field, value)
+
+    # ラベル変更時は重複チェックを実行
+    socket =
+      if field == "label" do
+        duplicate =
+          Ingestion.find_duplicate_label(
+            socket.assigns.extracted_image.pdf_source_id,
+            value,
+            socket.assigns.extracted_image.id
+          )
+
+        assign(socket, :duplicate_record, duplicate)
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -80,40 +98,26 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   @impl true
   def handle_event("save", %{"action" => action}, socket) do
-    # "finish" の場合は status を pending_review に遷移させる
-    save_result =
-      case action do
-        "finish" -> save_metadata(socket, %{status: "pending_review"})
-        _other -> save_metadata(socket)
-      end
+    # "finish" 時に重複ラベルがあればブロック
+    if action == "finish" && socket.assigns.duplicate_record do
+      {:noreply, put_flash(socket, :error, "⚠️ 重複ラベルがあります。ラベルを変更するか、既存レコードを更新してください。")}
+    else
+      do_save(socket, action)
+    end
+  end
 
-    case save_result do
-      {:ok, _updated} ->
-        # "finish" 時は PTIF をバックグラウンド生成
-        if action == "finish" do
-          updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+  @impl true
+  def handle_event("merge_existing", _params, socket) do
+    # 重複レコードの編集画面にナビゲート
+    case socket.assigns.duplicate_record do
+      nil ->
+        {:noreply, put_flash(socket, :info, "重複レコードはありません")}
 
-          Task.start(fn ->
-            AlchemIiif.Pipeline.generate_single_ptif(updated_image)
-          end)
-        end
-
-        {flash_msg, route} =
-          case action do
-            "continue" ->
-              {"✅ ラベルを保存しました！", ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
-
-            _finish ->
-              {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
-          end
-
+      dup ->
         {:noreply,
          socket
-         |> put_flash(:info, flash_msg)
-         |> push_navigate(to: route)}
-
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+         |> put_flash(:info, "既存レコード ##{dup.id} を編集します")
+         |> push_navigate(to: ~p"/lab/label/#{dup.id}")}
     end
   end
 
@@ -176,6 +180,53 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     Ingestion.update_extracted_image(
       socket.assigns.extracted_image,
       Map.merge(base_attrs, extra_attrs)
+    )
+  end
+
+  # 保存ロジック（重複チェック通過後に呼ばれる）
+  defp do_save(socket, action) do
+    save_result =
+      case action do
+        "finish" -> save_metadata(socket, %{status: "pending_review"})
+        _other -> save_metadata(socket)
+      end
+
+    case save_result do
+      {:ok, _updated} ->
+        # "finish" 時は PTIF をバックグラウンド生成
+        if action == "finish" do
+          updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+
+          Task.start(fn ->
+            AlchemIiif.Pipeline.generate_single_ptif(updated_image)
+          end)
+        end
+
+        {flash_msg, route} =
+          case action do
+            "continue" ->
+              {"✅ ラベルを保存しました！", ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
+
+            _finish ->
+              {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
+          end
+
+        {:noreply,
+         socket
+         |> put_flash(:info, flash_msg)
+         |> push_navigate(to: route)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+    end
+  end
+
+  # 初期表示時の重複チェック
+  defp check_duplicate_label(extracted_image) do
+    Ingestion.find_duplicate_label(
+      extracted_image.pdf_source_id,
+      extracted_image.label,
+      extracted_image.id
     )
   end
 
@@ -243,7 +294,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             <input
               type="text"
               id="label-input"
-              class="form-input form-input-large"
+              class={["form-input form-input-large", @duplicate_record && "input-error"]}
               value={@label}
               phx-blur="update_field"
               phx-value-field="label"
@@ -251,6 +302,34 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               placeholder="例: fig-003"
               name="label"
             />
+
+            <%!-- 重複検出警告 --%>
+            <%= if @duplicate_record do %>
+              <div class="duplicate-warning">
+                <p class="duplicate-error-text">
+                  ⚠️ このラベルは既にこの PDF 内で使用されています
+                </p>
+                <div class="duplicate-card">
+                  <div class="duplicate-card-info">
+                    <span class="duplicate-card-label">重複先:</span>
+                    <span class="duplicate-card-id">
+                      ID: #{@duplicate_record.id}
+                    </span>
+                    <span class="duplicate-card-caption">
+                      {@duplicate_record.caption || "（キャプションなし）"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-merge"
+                    phx-click="merge_existing"
+                    aria-label="既存レコードを編集"
+                  >
+                    📝 既存レコードを更新
+                  </button>
+                </div>
+              </div>
+            <% end %>
           </div>
 
           <div class="form-group">

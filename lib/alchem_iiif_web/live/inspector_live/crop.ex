@@ -291,89 +291,62 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           <%!-- 右カラム: D-Pad コントロール (sticky サイドバー) --%>
           <div class="crop-sidebar">
             <div class="sidebar-label">D-Pad 微調整</div>
-            <%!-- D-Pad 3×3 Grid --%>
+            <%!-- D-Pad 3×3 Grid — インラインTailwindで明示的カラー指定 --%>
             <div
-              class="nudge-controls"
+              class="grid grid-cols-3 gap-3 p-6 bg-[#1A2C42]/30 rounded-lg"
               role="group"
               aria-label="クロップ範囲の微調整（矢印キーでも操作可能）"
             >
-              <%!-- Row 1: [縮小] [↑] [拡大] --%>
+              <%!-- Row 1: [空白] [↑] [空白] --%>
+              <div></div>
               <button
                 type="button"
-                class="nudge-btn nudge-shrink dpad-shrink"
-                phx-click="nudge"
-                phx-value-direction="shrink"
-                phx-value-amount="10"
-                aria-label="縮小"
-              >
-                <.icon name="hero-arrows-pointing-in-solid" class="nudge-icon" />
-              </button>
-              <button
-                type="button"
-                class="nudge-btn dpad-up"
+                class="flex items-center justify-center w-16 h-16 rounded-lg border-2 border-[#E6B422] bg-transparent text-[#E6B422] hover:bg-[#E6B422] hover:text-[#1A2C42] transition-colors"
                 phx-click="nudge"
                 phx-value-direction="up"
                 phx-value-amount="10"
                 aria-label="上に移動"
               >
-                <.icon name="hero-chevron-up-solid" class="nudge-icon" />
+                <.icon name="hero-chevron-up" class="w-10 h-10" />
               </button>
-              <button
-                type="button"
-                class="nudge-btn nudge-expand dpad-expand"
-                phx-click="nudge"
-                phx-value-direction="expand"
-                phx-value-amount="10"
-                aria-label="拡大"
-              >
-                <.icon name="hero-arrows-pointing-out-solid" class="nudge-icon" />
-              </button>
+              <div></div>
 
-              <%!-- Row 2: [←] [UNDO] [→] --%>
+              <%!-- Row 2: [←] [MOVE] [→] --%>
               <button
                 type="button"
-                class="nudge-btn dpad-left"
+                class="flex items-center justify-center w-16 h-16 rounded-lg border-2 border-[#E6B422] bg-transparent text-[#E6B422] hover:bg-[#E6B422] hover:text-[#1A2C42] transition-colors"
                 phx-click="nudge"
                 phx-value-direction="left"
                 phx-value-amount="10"
                 aria-label="左に移動"
               >
-                <.icon name="hero-chevron-left-solid" class="nudge-icon" />
+                <.icon name="hero-chevron-left" class="w-10 h-10" />
               </button>
+              <div class="flex items-center justify-center text-[#E6B422] font-bold">MOVE</div>
               <button
                 type="button"
-                class="dpad-undo-btn dpad-center"
-                phx-click="undo"
-                disabled={@undo_stack == []}
-                aria-label="元に戻す"
-              >
-                <.icon name="hero-arrow-uturn-left-solid" class="dpad-undo-icon" />
-                <%= if @undo_stack != [] do %>
-                  <span class="dpad-undo-count">{length(@undo_stack)}</span>
-                <% end %>
-              </button>
-              <button
-                type="button"
-                class="nudge-btn dpad-right"
+                class="flex items-center justify-center w-16 h-16 rounded-lg border-2 border-[#E6B422] bg-transparent text-[#E6B422] hover:bg-[#E6B422] hover:text-[#1A2C42] transition-colors"
                 phx-click="nudge"
                 phx-value-direction="right"
                 phx-value-amount="10"
                 aria-label="右に移動"
               >
-                <.icon name="hero-chevron-right-solid" class="nudge-icon" />
+                <.icon name="hero-chevron-right" class="w-10 h-10" />
               </button>
 
-              <%!-- Row 3: [ ] [↓] [ ] --%>
+              <%!-- Row 3: [空白] [↓] [空白] --%>
+              <div></div>
               <button
                 type="button"
-                class="nudge-btn dpad-down"
+                class="flex items-center justify-center w-16 h-16 rounded-lg border-2 border-[#E6B422] bg-transparent text-[#E6B422] hover:bg-[#E6B422] hover:text-[#1A2C42] transition-colors"
                 phx-click="nudge"
                 phx-value-direction="down"
                 phx-value-amount="10"
                 aria-label="下に移動"
               >
-                <.icon name="hero-chevron-down-solid" class="nudge-icon" />
+                <.icon name="hero-chevron-down" class="w-10 h-10" />
               </button>
+              <div></div>
             </div>
           </div>
         </div>

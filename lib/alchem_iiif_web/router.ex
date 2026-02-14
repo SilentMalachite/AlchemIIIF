@@ -20,6 +20,7 @@ defmodule AlchemIiifWeb.Router do
 
     get "/", PageController, :home
     live "/gallery", GalleryLive, :index
+    get "/download/:id", DownloadController, :show
   end
 
   # ── 内部スコープ (Lab) ─────────────────────────────────

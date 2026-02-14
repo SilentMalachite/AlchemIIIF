@@ -59,7 +59,11 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
       :status
     ])
     |> validate_required([:pdf_source_id, :page_number])
-    |> validate_inclusion(:status, ~w(draft pending_review published))
+    |> validate_inclusion(:status, ~w(draft pending_review published deleted))
     |> foreign_key_constraint(:pdf_source_id)
+    |> unique_constraint([:pdf_source_id, :label],
+      name: :extracted_images_pdf_source_id_label_unique,
+      message: "このラベルは既にこの PDF 内で使用されています"
+    )
   end
 end

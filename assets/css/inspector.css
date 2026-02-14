@@ -400,6 +400,7 @@
 .nudge-icon {
   width: 28px;
   height: 28px;
+  color: #E6B422;
 }
 
 /* --- 拡大/縮小ボタン: Indigo & Gold テーマ統一 --- */
@@ -685,5 +686,133 @@
   /* D-Pad 分の下部余白を確保 */
   .crop-area {
     padding-bottom: 220px;
+  }
+}
+
+/* === 重複検出 UI (Duplicate Detective) === */
+
+/* 入力フィールドのエラー状態 */
+.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+}
+
+/* 重複警告コンテナ */
+.duplicate-warning {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  animation: shake-subtle 0.4s ease-out;
+}
+
+@keyframes shake-subtle {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-3px);
+  }
+
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+/* エラーテキスト */
+.duplicate-error-text {
+  color: #ef4444;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+/* リンクカード */
+.duplicate-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-base-100, #fff);
+  border: 1px solid var(--color-base-300, #d1d5db);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.duplicate-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.duplicate-card-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-base-content, #333);
+  opacity: 0.6;
+}
+
+.duplicate-card-id {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-base-content, #333);
+}
+
+.duplicate-card-caption {
+  font-size: 0.8rem;
+  color: var(--color-base-content, #333);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* マージボタン */
+.btn-merge {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  background: linear-gradient(145deg, #1A2C42, #152336);
+  color: #E6B422;
+  border: 1.5px solid #E6B422;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  min-height: 40px;
+}
+
+.btn-merge:hover {
+  background: linear-gradient(145deg, #243a54, #1A2C42);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(230, 180, 34, 0.3);
+}
+
+.btn-merge:active {
+  transform: translateY(1px) scale(0.97);
+}
+
+/* モバイル: カード縦積み */
+@media (max-width: 480px) {
+  .duplicate-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-merge {
+    width: 100%;
+    justify-content: center;
   }
 }

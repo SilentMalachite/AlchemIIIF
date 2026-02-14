@@ -3,6 +3,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLiveTest do
 
   import Phoenix.LiveViewTest
   import AlchemIiif.Factory
+  alias AlchemIiif.Ingestion
 
   describe "mount/3" do
     test "Admin Review Dashboard が正常にマウントされる", %{conn: conn} do
@@ -133,6 +134,27 @@ defmodule AlchemIiifWeb.Admin.ReviewLiveTest do
       assert html =~ "インスペクターテスト"
     end
 
+    test "geometry 付き画像選択で SVG viewBox クロップが表示される", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/crop.tif",
+          status: "pending_review",
+          label: "クロップテスト",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 10, "y" => 20, "width" => 100, "height" => 80}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/review")
+
+      # カードを選択
+      html = render_click(view, "select_image", %{"id" => to_string(image.id)})
+
+      # SVG viewBox がレンダリングされる
+      assert html =~ "viewBox"
+      assert html =~ "10 20 100 80"
+      assert html =~ "inspector-crop-svg"
+    end
+
     test "インスペクターを閉じることができる", %{conn: conn} do
       image =
         insert_extracted_image(%{
@@ -178,6 +200,47 @@ defmodule AlchemIiifWeb.Admin.ReviewLiveTest do
       # リストから消え、0件になる
       assert html =~ "レビュー待ち: 0 件"
       assert html =~ "レビュー待ちの図版はありません"
+    end
+  end
+
+  describe "delete イベント" do
+    test "削除ボタンでエントリがリストから消える", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/delete.tif",
+          status: "pending_review",
+          label: "削除テスト画像"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/review")
+
+      # 削除を実行
+      html = render_click(view, "delete", %{"id" => to_string(image.id)})
+
+      # リストから消え、0件になる
+      assert html =~ "レビュー待ち: 0 件"
+      assert html =~ "レビュー待ちの図版はありません"
+    end
+
+    test "draft ステータスの画像は削除できない", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/draft.tif",
+          status: "pending_review",
+          label: "削除不可テスト"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/admin/review")
+
+      # まずステータスを draft に変更して再度テスト
+      # pending_review の画像を直接 reject して draft にする
+      render_click(view, "open_reject_modal", %{"id" => to_string(image.id)})
+      render_click(view, "confirm_reject", %{})
+
+      # draft の画像は削除できないことを確認（リストに表示されないため別経路で確認）
+      # pending_review 以外は soft_delete_image がエラーを返す
+      assert Ingestion.soft_delete_image(%{image | status: "draft"}) ==
+               {:error, :invalid_status_transition}
     end
   end
 end

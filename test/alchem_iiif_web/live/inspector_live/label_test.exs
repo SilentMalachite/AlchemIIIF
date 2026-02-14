@@ -123,4 +123,157 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert has_element?(view, "button.btn-undo[disabled]")
     end
   end
+
+  describe "重複ラベル検出" do
+    test "同一 PDF 内で重複ラベルがある場合に警告が表示される", %{conn: conn} do
+      pdf_source = insert_pdf_source()
+
+      # 1つ目のレコード — ラベル fig-001 で保存
+      _existing =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: "fig-001",
+          caption: "既存の図版"
+        })
+
+      # 2つ目のレコード — 同じ pdf_source_id でラベル未設定
+      current =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: nil,
+          page_number: 2
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{current.id}")
+
+      # ラベル入力で同じ fig-001 を入力（blur イベント）
+      view
+      |> element("#label-input")
+      |> render_blur(%{"field" => "label", "value" => "fig-001"})
+
+      html = render(view)
+      assert html =~ "このラベルは既にこの PDF 内で使用されています"
+      assert html =~ "既存レコードを更新"
+    end
+
+    test "異なる PDF では重複として扱わない", %{conn: conn} do
+      # PDF A のレコード
+      _image_a =
+        insert_extracted_image(%{
+          label: "fig-001",
+          caption: "PDF A の図版"
+        })
+
+      # PDF B のレコード（別の pdf_source）
+      image_b =
+        insert_extracted_image(%{
+          label: nil,
+          page_number: 1
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image_b.id}")
+
+      # 同じラベルを入力しても別 PDF なので重複にならない
+      view
+      |> element("#label-input")
+      |> render_blur(%{"field" => "label", "value" => "fig-001"})
+
+      html = render(view)
+      refute html =~ "このラベルは既にこの PDF 内で使用されています"
+    end
+
+    test "空ラベルでは重複警告が出ない", %{conn: conn} do
+      pdf_source = insert_pdf_source()
+
+      _existing =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: ""
+        })
+
+      current =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: nil,
+          page_number: 2
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{current.id}")
+
+      # 空文字を入力
+      view
+      |> element("#label-input")
+      |> render_blur(%{"field" => "label", "value" => ""})
+
+      html = render(view)
+      refute html =~ "このラベルは既にこの PDF 内で使用されています"
+    end
+
+    test "重複がある状態で保存して終了がブロックされる", %{conn: conn} do
+      pdf_source = insert_pdf_source()
+
+      _existing =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: "fig-001"
+        })
+
+      # current は別のラベルで作成（DB 制約回避）
+      current =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: nil,
+          page_number: 2
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{current.id}")
+
+      # 重複ラベルを入力して duplicate_record をセット
+      view
+      |> element("#label-input")
+      |> render_blur(%{"field" => "label", "value" => "fig-001"})
+
+      # save finish を押しても遷移しない（ブロックされる）
+      html =
+        view
+        |> element(".btn-save-finish")
+        |> render_click()
+
+      # ページ遷移せず重複警告が表示されたまま
+      assert html =~ "このラベルは既にこの PDF 内で使用されています"
+      assert html =~ "既存レコードを更新"
+    end
+
+    test "マージボタンで既存レコードの編集画面に遷移する", %{conn: conn} do
+      pdf_source = insert_pdf_source()
+
+      existing =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: "fig-001",
+          caption: "既存の図版"
+        })
+
+      # current は別のラベルで作成（DB 制約回避）
+      current =
+        insert_extracted_image(%{
+          pdf_source_id: pdf_source.id,
+          label: nil,
+          page_number: 2
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{current.id}")
+
+      # 重複ラベルを入力して duplicate_record をセット
+      view
+      |> element("#label-input")
+      |> render_blur(%{"field" => "label", "value" => "fig-001"})
+
+      # マージボタンをクリック
+      assert {:error, {:live_redirect, %{to: path}}} =
+               view |> element(".btn-merge") |> render_click()
+
+      assert path =~ "/lab/label/#{existing.id}"
+    end
+  end
 end

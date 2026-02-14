@@ -30,6 +30,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   use AlchemIiifWeb, :live_view
 
   alias AlchemIiif.Ingestion
+  alias AlchemIiif.Ingestion.ImageProcessor
 
   @impl true
   def mount(_params, _session, socket) do
@@ -42,6 +43,9 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
         %{image: image, validation: validation}
       end)
 
+    # カード用の画像寸法マップを構築（SVG viewBox クロップ表示用）
+    dims_map = build_dims_map(images_with_validation)
+
     {:ok,
      socket
      |> assign(:page_title, "Admin Review Dashboard")
@@ -51,7 +55,9 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
      |> assign(:show_reject_modal, false)
      |> assign(:reject_note, "")
      |> assign(:reject_target_id, nil)
-     |> assign(:fading_ids, MapSet.new())}
+     |> assign(:fading_ids, MapSet.new())
+     |> assign(:selected_image_dims, {0, 0})
+     |> assign(:dims_map, dims_map)}
   end
 
   # --- イベントハンドラ ---
@@ -65,12 +71,51 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
         item.image.id == image_id
       end)
 
-    {:noreply, assign(socket, :selected_image, selected)}
+    # 元画像の寸法を取得（SVG viewBox クロップ表示用）
+    dims = read_source_dimensions(selected.image.image_path)
+
+    {:noreply,
+     socket
+     |> assign(:selected_image, selected)
+     |> assign(:selected_image_dims, dims)}
+  end
+
+  @impl true
+  def handle_event("delete", %{"id" => id}, socket) do
+    image = Ingestion.get_extracted_image!(id)
+
+    case Ingestion.soft_delete_image(image) do
+      {:ok, _deleted} ->
+        # リストから即座に削除
+        image_id = String.to_integer(id)
+
+        updated_images =
+          Enum.reject(socket.assigns.pending_images, fn item ->
+            item.image.id == image_id
+          end)
+
+        # dims_map から該当IDを削除
+        updated_dims_map = Map.delete(socket.assigns.dims_map, image_id)
+
+        {:noreply,
+         socket
+         |> assign(:pending_images, updated_images)
+         |> assign(:pending_count, length(updated_images))
+         |> assign(:dims_map, updated_dims_map)
+         |> close_inspector_if_selected(image_id)
+         |> put_flash(:info, "「#{image.label || "名称未設定"}」を削除しました。")}
+
+      {:error, :invalid_status_transition} ->
+        {:noreply, put_flash(socket, :error, "この画像は削除できません。")}
+    end
   end
 
   @impl true
   def handle_event("close_inspector", _params, socket) do
-    {:noreply, assign(socket, :selected_image, nil)}
+    {:noreply,
+     socket
+     |> assign(:selected_image, nil)
+     |> assign(:selected_image_dims, {0, 0})}
   end
 
   @impl true
@@ -137,12 +182,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
             %{image: img, validation: validation}
           end)
 
+        # dims_map を再構築
+        dims_map = build_dims_map(images_with_validation)
         image_id = String.to_integer(id)
 
         {:noreply,
          socket
          |> assign(:pending_images, images_with_validation)
          |> assign(:pending_count, length(images_with_validation))
+         |> assign(:dims_map, dims_map)
          |> assign(:show_reject_modal, false)
          |> assign(:reject_target_id, nil)
          |> assign(:reject_note, "")
@@ -166,12 +214,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
       end)
 
     fading_ids = MapSet.delete(socket.assigns.fading_ids, image_id)
+    # dims_map から該当IDを削除
+    updated_dims_map = Map.delete(socket.assigns.dims_map, image_id)
 
     {:noreply,
      socket
      |> assign(:pending_images, updated_images)
      |> assign(:pending_count, length(updated_images))
-     |> assign(:fading_ids, fading_ids)}
+     |> assign(:fading_ids, fading_ids)
+     |> assign(:dims_map, updated_dims_map)}
   end
 
   # --- レンダリング ---
@@ -233,7 +284,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                     <% end %>
                   </div>
 
-                  <%!-- 画像サムネイル --%>
+                  <%!-- 画像サムネイル（SVG viewBox クロップ表示） --%>
                   <div class="review-card-image-container">
                     <%= if is_nil(item.image.ptif_path) do %>
                       <div class="review-card-processing">
@@ -241,12 +292,30 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                         <span class="processing-text">画像処理中...</span>
                       </div>
                     <% else %>
-                      <img
-                        src={image_thumbnail_url(item.image)}
-                        alt={item.image.caption || "図版"}
-                        class="review-card-image"
-                        loading="lazy"
-                      />
+                      <%= if item.image.geometry do %>
+                        <% geo = item.image.geometry %>
+                        <% {orig_w, orig_h} = Map.get(@dims_map, item.image.id, {0, 0}) %>
+                        <div class="relative w-full h-48 bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                          <svg
+                            viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                            class="max-w-full max-h-full"
+                            preserveAspectRatio="xMidYMid meet"
+                          >
+                            <image
+                              href={image_thumbnail_url(item.image)}
+                              width={orig_w}
+                              height={orig_h}
+                            />
+                          </svg>
+                        </div>
+                      <% else %>
+                        <img
+                          src={image_thumbnail_url(item.image)}
+                          alt={item.image.caption || "図版"}
+                          class="review-card-image"
+                          loading="lazy"
+                        />
+                      <% end %>
                     <% end %>
                   </div>
 
@@ -288,6 +357,19 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                       ↩️ 差し戻し
                     </button>
                   </div>
+                  <%!-- Danger Zone: 削除ボタン --%>
+                  <div class="danger-zone">
+                    <button
+                      type="button"
+                      class="btn-delete"
+                      phx-click="delete"
+                      phx-value-id={item.image.id}
+                      data-confirm="この図版を完全に削除しますか？この操作は元に戻せません。"
+                      aria-label={"「#{item.image.label || "名称未設定"}」を削除"}
+                    >
+                      🗑️ 削除
+                    </button>
+                  </div>
                 </div>
               <% end %>
             </div>
@@ -309,13 +391,29 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               </button>
             </div>
 
-            <%!-- フル画像 --%>
+            <%!-- クロップ画像（SVG viewBox）またはフル画像 --%>
             <div class="inspector-image-container">
-              <img
-                src={image_full_url(@selected_image.image)}
-                alt={@selected_image.image.caption || "図版"}
-                class="inspector-full-image"
-              />
+              <%= if @selected_image.image.geometry do %>
+                <% geo = @selected_image.image.geometry %>
+                <% {orig_w, orig_h} = @selected_image_dims %>
+                <svg
+                  viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                  class="inspector-crop-svg"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <image
+                    href={image_full_url(@selected_image.image)}
+                    width={orig_w}
+                    height={orig_h}
+                  />
+                </svg>
+              <% else %>
+                <img
+                  src={image_full_url(@selected_image.image)}
+                  alt={@selected_image.image.caption || "図版"}
+                  class="inspector-full-image"
+                />
+              <% end %>
             </div>
 
             <%!-- 詳細メタデータ --%>
@@ -394,6 +492,19 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                 phx-value-id={@selected_image.image.id}
               >
                 ↩️ 差し戻し
+              </button>
+            </div>
+            <%!-- Danger Zone: 削除ボタン --%>
+            <div class="danger-zone inspector-danger-zone">
+              <button
+                type="button"
+                class="btn-delete"
+                phx-click="delete"
+                phx-value-id={@selected_image.image.id}
+                data-confirm="この図版を完全に削除しますか？この操作は元に戻せません。"
+                aria-label={"「#{@selected_image.image.label || "名称未設定"}」を削除"}
+              >
+                🗑️ 削除
               </button>
             </div>
           </div>
@@ -482,6 +593,22 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
       manifest ->
         "/iiif/image/#{manifest.identifier}/full/max/0/default.jpg"
+    end
+  end
+
+  # 画像寸法マップの構築（SVGカードクロップ表示用）
+  defp build_dims_map(images_with_validation) do
+    Map.new(images_with_validation, fn item ->
+      dims = read_source_dimensions(item.image.image_path)
+      {item.image.id, dims}
+    end)
+  end
+
+  # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
+  defp read_source_dimensions(image_path) do
+    case ImageProcessor.get_image_dimensions(image_path) do
+      {:ok, %{width: w, height: h}} -> {w, h}
+      _error -> {0, 0}
     end
   end
 

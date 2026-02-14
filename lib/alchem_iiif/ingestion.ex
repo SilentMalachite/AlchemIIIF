@@ -66,6 +66,30 @@ defmodule AlchemIiif.Ingestion do
     |> Repo.update()
   end
 
+  @doc "同一 PDF 内で同じラベルを持つレコードを検索（自分自身を除く）"
+  def find_duplicate_label(pdf_source_id, label, exclude_id \\ nil)
+
+  def find_duplicate_label(_pdf_source_id, label, _exclude_id)
+      when is_nil(label) or label == "",
+      do: nil
+
+  def find_duplicate_label(pdf_source_id, label, exclude_id) do
+    query =
+      from(e in ExtractedImage,
+        where: e.pdf_source_id == ^pdf_source_id,
+        where: e.label == ^label,
+        where: e.status != "deleted",
+        limit: 1
+      )
+
+    query =
+      if exclude_id,
+        do: from(e in query, where: e.id != ^exclude_id),
+        else: query
+
+    Repo.one(query)
+  end
+
   # === ステータス遷移 ===
 
   @doc "レビュー提出 (draft → pending_review)"
@@ -115,6 +139,13 @@ defmodule AlchemIiif.Ingestion do
   end
 
   def reject_to_draft_with_note(_image, _note), do: {:error, :invalid_status_transition}
+
+  @doc "ソフトデリート (pending_review → deleted)。誤登録エントリの論理削除。"
+  def soft_delete_image(%ExtractedImage{status: "pending_review"} = image) do
+    update_extracted_image(image, %{status: "deleted"})
+  end
+
+  def soft_delete_image(_image), do: {:error, :invalid_status_transition}
 
   @doc "レビュー待ちの画像一覧（Admin Review Dashboard 用）"
   def list_pending_review_images do

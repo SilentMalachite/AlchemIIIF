@@ -7,17 +7,28 @@
 
 /* --- カラー変数 --- */
 :root {
-  --admin-bg: #1A2C42;          /* Deep Indigo */
-  --admin-bg-light: #22354D;    /* カード背景 */
-  --admin-bg-dark: #152336;     /* Inspector 背景 */
-  --admin-text: #E0E0E0;        /* Mist Grey */
-  --admin-text-muted: #A0AEC0;  /* 補助テキスト */
-  --admin-border: #2A4060;      /* 標準ボーダー */
-  --admin-pending: #DAA520;     /* Harvest Gold — Pending */
-  --admin-approved: #2E7D32;    /* Green — Approved */
-  --admin-approve-btn: #2E7D32; /* APPROVE ボタン */
-  --admin-reject-btn: #C62828;  /* REJECT ボタン */
-  --admin-gold: #E6B422;        /* Harvest Gold アクセント */
+  --admin-bg: #1A2C42;
+  /* Deep Indigo */
+  --admin-bg-light: #22354D;
+  /* カード背景 */
+  --admin-bg-dark: #152336;
+  /* Inspector 背景 */
+  --admin-text: #E0E0E0;
+  /* Mist Grey */
+  --admin-text-muted: #A0AEC0;
+  /* 補助テキスト */
+  --admin-border: #2A4060;
+  /* 標準ボーダー */
+  --admin-pending: #DAA520;
+  /* Harvest Gold — Pending */
+  --admin-approved: #2E7D32;
+  /* Green — Approved */
+  --admin-approve-btn: #2E7D32;
+  /* APPROVE ボタン */
+  --admin-reject-btn: #C62828;
+  /* REJECT ボタン */
+  --admin-gold: #E6B422;
+  /* Harvest Gold アクセント */
 }
 
 /* --- コンテナ --- */
@@ -126,7 +137,7 @@
 .review-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3),
-              0 0 0 1px rgba(218, 165, 32, 0.2);
+    0 0 0 1px rgba(218, 165, 32, 0.2);
 }
 
 .review-card:active {
@@ -136,7 +147,7 @@
 .review-card.selected {
   border-color: var(--admin-gold);
   box-shadow: 0 0 0 3px rgba(230, 180, 34, 0.3),
-              0 8px 25px rgba(0, 0, 0, 0.3);
+    0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 /* フェードアウトアニメーション */
@@ -180,7 +191,6 @@
 /* --- カード画像 --- */
 .review-card-image-container {
   width: 100%;
-  aspect-ratio: 4 / 3;
   overflow: hidden;
   background: var(--admin-bg-dark);
 }
@@ -309,6 +319,52 @@
   outline-offset: 2px;
 }
 
+/* --- Danger Zone（削除ボタン分離エリア） --- */
+.danger-zone {
+  padding: 0.5rem 1rem 0.75rem;
+  border-top: 1px dashed rgba(220, 38, 38, 0.25);
+}
+
+.inspector-danger-zone {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px dashed rgba(220, 38, 38, 0.25);
+}
+
+/* DELETE ボタン — Ghost/Outline Red（Reject との差別化） */
+.btn-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: #DC2626;
+  border: 1.5px solid rgba(220, 38, 38, 0.35);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-delete:hover {
+  color: #991B1B;
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.6);
+}
+
+.btn-delete:active {
+  transform: scale(0.97);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.btn-delete:focus-visible {
+  outline: 3px solid #DC2626;
+  outline-offset: 2px;
+}
+
 /* --- 大ボタン共通 --- */
 .btn-large {
   min-height: 60px;
@@ -373,6 +429,7 @@
     opacity: 0;
     transform: translateX(20px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -534,8 +591,13 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal-content {
@@ -554,6 +616,7 @@
     opacity: 0;
     transform: scale(0.95) translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);

@@ -37,6 +37,23 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
 
       assert html =~ "まだ公開済みの図版がありません"
     end
+
+    test "geometry 付き画像で SVG クロップサムネイルが表示される", %{conn: conn} do
+      insert_extracted_image(%{
+        ptif_path: "/path/to/crop.tif",
+        status: "published",
+        label: "クロップギャラリーテスト",
+        image_path: "priv/static/uploads/test.png",
+        geometry: %{"x" => 10, "y" => 20, "width" => 200, "height" => 150}
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/gallery")
+
+      # SVG viewBox がレンダリングされる
+      assert html =~ "viewBox"
+      assert html =~ "10 20 200 150"
+      assert html =~ "xMidYMid meet"
+    end
   end
 
   describe "search イベント" do

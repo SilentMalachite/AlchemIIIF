@@ -11,6 +11,7 @@ defmodule AlchemIiifWeb.GalleryLive do
   """
   use AlchemIiifWeb, :live_view
 
+  alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Search
 
   @impl true
@@ -21,6 +22,7 @@ defmodule AlchemIiifWeb.GalleryLive do
     # 公開済み画像のみ表示
     results = Search.search_published_images()
     result_count = length(results)
+    dims_map = build_dims_map(results)
 
     {:ok,
      socket
@@ -29,18 +31,21 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filters, %{})
      |> assign(:filter_options, filter_options)
      |> assign(:results, results)
-     |> assign(:result_count, result_count)}
+     |> assign(:result_count, result_count)
+     |> assign(:dims_map, dims_map)}
   end
 
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
     results = Search.search_published_images(query, socket.assigns.filters)
+    dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:query, query)
      |> assign(:results, results)
-     |> assign(:result_count, length(results))}
+     |> assign(:result_count, length(results))
+     |> assign(:dims_map, dims_map)}
   end
 
   @impl true
@@ -56,23 +61,27 @@ defmodule AlchemIiifWeb.GalleryLive do
       end
 
     results = Search.search_published_images(socket.assigns.query, updated_filters)
+    dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, updated_filters)
      |> assign(:results, results)
-     |> assign(:result_count, length(results))}
+     |> assign(:result_count, length(results))
+     |> assign(:dims_map, dims_map)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     results = Search.search_published_images(socket.assigns.query, %{})
+    dims_map = build_dims_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, %{})
      |> assign(:results, results)
-     |> assign(:result_count, length(results))}
+     |> assign(:result_count, length(results))
+     |> assign(:dims_map, dims_map)}
   end
 
   @impl true
@@ -204,12 +213,30 @@ defmodule AlchemIiifWeb.GalleryLive do
           <%= for image <- @results do %>
             <div class="result-card">
               <a href={manifest_url(image)} class="result-card-link" target="_blank">
-                <img
-                  src={image_thumbnail_url(image)}
-                  alt={image.caption || "図版"}
-                  class="result-card-image"
-                  loading="lazy"
-                />
+                <%= if image.geometry do %>
+                  <% geo = image.geometry %>
+                  <% {orig_w, orig_h} = Map.get(@dims_map, image.id, {0, 0}) %>
+                  <div class="relative w-full h-64 bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                    <svg
+                      viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                      class="max-w-full max-h-full"
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <image
+                        href={image_thumbnail_url(image)}
+                        width={orig_w}
+                        height={orig_h}
+                      />
+                    </svg>
+                  </div>
+                <% else %>
+                  <img
+                    src={image_thumbnail_url(image)}
+                    alt={image.caption || "図版"}
+                    class="result-card-image"
+                    loading="lazy"
+                  />
+                <% end %>
                 <div class="result-card-body">
                   <h3 class="result-card-title">{image.label || "名称未設定"}</h3>
                   <%= if image.caption do %>
@@ -227,6 +254,28 @@ defmodule AlchemIiifWeb.GalleryLive do
                     <% end %>
                   </div>
                 </div>
+              </a>
+              <%!-- ダウンロードボタン --%>
+              <a
+                href={~p"/download/#{image}"}
+                class="download-btn"
+                title="高解像度画像をダウンロード"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                  class="download-icon"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+                  />
+                </svg>
+                ダウンロード
               </a>
             </div>
           <% end %>
@@ -254,6 +303,22 @@ defmodule AlchemIiifWeb.GalleryLive do
     case image.iiif_manifest do
       nil -> "#"
       manifest -> "/iiif/manifest/#{manifest.identifier}"
+    end
+  end
+
+  # 画像寸法マップの構築（SVG viewBox クロップ表示用）
+  defp build_dims_map(images) do
+    Map.new(images, fn image ->
+      dims = read_source_dimensions(image.image_path)
+      {image.id, dims}
+    end)
+  end
+
+  # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
+  defp read_source_dimensions(image_path) do
+    case ImageProcessor.get_image_dimensions(image_path) do
+      {:ok, %{width: w, height: h}} -> {w, h}
+      _error -> {0, 0}
     end
   end
 

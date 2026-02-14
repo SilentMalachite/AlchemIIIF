@@ -31,6 +31,25 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
   end
 
   @doc """
+  画像をクロップし、JPEG バイナリとして返します（ファイル保存なし）。
+  ダウンロード機能で使用します。
+
+  ## 引数
+    - image_path: 元画像のパス
+    - geometry: %{"x" => x, "y" => y, "width" => w, "height" => h}
+
+  ## 戻り値
+    - {:ok, binary} クロップ済み JPEG バイナリ
+    - {:error, reason}
+  """
+  def crop_to_binary(image_path, %{"x" => x, "y" => y, "width" => w, "height" => h}) do
+    with {:ok, image} <- Image.new_from_file(image_path),
+         {:ok, cropped} <- Operation.extract_area(image, round(x), round(y), round(w), round(h)) do
+      Image.write_to_buffer(cropped, ".jpg")
+    end
+  end
+
+  @doc """
   画像からピラミッド型TIFF (PTIF) を生成します。
 
   ## 引数
