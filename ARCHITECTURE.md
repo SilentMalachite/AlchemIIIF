@@ -64,6 +64,11 @@ SearchLive               ステータス変更          IIIF API 配信
                         published / deleted)
 ```
 
+> **Write-on-Action ポリシー**: Browse（Step 2）でページを選択しても DB にレコードは
+> 作成されません。ExtractedImage レコードは Crop（Step 3）でユーザーが明示的に
+> クロップ範囲を保存した時に初めて作成されます。これにより空のゴーストレコードの
+> 発生を防止します。
+
 ---
 
 ## データフロー
@@ -77,15 +82,17 @@ PDF ファイル
 [pdftoppm] ──── 300 DPI PNG 生成
     │
     ▼
-サムネイルグリッド (/lab/browse/:id)
-    │  Step 2: ユーザーがページ選択
+サムネイルグリッド (/lab/browse/:pdf_source_id)
+    │  Step 2: ユーザーがページ選択（レコード作成なし — Write-on-Action）
     ▼
-ImageSelection Hook ──── D-Pad による手動クロップ (10px 単位) + 矢印キー連携 (/lab/crop/:id)
+ImageSelection Hook ──── D-Pad による手動クロップ (/lab/crop/:pdf_source_id/:page_number)
     │  Step 3: 図版の範囲を指定。**ダブルクリック**で確定・保存。
+    │          ★ ここで初めて ExtractedImage レコードを INSERT。
     ▼
-メタデータ入力フォーム (/lab/label/:id)
+メタデータ入力フォーム (/lab/label/:image_id)
     │  Step 4: caption, label, site, period, artifact_type を手入力。自動ラベリング保存。
     │          Save & Finish 時に PTIF 生成ジョブを自動 dispatch。
+    │          geometry nil の場合は保存をブロック。
     ▼
 [vix/libvips] ── クロップ画像 → PTIF 生成 (バックグラウンド)
     │  Step 5: 提出ステータスの確認 (/lab/finalize/:id)
@@ -195,10 +202,10 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 | `/` | `PageController` | トップページ |
 | `/gallery` | `GalleryLive` | 公開ギャラリー (Gallery) |
 | `/lab` | `InspectorLive.Upload` | Lab: Step 1 — PDF アップロード |
-| `/lab/browse/:id` | `InspectorLive.Browse` | Lab: Step 2 — ページ選択 |
-| `/lab/crop/:id` | `InspectorLive.Crop` | Lab: Step 3 — クロップ |
-| `/lab/label/:id` | `InspectorLive.Label` | Lab: Step 4 — ラベリング |
-| `/lab/finalize/:id` | `InspectorLive.Finalize` | Lab: Step 5 — レビュー提出 |
+| `/lab/browse/:pdf_source_id` | `InspectorLive.Browse` | Lab: Step 2 — ページ選択 |
+| `/lab/crop/:pdf_source_id/:page_number` | `InspectorLive.Crop` | Lab: Step 3 — クロップ (Write-on-Action) |
+| `/lab/label/:image_id` | `InspectorLive.Label` | Lab: Step 4 — ラベリング |
+| `/lab/finalize/:image_id` | `InspectorLive.Finalize` | Lab: Step 5 — レビュー提出 |
 | `/lab/search` | `SearchLive` | Lab: 検索 |
 | `/lab/approval` | `ApprovalLive` | Lab: 承認管理 |
 | `/admin/review` | `ReviewLive` | Admin: 最終承認 (Review) |

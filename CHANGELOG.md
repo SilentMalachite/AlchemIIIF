@@ -4,6 +4,25 @@
 
 ---
 
+## [0.2.4] - 2026-02-14
+
+### 🐛 重大バグ修正: ゴーストレコード & データ消失
+- **Write-on-Action ポリシーの導入**
+  - Browse（Step 2）でページ選択時に `ExtractedImage` レコードを自動作成していた問題を修正。
+  - レコードは Crop（Step 3）でユーザーがダブルクリックでクロップを保存した時に初めて作成されるように変更。
+- **Crop ルーティングの変更**
+  - `/lab/crop/:image_id` → `/lab/crop/:pdf_source_id/:page_number` に変更。
+  - Crop 画面は既存レコードがあればロードし、なければ `save_crop` 時に新規作成。
+- **Label での geometry バリデーション追加**
+  - geometry（クロップ範囲）が未設定の場合、保存をブロックするバリデーションを追加。
+- **Admin Review の壊れたレコードフィルタリング**
+  - `list_pending_review_images` クエリに `image_path`/`geometry` の nil チェックを追加。
+
+### ⚠️ 破壊的変更
+- Crop 画面の URL パターンが変更されました（`/lab/crop/:image_id` → `/lab/crop/:pdf_source_id/:page_number`）。
+
+---
+
 ## [0.2.3] - 2026-02-14
 
 ### 🎨 UI & レンダリング改善
