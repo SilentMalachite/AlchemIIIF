@@ -52,6 +52,14 @@ defmodule AlchemIiif.Ingestion do
   @doc "IDで抽出画像を取得"
   def get_extracted_image!(id), do: Repo.get!(ExtractedImage, id)
 
+  @doc "IDで抽出画像を取得（iiif_manifest プリロード付き、nil 安全）"
+  def get_extracted_image_with_manifest(id) do
+    case Repo.get(ExtractedImage, id) do
+      nil -> nil
+      image -> Repo.preload(image, :iiif_manifest)
+    end
+  end
+
   @doc "pdf_source_id と page_number で既存の抽出画像を検索（Write-on-Action 用）"
   def find_extracted_image_by_page(pdf_source_id, page_number) do
     from(e in ExtractedImage,

@@ -11,6 +11,7 @@ defmodule AlchemIiifWeb.GalleryLive do
   """
   use AlchemIiifWeb, :live_view
 
+  alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Search
 
@@ -32,7 +33,9 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filter_options, filter_options)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:dims_map, dims_map)}
+     |> assign(:dims_map, dims_map)
+     |> assign(:selected_image, nil)
+     |> assign(:selected_dims, {0, 0})}
   end
 
   @impl true
@@ -88,9 +91,50 @@ defmodule AlchemIiifWeb.GalleryLive do
   end
 
   @impl true
+  def handle_event("select_image", %{"id" => id}, socket) do
+    case Ingestion.get_extracted_image_with_manifest(id) do
+      nil ->
+        {:noreply, socket}
+
+      image ->
+        dims = read_source_dimensions(image.image_path)
+
+        {:noreply,
+         socket
+         |> assign(:selected_image, image)
+         |> assign(:selected_dims, dims)}
+    end
+  end
+
+  @impl true
+  def handle_event("close_modal", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:selected_image, nil)
+     |> assign(:selected_dims, {0, 0})}
+  end
+
+  # Esc キーによるモーダル閉鎖（常時リッスン、モーダル開時のみ反応）
+  @impl true
+  def handle_event("handle_keydown", %{"key" => "Escape"}, socket) do
+    if socket.assigns.selected_image do
+      {:noreply,
+       socket
+       |> assign(:selected_image, nil)
+       |> assign(:selected_dims, {0, 0})}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("handle_keydown", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
-    <div class="gallery-container">
+    <div class="gallery-container" phx-window-keydown="handle_keydown" phx-key="Escape">
       <div class="gallery-header">
         <h1 class="section-title">🏛️ ギャラリー</h1>
         <p class="section-description">
@@ -228,8 +272,12 @@ defmodule AlchemIiifWeb.GalleryLive do
       <% else %>
         <div class="results-grid columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
           <%= for image <- @results do %>
-            <div class="result-card break-inside-avoid mb-4">
-              <a href={manifest_url(image)} class="result-card-link" target="_blank">
+            <div
+              class="result-card break-inside-avoid mb-4 group relative border-2 border-transparent hover:border-[#E6B422] transition-colors duration-300 will-change-transform cursor-pointer"
+              phx-click="select_image"
+              phx-value-id={image.id}
+            >
+              <div class="result-card-link">
                 <%= if image.geometry do %>
                   <% geo = image.geometry %>
                   <% {orig_w, orig_h} = Map.get(@dims_map, image.id, {0, 0}) %>
@@ -271,7 +319,7 @@ defmodule AlchemIiifWeb.GalleryLive do
                     <% end %>
                   </div>
                 </div>
-              </a>
+              </div>
               <%!-- ダウンロードボタン --%>
               <a
                 href={~p"/download/#{image}"}
@@ -298,6 +346,53 @@ defmodule AlchemIiifWeb.GalleryLive do
           <% end %>
         </div>
       <% end %>
+
+      <%!-- 画像拡大モーダル --%>
+      <%= if @selected_image do %>
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
+          phx-click="close_modal"
+        >
+          <div
+            class="relative w-full max-w-6xl h-full flex items-center justify-center"
+            phx-click={JS.dispatch("phx:noop")}
+          >
+            <%!-- 閉じるボタン --%>
+            <button
+              phx-click="close_modal"
+              class="absolute top-6 right-6 z-50 p-3 rounded-full bg-black/60 text-[#E6B422] border border-[#E6B422]/30 hover:bg-[#E6B422] hover:text-[#1A2C42] transition-all shadow-xl backdrop-blur-md group"
+              aria-label="閉じる"
+            >
+              <.icon name="hero-x-mark" class="w-8 h-8 group-hover:scale-110 transition-transform" />
+            </button>
+
+            <%!-- 画像表示エリア --%>
+            <div class="relative w-full h-full flex items-center justify-center pointer-events-none">
+              <%= if @selected_image.geometry do %>
+                <% geo = @selected_image.geometry %>
+                <% {orig_w, orig_h} = @selected_dims %>
+                <svg
+                  viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                  class="max-w-full max-h-[90vh] shadow-2xl"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <image
+                    href={image_thumbnail_url(@selected_image)}
+                    width={orig_w}
+                    height={orig_h}
+                  />
+                </svg>
+              <% else %>
+                <img
+                  src={image_thumbnail_url(@selected_image)}
+                  alt={@selected_image.caption || "図版"}
+                  class="max-w-full max-h-[90vh] object-contain shadow-2xl"
+                />
+              <% end %>
+            </div>
+          </div>
+        </div>
+      <% end %>
     </div>
     """
   end
@@ -314,14 +409,6 @@ defmodule AlchemIiifWeb.GalleryLive do
   # 結果件数のテキスト
   defp result_text(0), do: "結果なし"
   defp result_text(count), do: "#{count} 件の図版が見つかりました"
-
-  # Manifest URL の生成
-  defp manifest_url(image) do
-    case image.iiif_manifest do
-      nil -> "#"
-      manifest -> "/iiif/manifest/#{manifest.identifier}"
-    end
-  end
 
   # 画像寸法マップの構築（SVG viewBox クロップ表示用）
   defp build_dims_map(images) do

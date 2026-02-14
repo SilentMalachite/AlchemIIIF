@@ -108,4 +108,55 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
       assert html =~ "件の図版" or html =~ "結果なし"
     end
   end
+
+  describe "select_image / close_modal イベント" do
+    test "カードクリックでモーダルが表示される", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/modal.tif",
+          status: "published",
+          label: "モーダルテスト",
+          caption: "テストキャプション",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 10, "y" => 20, "width" => 200, "height" => 150}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      # モーダルが表示される
+      assert html =~ "モーダルテスト"
+      assert html =~ "テストキャプション"
+      assert html =~ "hero-x-mark"
+    end
+
+    test "close_modal でモーダルが閉じる", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/modal2.tif",
+          status: "published",
+          label: "クローズテスト",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 0, "y" => 0, "width" => 100, "height" => 100}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+
+      # モーダルを開く
+      render_click(view, "select_image", %{"id" => image.id})
+
+      # モーダルを閉じる
+      html = render_click(view, "close_modal", %{})
+
+      # モーダルが非表示になる
+      refute html =~ "hero-x-mark"
+    end
+
+    test "初期状態ではモーダルが表示されない", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/gallery")
+
+      refute html =~ "hero-x-mark"
+    end
+  end
 end
