@@ -31,6 +31,7 @@ defmodule AlchemIiifWeb.Router do
     live "/", InspectorLive.Upload, :index
     live "/browse/:pdf_source_id", InspectorLive.Browse, :browse
     live "/crop/:pdf_source_id/:page_number", InspectorLive.Crop, :crop
+    live "/inspector/:pdf_source_id/page/:page_number", InspectorLive.Crop, :new
     live "/label/:image_id", InspectorLive.Label, :label
     live "/finalize/:image_id", InspectorLive.Finalize, :finalize
     live "/search", SearchLive, :index

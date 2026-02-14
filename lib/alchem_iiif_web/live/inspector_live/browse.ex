@@ -52,8 +52,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
        |> assign(:page_title, "ページを選択")
        |> assign(:current_step, 2)
        |> assign(:pdf_source, pdf_source)
-       |> assign(:page_images, page_images)
-       |> assign(:selected_page, nil)}
+       |> assign(:page_images, page_images)}
     end
   end
 
@@ -66,27 +65,16 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
           Enum.find(socket.assigns.page_images, &(&1.page_number == page_number))
 
         if page_image do
-          {:noreply, assign(socket, :selected_page, page_number)}
+          # ダイレクトに Crop 画面へ遷移（Lazy Creation ルート）
+          pdf_id = socket.assigns.pdf_source.id
+
+          {:noreply, push_navigate(socket, to: ~p"/lab/inspector/#{pdf_id}/page/#{page_number}")}
         else
           {:noreply, put_flash(socket, :error, "指定されたページが見つかりません")}
         end
 
       _ ->
         {:noreply, put_flash(socket, :error, "無効なページ番号です")}
-    end
-  end
-
-  @impl true
-  def handle_event("proceed_to_crop", _params, socket) do
-    case socket.assigns.selected_page do
-      nil ->
-        {:noreply, put_flash(socket, :error, "ページを選択してください")}
-
-      page_number ->
-        pdf_source = socket.assigns.pdf_source
-
-        # レコードを作成せず、pdf_source_id と page_number のみでナビゲート
-        {:noreply, push_navigate(socket, to: ~p"/lab/crop/#{pdf_source.id}/#{page_number}")}
     end
   end
 
@@ -127,18 +115,17 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
           <% true -> %>
             <h2 class="section-title">ページを選択してください</h2>
             <p class="section-description">
-              「{@pdf_source.filename}」のページ一覧です。<br /> 図版や挿絵が含まれているページをクリックして選択してください。
+              「{@pdf_source.filename}」のページ一覧です。<br /> 図版や挿絵が含まれているページをクリックするとクロップ画面へ進みます。
             </p>
 
             <div class="page-grid">
               <%= for page <- @page_images do %>
                 <button
                   type="button"
-                  class={"page-thumbnail #{if @selected_page == page.page_number, do: "selected", else: ""}"}
+                  class="page-thumbnail"
                   phx-click="select_page"
                   phx-value-page={page.page_number}
                   aria-label={"ページ #{page.page_number}"}
-                  aria-pressed={@selected_page == page.page_number}
                 >
                   <img
                     src={page.url}
@@ -154,15 +141,6 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
               <.link navigate={~p"/lab"} class="btn-secondary btn-large">
                 ← 戻る
               </.link>
-
-              <button
-                type="button"
-                class="btn-primary btn-large"
-                phx-click="proceed_to_crop"
-                disabled={@selected_page == nil}
-              >
-                次へ: クロップ →
-              </button>
             </div>
         <% end %>
       </div>
