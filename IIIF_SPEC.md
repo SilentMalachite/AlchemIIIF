@@ -14,7 +14,7 @@ AlchemIIIF is a modular-monolith application built with Elixir and Phoenix. It i
 - **Database:** PostgreSQL 15+ (utilizing JSONB for flexible metadata and geometry storage).
 - **Image Processing:** [vix](https://github.com/akash-akya/vix) (libvips wrapper) for real-time tiling and Pyramidal TIFF (PTIF) generation.
 - **PDF Processing:** [poppler-utils](https://poppler.freedesktop.org/) (specifically `pdftoppm`) for high-fidelity conversion of PDF pages to images.
-- **Frontend:** Phoenix LiveView with Custom JS Hooks leveraging [Cropper.js](https://github.com/fengyuanchen/cropperjs).
+- **Frontend:** Phoenix LiveView with Custom JS Hooks (`ImageSelection`) for precise coordinate mapping.
 
 ## 3. Data Schema (PostgreSQL Strategy)
 
@@ -71,44 +71,36 @@ To ensure a stress-free user experience, the ingestion process is strictly divid
 ### 7.1 Wizard-Style Flow (5 Steps)
 1. **Upload (📄 アップロード):** Submit the PDF. The system automatically converts all pages into high-resolution PNGs for inspection.
 2. **Browse & Select (🔍 ページ選択):** User browses a grid of page thumbnails and manually selects a page containing a figure/illustration.
-3. **Manual Crop (✂️ クロップ):** User defines figure boundaries using Cropper.js with Nudge controls for fine adjustments.
-4. **Labeling (🏷️ ラベリング):** Captions, labels, and archaeological metadata (site, period, artifact type) are entered manually to ensure 100% accuracy.
-5. **Review & Submit (✅ レビュー提出):** The system generates the PTIF, saves the crop geometry, and registers the metadata in PostgreSQL.
+3. **Manual Crop (✂️ クロップ):** User defines figure boundaries using a custom JS Hook (`ImageSelection`) with D-Pad Nudge controls. **Double-click** (or double-tap) inside the selection to save.
+4. **Labeling (🏷️ ラベリング):** Captions, labels, and archaeological metadata are entered manually. Labels are validated for uniqueness within the PDF. PTIF generation starts automatically in the background upon completion.
+5. **Review & Submit (✅ レビュー提出):** User verifies the final metadata and submits for admin review.
 
 ### 7.2 Accessibility Feature: "Nudge" Controls
 The UI provides large (min 60x60px) directional buttons (Up, Down, Left, Right) to allow users to incrementally adjust the crop area. This reduces the cognitive and motor load associated with precise pointer movements.
 
 ## 8. Key Implementation Snippets
 
-### 8.1 JS Hook (Manual Crop with Nudge Support)
+### 8.1 JS Hook (Manual Crop with Nudge & Double-Click support)
 
 ```javascript
-// assets/js/hooks/image_inspector_hook.js
-import Cropper from 'cropperjs';
-
-const ImageInspectorHook = {
+// assets/js/hooks/image_selection_hook.js
+const ImageSelection = {
   mounted() {
-    const image = this.el.querySelector('#inspect-target');
-    this.cropper = new Cropper(image, { viewMode: 1, autoCropArea: 0.5 });
-
-    // Handle manual "Nudge" adjustments from Phoenix LiveView events
+    // Custom logic for coordinate mapping between CSS and original image size.
+    // Supports dragging to select, Nudge button events from LiveView,
+    // and keyboard arrow keys.
     this.handleEvent("nudge_crop", ({ direction, amount }) => {
-      const data = this.cropper.getData();
-      switch(direction) {
-        case "up":    this.cropper.setData({ y: data.y - amount }); break;
-        case "down":  this.cropper.setData({ y: data.y + amount }); break;
-        case "left":  this.cropper.setData({ x: data.x - amount }); break;
-        case "right": this.cropper.setData({ x: data.x + amount }); break;
-      }
+      // Logic to nudge selection coordinates...
     });
 
-    this.el.addEventListener('cropend', () => {
-      this.pushEvent("update_crop_data", this.cropper.getData(true));
+    // Double-click to save
+    this.el.addEventListener('dblclick', (e) => {
+      if (this.isInSelection(e)) {
+        this.pushEvent("save_crop", this.currentRect);
+      }
     });
   }
 };
-
-export default ImageInspectorHook;
 ```
 
 ## 9. UX & Accessibility Requirements

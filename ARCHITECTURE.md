@@ -59,9 +59,9 @@ Upload → Browse →           ApprovalLive /              GalleryLive
 Crop → Label → Finalize    ReviewLive (/admin)         (published のみ表示)
 (status: draft)             (pending_review →
                             published)
-       ↓                       ↓                       ↓
-  SearchLive               ステータス変更          IIIF API 配信
-  (Lab 内検索)
+SearchLive               ステータス変更          IIIF API 配信
+(Lab 内検索)          (pending_review →
+                        published / deleted)
 ```
 
 ---
@@ -81,13 +81,14 @@ PDF ファイル
     │  Step 2: ユーザーがページ選択
     ▼
 ImageSelection Hook ──── D-Pad による手動クロップ (10px 単位) + 矢印キー連携 (/lab/crop/:id)
-    │  Step 3: 図版の範囲を指定。物理キーボードやコントローラーの D-Pad を意識した UI。
+    │  Step 3: 図版の範囲を指定。**ダブルクリック**で確定・保存。
     ▼
 メタデータ入力フォーム (/lab/label/:id)
-    │  Step 4: caption, label, site, period, artifact_type を手入力
+    │  Step 4: caption, label, site, period, artifact_type を手入力。自動ラベリング保存。
+    │          Save & Finish 時に PTIF 生成ジョブを自動 dispatch。
     ▼
-[vix/libvips] ── クロップ画像 → PTIF 生成 (/lab/finalize/:id)
-    │  Step 5: レビュー提出
+[vix/libvips] ── クロップ画像 → PTIF 生成 (バックグラウンド)
+    │  Step 5: 提出ステータスの確認 (/lab/finalize/:id)
     ▼
 PostgreSQL ──── geometry(JSONB) + metadata 保存
                 IIIF Manifest レコード登録
@@ -153,8 +154,9 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 | 値 | 説明 |
 |:---|:---|
 | `draft` | 初期状態（Lab で作成直後） |
-| `pending_review` | 承認申請済み |
-| `published` | 承認済み・公開中 |
+| `pending_review` | レビュー待ち（承認申請済み） |
+| `published` | 公開中（承認済み） |
+| `deleted` | 削除済み（論理削除） |
 
 ### JSONB カラムの詳細
 
