@@ -142,6 +142,18 @@ defmodule AlchemIiifWeb.GalleryLive do
         </p>
       </div>
 
+      <%!-- 使用方法ガイド --%>
+      <div class="text-center mb-4 text-gray-400 text-sm">
+        <span class="inline-flex items-center gap-2">
+          <.icon name="hero-cursor-arrow-rays" class="w-4 h-4 text-[#E6B422]" /> 図版をクリックして拡大表示
+          <span class="mx-2 text-gray-600">|</span>
+          <kbd class="px-2 py-0.5 rounded bg-gray-800 border border-gray-700 text-xs font-mono text-gray-300">
+            Esc
+          </kbd>
+          キーで閉じる
+        </span>
+      </div>
+
       <%!-- 検索バー --%>
       <div class="search-bar">
         <span class="search-icon">🔍</span>
@@ -357,15 +369,6 @@ defmodule AlchemIiifWeb.GalleryLive do
             class="relative w-full max-w-6xl h-full flex items-center justify-center"
             phx-click={JS.dispatch("phx:noop")}
           >
-            <%!-- 閉じるボタン --%>
-            <button
-              phx-click="close_modal"
-              class="absolute top-6 right-6 z-50 p-3 rounded-full bg-black/60 text-[#E6B422] border border-[#E6B422]/30 hover:bg-[#E6B422] hover:text-[#1A2C42] transition-all shadow-xl backdrop-blur-md group"
-              aria-label="閉じる"
-            >
-              <.icon name="hero-x-mark" class="w-8 h-8 group-hover:scale-110 transition-transform" />
-            </button>
-
             <%!-- 画像表示エリア --%>
             <div class="relative w-full h-full flex items-center justify-center pointer-events-none">
               <%= if @selected_image.geometry do %>

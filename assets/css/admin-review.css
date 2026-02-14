@@ -108,11 +108,12 @@
 /* --- アーティファクトカード --- */
 .review-card {
   background: var(--admin-bg-light);
-  border: 3px solid var(--admin-pending);
+  border: 2px solid transparent;
   border-radius: 16px;
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: border-color 0.3s ease;
+  will-change: transform;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -120,30 +121,21 @@
 
 /* Pending 状態のカード（デフォルト） */
 .review-card.status-pending {
-  border-color: var(--admin-pending);
-  box-shadow: 0 0 0 0 rgba(218, 165, 32, 0);
+  border-color: transparent;
 }
 
 /* Approved 状態のカード（将来拡張用） */
 .review-card.status-approved {
-  border-color: var(--admin-approved);
-  box-shadow: 0 0 0 0 rgba(46, 125, 50, 0);
+  border-color: transparent;
 }
 
 .review-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(218, 165, 32, 0.2);
-}
-
-.review-card:active {
-  transform: translateY(-1px) scale(0.98);
+  border-color: var(--admin-gold);
 }
 
 .review-card.selected {
   border-color: var(--admin-gold);
-  box-shadow: 0 0 0 3px rgba(230, 180, 34, 0.3),
-    0 8px 25px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 3px rgba(230, 180, 34, 0.3);
 }
 
 /* フェードアウトアニメーション */
@@ -194,11 +186,6 @@
 .review-card-image {
   width: 100%;
   height: auto;
-  transition: transform 0.3s ease;
-}
-
-.review-card:hover .review-card-image {
-  transform: scale(1.05);
 }
 
 /* --- カードボディ --- */

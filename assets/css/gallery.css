@@ -193,23 +193,17 @@
 /* --- アーティファクトカード --- */
 .result-card {
     background: var(--gallery-bg-card);
-    border: 2px solid var(--gallery-border);
+    border: 2px solid transparent;
     border-radius: 16px;
     overflow: hidden;
-    transition: all 0.25s ease;
+    transition: border-color 0.3s ease;
+    will-change: transform;
     display: flex;
     flex-direction: column;
 }
 
 .result-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(230, 180, 34, 0.4);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(230, 180, 34, 0.15);
-}
-
-.result-card:active {
-    transform: translateY(-1px) scale(0.98);
+    border-color: var(--gallery-gold);
 }
 
 .result-card-link {
