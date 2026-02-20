@@ -14,7 +14,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   def mount(%{"pdf_source_id" => pdf_source_id}, _session, socket) do
     pdf_source =
       try do
-        Ingestion.get_pdf_source!(pdf_source_id)
+        Ingestion.get_pdf_source!(pdf_source_id, socket.assigns.current_user)
       rescue
         Ecto.NoResultsError -> nil
       end

@@ -34,6 +34,9 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     # ソフトデリート用タイムスタンプ（nil = アクティブ、値あり = ゴミ箱内）
     field :deleted_at, :utc_datetime
 
+    # プロジェクトオーナー（アクセス制御の基盤）
+    belongs_to :user, AlchemIiif.Accounts.User
+
     has_many :extracted_images, AlchemIiif.Ingestion.ExtractedImage
 
     # バーチャルフィールド（クエリの select_merge で注入）
@@ -53,7 +56,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
       :status,
       :deleted_at,
       :workflow_status,
-      :return_message
+      :return_message,
+      :user_id
     ])
     |> validate_required([:filename])
     |> validate_inclusion(:status, ["uploading", "converting", "ready", "error"])

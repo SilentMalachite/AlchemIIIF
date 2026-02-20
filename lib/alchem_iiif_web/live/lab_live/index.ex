@@ -14,7 +14,7 @@ defmodule AlchemIiifWeb.LabLive.Index do
 
     projects =
       current_user
-      |> Ingestion.list_pdf_sources()
+      |> Ingestion.list_user_pdf_sources()
       |> Enum.map(fn p -> Map.put(p, :published?, Ingestion.is_published?(p)) end)
 
     {:ok,

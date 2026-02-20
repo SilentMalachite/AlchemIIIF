@@ -14,7 +14,9 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
     extracted_image = Ingestion.get_extracted_image!(image_id)
-    pdf_source = Ingestion.get_pdf_source!(extracted_image.pdf_source_id)
+
+    pdf_source =
+      Ingestion.get_pdf_source!(extracted_image.pdf_source_id, socket.assigns.current_user)
 
     # 画像のURLを生成（プレビュー用）
     image_url =

@@ -552,33 +552,105 @@ defmodule AlchemIiif.IngestionTest do
     end
   end
 
-  # === get_pdf_source!/2 (所有権チェック) テスト ===
+  # === get_pdf_source!/2 (user_id ベース所有権チェック) テスト ===
 
-  describe "get_pdf_source!/2" do
+  describe "get_pdf_source!/2 (user_id)" do
     test "Admin は任意の PdfSource を取得できる" do
       admin = insert_user(%{role: "admin"})
-      pdf = insert_pdf_source()
+      user = insert_user()
+      pdf = insert_pdf_source(%{user_id: user.id})
 
       assert Ingestion.get_pdf_source!(pdf.id, admin).id == pdf.id
     end
 
-    test "一般ユーザーは自分の画像がある PdfSource を取得できる" do
+    test "一般ユーザーは自分の PdfSource を取得できる" do
       user = insert_user()
-      pdf = insert_pdf_source()
-      insert_extracted_image(%{pdf_source_id: pdf.id, owner_id: user.id, label: "fig-10004-1"})
+      pdf = insert_pdf_source(%{user_id: user.id})
 
       assert Ingestion.get_pdf_source!(pdf.id, user).id == pdf.id
     end
 
-    test "一般ユーザーは自分の画像がない PdfSource を取得できない" do
+    test "一般ユーザーは他ユーザーの PdfSource を取得できない" do
       user_a = insert_user()
       user_b = insert_user()
-      pdf = insert_pdf_source()
-      insert_extracted_image(%{pdf_source_id: pdf.id, owner_id: user_b.id, label: "fig-10005-1"})
+      pdf = insert_pdf_source(%{user_id: user_b.id})
 
       assert_raise Ecto.NoResultsError, fn ->
         Ingestion.get_pdf_source!(pdf.id, user_a)
       end
+    end
+
+    test "user_id が nil の PdfSource は一般ユーザーから取得できない" do
+      user = insert_user()
+      pdf = insert_pdf_source()
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Ingestion.get_pdf_source!(pdf.id, user)
+      end
+    end
+  end
+
+  # === list_user_pdf_sources/1 (user_id ベーススコーピング) テスト ===
+
+  describe "list_user_pdf_sources/1" do
+    test "Admin は全ての PdfSource を取得できる" do
+      admin = insert_user(%{role: "admin"})
+      user = insert_user()
+
+      pdf1 = insert_pdf_source(%{filename: "admin-owned.pdf", user_id: admin.id})
+      pdf2 = insert_pdf_source(%{filename: "user-owned.pdf", user_id: user.id})
+
+      result = Ingestion.list_user_pdf_sources(admin)
+      ids = Enum.map(result, & &1.id)
+
+      assert pdf1.id in ids
+      assert pdf2.id in ids
+    end
+
+    test "一般ユーザーは自分の PdfSource のみ取得できる" do
+      user_a = insert_user()
+      user_b = insert_user()
+
+      pdf1 = insert_pdf_source(%{filename: "my-project.pdf", user_id: user_a.id})
+      _pdf2 = insert_pdf_source(%{filename: "other-project.pdf", user_id: user_b.id})
+
+      result = Ingestion.list_user_pdf_sources(user_a)
+      ids = Enum.map(result, & &1.id)
+
+      assert pdf1.id in ids
+      assert length(result) == 1
+    end
+
+    test "ソフトデリート済みの PdfSource は除外される" do
+      user = insert_user()
+      _pdf_active = insert_pdf_source(%{filename: "active.pdf", user_id: user.id})
+      pdf_deleted = insert_pdf_source(%{filename: "deleted.pdf", user_id: user.id})
+      {:ok, _} = Ingestion.soft_delete_pdf_source(pdf_deleted)
+
+      result = Ingestion.list_user_pdf_sources(user)
+      ids = Enum.map(result, & &1.id)
+
+      refute pdf_deleted.id in ids
+    end
+
+    test "image_count が正しく計算される" do
+      user = insert_user()
+      pdf = insert_pdf_source(%{filename: "count-test.pdf", user_id: user.id})
+
+      insert_extracted_image(%{pdf_source_id: pdf.id, owner_id: user.id, label: "fig-30001-1"})
+      insert_extracted_image(%{pdf_source_id: pdf.id, owner_id: user.id, label: "fig-30001-2"})
+
+      [result] = Ingestion.list_user_pdf_sources(user)
+      assert result.image_count == 2
+    end
+
+    test "Admin の結果に owner_email が含まれる" do
+      admin = insert_user(%{role: "admin"})
+      user = insert_user()
+      _pdf = insert_pdf_source(%{filename: "email-test.pdf", user_id: user.id})
+
+      [result] = Ingestion.list_user_pdf_sources(admin)
+      assert result.owner_email == user.email
     end
   end
 

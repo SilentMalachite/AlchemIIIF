@@ -58,31 +58,53 @@ defmodule AlchemIiif.Ingestion do
     |> Repo.all()
   end
 
+  @doc """
+  ユーザーの PdfSource 一覧を取得（user_id ベース厳密スコーピング）。
+  Admin は全件、一般ユーザーは自分が作成した PdfSource のみ。
+  画像数をバーチャルフィールドとして付与します。
+  """
+  def list_user_pdf_sources(%User{role: "admin"}) do
+    from(p in PdfSource,
+      left_join: e in ExtractedImage,
+      on: e.pdf_source_id == p.id,
+      left_join: u in AlchemIiif.Accounts.User,
+      on: u.id == p.user_id,
+      where: is_nil(p.deleted_at),
+      group_by: p.id,
+      select: %{p | extracted_images: []},
+      select_merge: %{image_count: count(e.id), owner_email: min(u.email)},
+      order_by: [desc: p.inserted_at]
+    )
+    |> Repo.all()
+  end
+
+  def list_user_pdf_sources(%User{id: user_id}) do
+    from(p in PdfSource,
+      left_join: e in ExtractedImage,
+      on: e.pdf_source_id == p.id,
+      where: p.user_id == ^user_id and is_nil(p.deleted_at),
+      group_by: p.id,
+      select: %{p | extracted_images: []},
+      select_merge: %{image_count: count(e.id)},
+      order_by: [desc: p.inserted_at]
+    )
+    |> Repo.all()
+  end
+
   @doc "IDでPDFソースを取得"
   def get_pdf_source!(id), do: Repo.get!(PdfSource, id)
 
   @doc """
   所有権チェック付きで PdfSource を取得。
   Admin は任意の PdfSource を取得可能。
-  一般ユーザーは自分の ExtractedImage がある PdfSource のみ取得可能。
+  一般ユーザーは自分が作成した PdfSource のみ取得可能（user_id ベース）。
   """
   def get_pdf_source!(id, %User{role: "admin"}) do
     Repo.get!(PdfSource, id)
   end
 
   def get_pdf_source!(id, %User{id: user_id}) do
-    query =
-      from(p in PdfSource,
-        join: e in ExtractedImage,
-        on: e.pdf_source_id == p.id and e.owner_id == ^user_id,
-        where: p.id == ^id,
-        distinct: true
-      )
-
-    case Repo.one(query) do
-      nil -> raise Ecto.NoResultsError, queryable: query
-      pdf -> pdf
-    end
+    Repo.get_by!(PdfSource, id: id, user_id: user_id)
   end
 
   @doc "PDFソースを作成"

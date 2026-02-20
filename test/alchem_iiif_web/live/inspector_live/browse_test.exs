@@ -18,8 +18,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
   setup :register_and_log_in_user
 
   describe "マウント" do
-    test "正常な PDF Source でステップ2が表示される", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "正常な PDF Source でステップ2が表示される", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
 
       # テスト用ページ画像ディレクトリを作成
       pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
@@ -45,16 +45,16 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
       assert flash["error"] =~ "指定されたPDFソースが見つかりません"
     end
 
-    test "ページ画像がない場合に警告が表示される", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "ページ画像がない場合に警告が表示される", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
 
       {:ok, _view, html} = live(conn, ~p"/lab/browse/#{pdf_source.id}")
 
       assert html =~ "画像が見つかりませんでした"
     end
 
-    test "エラーステータスの PDF Source でエラー画面が表示される", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "error"})
+    test "エラーステータスの PDF Source でエラー画面が表示される", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "error", user_id: user.id})
 
       {:ok, _view, html} = live(conn, ~p"/lab/browse/#{pdf_source.id}")
 
@@ -63,8 +63,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
   end
 
   describe "select_page イベント（ダイレクトナビゲーション）" do
-    test "有効なページ番号でダイレクトに Crop 画面へ遷移する", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "有効なページ番号でダイレクトに Crop 画面へ遷移する", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
 
       # テスト用ページ画像ディレクトリ・ファイルを作成
       pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
@@ -84,8 +84,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
       File.rm_rf!("priv/static/uploads/pages")
     end
 
-    test "無効なページ番号でエラーがハンドリングされる", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "無効なページ番号でエラーがハンドリングされる", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
       pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
       File.mkdir_p!(pages_dir)
       File.write!(Path.join(pages_dir, "page-001.png"), "dummy")
@@ -98,8 +98,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
       File.rm_rf!("priv/static/uploads/pages")
     end
 
-    test "存在しないページ番号でエラーがハンドリングされる", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "存在しないページ番号でエラーがハンドリングされる", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
       pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
       File.mkdir_p!(pages_dir)
       File.write!(Path.join(pages_dir, "page-001.png"), "dummy")
@@ -114,8 +114,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
   end
 
   describe "ナビゲーション" do
-    test "戻るリンクが Lab トップを指す", %{conn: conn} do
-      pdf_source = insert_pdf_source(%{status: "ready"})
+    test "戻るリンクが Lab トップを指す", %{conn: conn, user: user} do
+      pdf_source = insert_pdf_source(%{status: "ready", user_id: user.id})
       pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
       File.mkdir_p!(pages_dir)
       File.write!(Path.join(pages_dir, "page-001.png"), "dummy")

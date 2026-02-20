@@ -66,7 +66,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
         {:ok, pdf_source} =
           Ingestion.create_pdf_source(%{
             filename: Path.basename(pdf_path),
-            status: "converting"
+            status: "converting",
+            user_id: socket.assigns.current_user.id
           })
 
         # パイプラインIDを生成

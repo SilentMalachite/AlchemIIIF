@@ -25,7 +25,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
         socket
       ) do
     {page_number, _} = Integer.parse(page_number_str)
-    pdf_source = Ingestion.get_pdf_source!(pdf_source_id)
+    pdf_source = Ingestion.get_pdf_source!(pdf_source_id, socket.assigns.current_user)
 
     # この pdf_source_id + page_number に既存レコードがあるかチェック
     existing_image = Ingestion.find_extracted_image_by_page(pdf_source.id, page_number)

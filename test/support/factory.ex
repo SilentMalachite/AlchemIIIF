@@ -23,9 +23,19 @@ defmodule AlchemIiif.Factory do
 
   @doc "PdfSource レコードを作成・挿入"
   def insert_pdf_source(overrides \\ %{}) do
-    %PdfSource{}
-    |> PdfSource.changeset(pdf_source_attrs(overrides))
-    |> Repo.insert!()
+    attrs = pdf_source_attrs(overrides)
+
+    changeset = PdfSource.changeset(%PdfSource{}, attrs)
+
+    # user_id が指定されている場合は changeset に追加
+    changeset =
+      if Map.has_key?(overrides, :user_id) do
+        Ecto.Changeset.put_change(changeset, :user_id, overrides[:user_id])
+      else
+        changeset
+      end
+
+    Repo.insert!(changeset)
   end
 
   # === ExtractedImage ファクトリ ===
