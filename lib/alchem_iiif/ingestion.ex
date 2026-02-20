@@ -149,7 +149,7 @@ defmodule AlchemIiif.Ingestion do
   end
 
   @doc "PdfSource に公開済み画像があるか判定"
-  def is_published?(%PdfSource{} = pdf_source) do
+  def published?(%PdfSource{} = pdf_source) do
     Repo.exists?(
       from(e in ExtractedImage,
         where: e.pdf_source_id == ^pdf_source.id,
@@ -164,7 +164,7 @@ defmodule AlchemIiif.Ingestion do
   deleted_at を現在時刻に設定します。物理ファイルは削除しません。
   """
   def soft_delete_pdf_source(%PdfSource{} = pdf_source) do
-    if is_published?(pdf_source) do
+    if published?(pdf_source) do
       {:error, :published_project}
     else
       pdf_source

@@ -683,27 +683,27 @@ defmodule AlchemIiif.IngestionTest do
     end
   end
 
-  # === is_published? テスト ===
+  # === published? テスト ===
 
-  describe "is_published?/1" do
+  describe "published?/1" do
     test "公開済み画像がある場合 true を返す" do
       pdf = insert_pdf_source(%{filename: "pub-check.pdf"})
       insert_extracted_image(%{pdf_source_id: pdf.id, status: "published", label: "fig-30001-1"})
 
-      assert Ingestion.is_published?(pdf) == true
+      assert Ingestion.published?(pdf) == true
     end
 
     test "公開済み画像がない（draft のみ）場合 false を返す" do
       pdf = insert_pdf_source(%{filename: "draft-only.pdf"})
       insert_extracted_image(%{pdf_source_id: pdf.id, status: "draft", label: "fig-30002-1"})
 
-      assert Ingestion.is_published?(pdf) == false
+      assert Ingestion.published?(pdf) == false
     end
 
     test "画像が0件の場合 false を返す" do
       pdf = insert_pdf_source(%{filename: "no-images.pdf"})
 
-      assert Ingestion.is_published?(pdf) == false
+      assert Ingestion.published?(pdf) == false
     end
   end
 

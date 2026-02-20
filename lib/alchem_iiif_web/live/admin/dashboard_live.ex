@@ -69,7 +69,7 @@ defmodule AlchemIiifWeb.Admin.DashboardLive do
         updated_images = Enum.reject(socket.assigns.images, &MapSet.member?(id_set, &1.id))
 
         msg =
-          if length(published) > 0,
+          if published != [],
             do: "#{count} 件削除（公開済み #{length(published)} 件はスキップ）",
             else: "#{count} 件の画像を削除しました"
 
