@@ -176,24 +176,24 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 │   pdf_sources    │ ─────>│   extracted_images     │ ────────> │ iiif_manifests │
 ├──────────────────┤       ├────────────────────────┤           ├────────────────┤
 │ id               │       │ id                     │           │ id             │
-│ filename         │       │ pdf_source_id(FK)      │           │ extracted_     │
-│ page_count       │       │ page_number            │           │   image_id(FK) │
-│ status           │       │ image_path             │           │ identifier     │
-│ workflow_status  │       │ geometry (JSONB)       │           │ metadata(JSONB)│
-│ return_message   │       │ caption                │           │ inserted_at    │
-│ deleted_at       │       │ label                  │           │ updated_at     │
-│ inserted_at      │       │ ptif_path              │           └────────────────┘
-│ updated_at       │       │ status                 │
-└──────────────────┘       │ review_comment         │
-                           │ lock_version           │
-┌──────────────┐           │ owner_id(FK → users)   │
-│    users     │           │ worker_id(FK → users)  │
-├──────────────┤           │ site                   │
-│ id           │ ◄─────────│ period                 │
-│ email        │   N:1     │ artifact_type          │
-│ hashed_pw    │           │ inserted_at            │
-│ confirmed_at │           │ updated_at             │
-│ role         │           └────────────────────────┘
+│ user_id (FK)     │       │ pdf_source_id(FK)      │           │ extracted_     │
+│ filename         │       │ page_number            │           │   image_id(FK) │
+│ page_count       │       │ image_path             │           │ identifier     │
+│ status           │       │ geometry (JSONB)       │           │ metadata(JSONB)│
+│ workflow_status  │       │ caption                │           │ inserted_at    │
+│ return_message   │       │ label                  │           │ updated_at     │
+│ deleted_at       │       │ ptif_path              │           └────────────────┘
+│ inserted_at      │       │ status                 │
+│ updated_at       │       │ review_comment         │
+└──────────────────┘       │ lock_version           │
+                           │ owner_id(FK → users)   │
+┌──────────────┐           │ worker_id(FK → users)  │
+│    users     │           │ site                   │
+├──────────────┤           │ period                 │
+│ id           │ ◄─────────│ artifact_type          │
+│ email        │   N:1     │ inserted_at            │
+│ hashed_pw    │           │ updated_at             │
+│ confirmed_at │           └────────────────────────┘
 │ inserted_at  │
 │ updated_at   │
 └──────────────┘
@@ -412,10 +412,20 @@ PdfSource 単位の Manifest では、Canvas のサイズは `geometry` の `wid
 | ログイン済み | メールアドレス、設定リンク、ログアウト |
 | 未ログイン | 登録リンク、ログインボタン |
 
-### 所有者/作業者モデル
+### 所有権管理 (User Scoping) とデータ隔離
 
-`ExtractedImage` に `owner_id`（所有者）と `worker_id`（作業者）の2つの外部キーを追加。
-将来的にマルチテナント・タスク割り当て機能の基盤として利用予定。
+`PdfSource` に `user_id`（所有者）を追加し、マルチユーザー環境におけるデータ隔離を実現しています。
+`Ingestion` コンテキストでの情報フェッチや変更処理はすべて `user_id` によるスコープが適用されており、以下のルールでアクセス制御されます。
+
+- **Admin ロール**: 全ユーザーの `PdfSource` にアクセス可能。ダッシュボードや `/admin/review` での全件管理。
+- **User ロール**: 自身が作成（アップロード）した `PdfSource` およびそれに紐づく `ExtractedImage` のみアクセス・編集可能。
+
+他ユーザーのデータアクセス試行に対しては `Ecto.NoResultsError` を発行し、404 エラーページへフォールバックさせて不正操作を防止します。
+
+### 所有者/作業者モデル (ExtractedImage)
+
+`ExtractedImage` にも個別の `owner_id`（アップロード者）と `worker_id`（作業者）の外部キーを持たせています。
+現在はこの所有権モデルと `PdfSource.user_id` の二段構えで、将来的なマルチテナントや細かなタスク割り当て基盤としての拡張性を持たせています。
 
 ---
 
