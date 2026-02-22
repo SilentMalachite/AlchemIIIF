@@ -1,6 +1,9 @@
 defmodule AlchemIiifWeb.UserRegistrationControllerTest do
   use AlchemIiifWeb.ConnCase, async: true
 
+  # 招待制に移行したため /users/register ルートはコメントアウト済み
+  @moduletag :skip
+
   import AlchemIiif.AccountsFixtures
 
   describe "GET /users/register" do

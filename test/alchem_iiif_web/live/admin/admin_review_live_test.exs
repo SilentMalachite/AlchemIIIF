@@ -199,7 +199,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLiveTest do
       assert html =~ "差し戻し理由"
 
       # Note を入力
-      render_click(view, "update_reject_note", %{"note" => "メタデータを修正してください"})
+      render_click(view, "update_reject_note", %{"reject_note" => %{"note" => "メタデータを修正してください"}})
 
       # 差し戻しを実行
       html = render_click(view, "confirm_reject", %{})

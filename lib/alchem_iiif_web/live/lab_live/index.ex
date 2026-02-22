@@ -102,12 +102,18 @@ defmodule AlchemIiifWeb.LabLive.Index do
                 <div class="project-card-header">
                   <span class="project-card-icon">📄</span>
                   <div class="project-card-badges">
-                    <span class={"project-status-badge project-status-#{project.status}"}>
-                      {status_label(project.status)}
-                    </span>
-                    <span class={"workflow-status-badge workflow-status-#{project.workflow_status}"}>
-                      {workflow_label(project.workflow_status)}
-                    </span>
+                    <%= cond do %>
+                      <% project.published? -> %>
+                        <span class="project-status-badge project-status-published">🔒 公開中</span>
+                      <% project.workflow_status == "pending_review" -> %>
+                        <span class="workflow-status-badge workflow-status-pending_review">審査待ち</span>
+                      <% project.workflow_status == "returned" -> %>
+                        <span class="workflow-status-badge workflow-status-returned">⚠️ 差し戻しあり</span>
+                      <% project.workflow_status == "approved" -> %>
+                        <span class="workflow-status-badge workflow-status-approved">承認済み</span>
+                      <% true -> %>
+                        <span class="workflow-status-badge workflow-status-wip">作業中</span>
+                    <% end %>
                   </div>
                 </div>
                 <h3 class="project-card-title">{project.filename}</h3>
@@ -176,18 +182,4 @@ defmodule AlchemIiifWeb.LabLive.Index do
     </div>
     """
   end
-
-  # ファイル処理ステータスの日本語ラベル
-  defp status_label("uploading"), do: "アップロード中"
-  defp status_label("converting"), do: "変換中"
-  defp status_label("ready"), do: "取り込み完了"
-  defp status_label("error"), do: "エラー"
-  defp status_label(_), do: "不明"
-
-  # ワークフローステータスの日本語ラベル
-  defp workflow_label("wip"), do: "作業中"
-  defp workflow_label("pending_review"), do: "作業完了/審査待ち"
-  defp workflow_label("returned"), do: "⚠️ 差し戻しあり"
-  defp workflow_label("approved"), do: "承認済み"
-  defp workflow_label(_), do: ""
 end

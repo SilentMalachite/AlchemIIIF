@@ -177,10 +177,17 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       {:ok, view, _html} = live(conn, ~p"/lab/label/#{current.id}")
 
-      # ラベル入力で同じ fig-1-1 を入力（blur イベント）
+      # ラベル入力で同じ fig-1-1 を入力（phx-change イベント）
       view
-      |> element("#label-input")
-      |> render_blur(%{"field" => "label", "value" => "fig-1-1"})
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["label"],
+        "label" => "fig-1-1",
+        "site" => "重複検出テスト市遺跡",
+        "caption" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
 
       html = render(view)
       assert html =~ "この遺跡でそのラベルは既に登録されています"
@@ -213,8 +220,15 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       # 同じラベルを入力しても別 PDF なので重複にならない
       view
-      |> element("#label-input")
-      |> render_blur(%{"field" => "label", "value" => "fig-1-1"})
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["label"],
+        "label" => "fig-1-1",
+        "site" => "",
+        "caption" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
 
       html = render(view)
       refute html =~ "この遺跡でそのラベルは既に登録されています"
@@ -240,8 +254,15 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       # 空文字を入力
       view
-      |> element("#label-input")
-      |> render_blur(%{"field" => "label", "value" => ""})
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["label"],
+        "label" => "",
+        "site" => "",
+        "caption" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
 
       html = render(view)
       refute html =~ "この遺跡でそのラベルは既に登録されています"
@@ -270,8 +291,15 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       # 重複ラベルを入力して duplicate_record をセット
       view
-      |> element("#label-input")
-      |> render_blur(%{"field" => "label", "value" => "fig-1-1"})
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["label"],
+        "label" => "fig-1-1",
+        "site" => "ブロックテスト市遺跡",
+        "caption" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
 
       # save finish を押しても遷移しない（ブロックされる）
       html =
@@ -308,8 +336,15 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
 
       # 重複ラベルを入力して duplicate_record をセット
       view
-      |> element("#label-input")
-      |> render_blur(%{"field" => "label", "value" => "fig-1-1"})
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["label"],
+        "label" => "fig-1-1",
+        "site" => "マージテスト市遺跡",
+        "caption" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
 
       # マージボタンをクリック
       assert {:error, {:live_redirect, %{to: path}}} =

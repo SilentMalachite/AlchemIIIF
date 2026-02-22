@@ -12,7 +12,6 @@ defmodule AlchemIiifWeb.UserSessionControllerTest do
       conn = get(conn, ~p"/users/log-in")
       response = html_response(conn, 200)
       assert response =~ "ログイン"
-      assert response =~ ~p"/users/register"
     end
 
     test "renders login page with email filled in (sudo mode)", %{conn: conn, user: user} do
@@ -33,7 +32,6 @@ defmodule AlchemIiifWeb.UserSessionControllerTest do
       conn = get(conn, ~p"/users/log-in?mode=password")
       response = html_response(conn, 200)
       assert response =~ "ログイン"
-      assert response =~ ~p"/users/register"
     end
   end
 

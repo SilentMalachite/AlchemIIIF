@@ -23,7 +23,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
         build_conn()
         |> log_in_user(user_a)
 
-      {:ok, view_a, _html} = live(conn_a, ~p"/lab")
+      {:ok, view_a, _html} = live(conn_a, ~p"/lab/upload")
 
       # PDF ファイルを選択（file_input でエントリを登録）
       pdf_input =
@@ -51,8 +51,9 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       # User B のビューに User A のファイル名が表示されないことを確認
       html_b = render(view_b)
+
       refute html_b =~ "secret_plan.pdf",
-        "セキュリティ違反: User A のアップロード (secret_plan.pdf) が User B のセッションに漏洩しています"
+             "セキュリティ違反: User A のアップロード (secret_plan.pdf) が User B のセッションに漏洩しています"
     end
   end
 end

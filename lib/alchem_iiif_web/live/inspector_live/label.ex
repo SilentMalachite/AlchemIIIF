@@ -43,6 +43,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
      |> assign(:period, extracted_image.period || "")
      |> assign(:artifact_type, extracted_image.artifact_type || "")
      |> assign(:undo_stack, [])
+     |> assign(:pre_edit_snapshot, nil)
      |> assign(:duplicate_record, check_duplicate_label(extracted_image))
      |> assign(:validation_errors, %{})
      |> assign(:save_state, :idle)
@@ -54,9 +55,79 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   # --- メタデータ更新イベント ---
 
+  # phx-change: フォーム入力のリアルタイムバリデーション
+  @impl true
+  def handle_event("validate_metadata", params, socket) do
+    # 編集開始時のスナップショットを保存（Undo 用）
+    socket =
+      if is_nil(socket.assigns.pre_edit_snapshot) do
+        assign(socket, :pre_edit_snapshot, take_snapshot(socket))
+      else
+        socket
+      end
+
+    # フォームの実入力値で assigns を更新
+    socket =
+      socket
+      |> assign(:caption, Map.get(params, "caption", socket.assigns.caption))
+      |> assign(:label, Map.get(params, "label", socket.assigns.label))
+      |> assign(:site, Map.get(params, "site", socket.assigns.site))
+      |> assign(:period, Map.get(params, "period", socket.assigns.period))
+      |> assign(:artifact_type, Map.get(params, "artifact_type", socket.assigns.artifact_type))
+
+    # 変更されたフィールドのバリデーション
+    target = List.first(params["_target"] || [])
+
+    socket =
+      if target,
+        do: run_inline_validation(socket, target, Map.get(params, target, "")),
+        else: socket
+
+    # label/site 変更時は重複チェック
+    socket =
+      if target in ["label", "site"] do
+        duplicate =
+          Ingestion.find_duplicate_label(
+            socket.assigns.site,
+            socket.assigns.label,
+            socket.assigns.extracted_image.id
+          )
+
+        assign(socket, :duplicate_record, duplicate)
+      else
+        socket
+      end
+
+    {:noreply, socket}
+  end
+
+  # phx-blur: フィールド離脱時に自動保存（Undo スナップショット確定）
+  @impl true
+  def handle_event("blur_save_field", %{"field" => field}, socket) do
+    # 編集前スナップショットを Undo スタックに追加
+    {socket, undo_stack} =
+      case socket.assigns.pre_edit_snapshot do
+        nil ->
+          {socket, socket.assigns.undo_stack}
+
+        snapshot ->
+          stack = [snapshot | socket.assigns.undo_stack] |> Enum.take(20)
+          {assign(socket, :pre_edit_snapshot, nil), stack}
+      end
+
+    value = Map.get(socket.assigns, String.to_existing_atom(field))
+
+    socket =
+      socket
+      |> assign(:undo_stack, undo_stack)
+      |> auto_save_field(field, value)
+
+    {:noreply, socket}
+  end
+
+  # レガシー互換: テストから呼ばれる update_field イベント
   @impl true
   def handle_event("update_field", %{"field" => field, "value" => value}, socket) do
-    # 現在の値を Undo スタックに保存
     current_snapshot = take_snapshot(socket)
     undo_stack = [current_snapshot | socket.assigns.undo_stack] |> Enum.take(20)
 
@@ -71,16 +142,13 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     # インラインバリデーション
     socket = run_inline_validation(socket, field, value)
 
-    # label または site 変更時は重複チェックを実行
+    # label/site 変更時は重複チェック
     socket =
       if field in ["label", "site"] do
-        site = if field == "site", do: value, else: socket.assigns.site
-        label = if field == "label", do: value, else: socket.assigns.label
-
         duplicate =
           Ingestion.find_duplicate_label(
-            site,
-            label,
+            socket.assigns.site,
+            socket.assigns.label,
             socket.assigns.extracted_image.id
           )
 
@@ -150,6 +218,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   @impl true
+  def handle_info({:auto_save_error, errors}, socket) do
+    {:noreply,
+     socket
+     |> assign(:save_state, :idle)
+     |> assign(:validation_errors, Map.merge(socket.assigns.validation_errors, errors))}
+  end
+
+  @impl true
   def handle_info(:stale_detected, socket) do
     {:noreply,
      put_flash(socket, :error, "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected).")}
@@ -168,26 +244,45 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   defp auto_save_field(socket, field, value) do
-    socket = assign(socket, :save_state, :saving)
-    extracted_image = socket.assigns.extracted_image
-    lv_pid = self()
+    # 保存前の文字数制限チェック（非同期保存を試みる前にブロック）
+    max_len = if field in ["caption"], do: 1000, else: 100
 
-    Task.start(fn ->
-      case Ingestion.update_extracted_image(extracted_image, %{
-             String.to_existing_atom(field) => value
-           }) do
-        {:ok, updated} ->
-          send(lv_pid, {:auto_save_complete, updated})
+    if field in ["site", "period", "artifact_type", "caption"] and
+         String.length(to_string(value)) > max_len do
+      errors =
+        Map.put(
+          socket.assigns.validation_errors,
+          String.to_existing_atom(field),
+          "#{max_len}文字以内で入力してください"
+        )
 
-        {:error, :stale} ->
-          send(lv_pid, :stale_detected)
+      assign(socket, validation_errors: errors, save_state: :idle)
+    else
+      socket = assign(socket, :save_state, :saving)
+      extracted_image = socket.assigns.extracted_image
+      lv_pid = self()
 
-        {:error, _} ->
-          send(lv_pid, :auto_save_complete)
-      end
-    end)
+      Task.start(fn ->
+        case Ingestion.update_extracted_image(extracted_image, %{
+               String.to_existing_atom(field) => value
+             }) do
+          {:ok, updated} ->
+            send(lv_pid, {:auto_save_complete, updated})
 
-    socket
+          {:error, :stale} ->
+            send(lv_pid, :stale_detected)
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            errors = extract_changeset_field_errors(changeset)
+            send(lv_pid, {:auto_save_error, errors})
+
+          {:error, _} ->
+            send(lv_pid, :auto_save_complete)
+        end
+      end)
+
+      socket
+    end
   end
 
   defp auto_save_all(socket, snapshot) do
@@ -202,6 +297,10 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
         {:error, :stale} ->
           send(lv_pid, :stale_detected)
+
+        {:error, %Ecto.Changeset{} = changeset} ->
+          errors = extract_changeset_field_errors(changeset)
+          send(lv_pid, {:auto_save_error, errors})
 
         {:error, _} ->
           send(lv_pid, :auto_save_complete)
@@ -230,65 +329,79 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   # 保存ロジック（重複チェック通過後に呼ばれる）
   # 全アクション（finish / continue）で status を pending_review に昇格する
   defp do_save(socket, action) do
-    # geometry が nil の場合は保存をブロック
-    if is_nil(socket.assigns.extracted_image.geometry) and is_nil(socket.assigns.geo) do
-      {:noreply, put_flash(socket, :error, "⚠️ クロップ範囲が設定されていません。先にクロップ画面で範囲を指定してください。")}
-    else
-      # rejected 画像の場合は resubmit_image を使用
-      save_result =
-        if socket.assigns.is_rejected do
-          # まずメタデータを保存
-          case save_metadata(socket, %{}) do
-            {:ok, _} ->
-              # 再提出（rejected → pending_review + review_comment クリア）
-              updated = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
-              Ingestion.resubmit_image(updated)
+    cond do
+      # バリデーションエラーがある場合は保存をブロック
+      socket.assigns.validation_errors != %{} ->
+        {:noreply, put_flash(socket, :error, "⚠️ 入力エラーがあります。修正してから保存してください。")}
 
-            error ->
-              error
-          end
-        else
-          # 通常: 全保存パスで status: "pending_review" を強制設定
-          save_metadata(socket, %{status: "pending_review"})
-        end
+      # geometry が nil の場合は保存をブロック
+      is_nil(socket.assigns.extracted_image.geometry) and is_nil(socket.assigns.geo) ->
+        {:noreply, put_flash(socket, :error, "⚠️ クロップ範囲が設定されていません。先にクロップ画面で範囲を指定してください。")}
 
-      case save_result do
-        {:ok, _updated} ->
-          # PTIF をバックグラウンド生成（全アクション共通）
-          updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+      true ->
+        # rejected 画像の場合は resubmit_image を使用
+        save_result =
+          if socket.assigns.is_rejected do
+            # まずメタデータを保存
+            case save_metadata(socket, %{}) do
+              {:ok, _} ->
+                # 再提出（rejected → pending_review + review_comment クリア）
+                updated = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+                Ingestion.resubmit_image(updated)
 
-          Task.start(fn ->
-            AlchemIiif.Pipeline.generate_single_ptif(updated_image)
-          end)
-
-          {flash_msg, route} =
-            if socket.assigns.is_rejected do
-              # 再提出の場合は Lab ダッシュボードに戻る
-              {"✅ 再提出しました！レビューをお待ちください。", ~p"/lab"}
-            else
-              case action do
-                "continue" ->
-                  {"✅ レビューに提出しました！次の図版を選択してください。",
-                   ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
-
-                _finish ->
-                  {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
-              end
+              error ->
+                error
             end
+          else
+            # 通常: 全保存パスで status: "pending_review" を強制設定
+            save_metadata(socket, %{status: "pending_review"})
+          end
 
-          {:noreply,
-           socket
-           |> put_flash(:info, flash_msg)
-           |> push_navigate(to: route)}
+        case save_result do
+          {:ok, _updated} ->
+            # PTIF をバックグラウンド生成（全アクション共通）
+            updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
 
-        {:error, :stale} ->
-          {:noreply,
-           put_flash(socket, :error, "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected).")}
+            Task.start(fn ->
+              AlchemIiif.Pipeline.generate_single_ptif(updated_image)
+            end)
 
-        {:error, changeset} ->
-          error_msg = format_changeset_errors(changeset)
-          {:noreply, put_flash(socket, :error, "保存に失敗しました: #{error_msg}")}
-      end
+            {flash_msg, route} =
+              if socket.assigns.is_rejected do
+                # 再提出の場合は Lab ダッシュボードに戻る
+                {"✅ 再提出しました！レビューをお待ちください。", ~p"/lab"}
+              else
+                case action do
+                  "continue" ->
+                    {"✅ レビューに提出しました！次の図版を選択してください。",
+                     ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
+
+                  _finish ->
+                    {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
+                end
+              end
+
+            {:noreply,
+             socket
+             |> put_flash(:info, flash_msg)
+             |> push_navigate(to: route)}
+
+          {:error, :stale} ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected)."
+             )}
+
+          {:error, changeset} ->
+            errors = extract_changeset_field_errors(changeset)
+
+            {:noreply,
+             socket
+             |> assign(:validation_errors, Map.merge(socket.assigns.validation_errors, errors))
+             |> put_flash(:error, "保存に失敗しました。入力内容を確認してください。")}
+        end
     end
   end
 
@@ -315,10 +428,36 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
           end
 
         "site" ->
-          if value != "" and not String.contains?(value, ["市", "町", "村"]) do
-            Map.put(errors, :site, "市町村名（市・町・村）を含めてください（例: 新潟市中野遺跡）")
+          cond do
+            String.length(value) > 100 ->
+              Map.put(errors, :site, "100文字以内で入力してください")
+
+            value != "" and not String.contains?(value, ["市", "町", "村"]) ->
+              Map.put(errors, :site, "市町村名（市・町・村）を含めてください（例: 新潟市中野遺跡）")
+
+            true ->
+              Map.delete(errors, :site)
+          end
+
+        "period" ->
+          if String.length(value) > 100 do
+            Map.put(errors, :period, "100文字以内で入力してください")
           else
-            Map.delete(errors, :site)
+            Map.delete(errors, :period)
+          end
+
+        "artifact_type" ->
+          if String.length(value) > 100 do
+            Map.put(errors, :artifact_type, "100文字以内で入力してください")
+          else
+            Map.delete(errors, :artifact_type)
+          end
+
+        "caption" ->
+          if String.length(value) > 1000 do
+            Map.put(errors, :caption, "1000文字以内で入力してください")
+          else
+            Map.delete(errors, :caption)
           end
 
         _ ->
@@ -328,11 +467,11 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     assign(socket, :validation_errors, errors)
   end
 
-  # changeset のエラーメッセージをフォーマット
-  defp format_changeset_errors(changeset) do
+  # changeset からフィールドごとのエラーメッセージを抽出
+  defp extract_changeset_field_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
-    |> Enum.map(fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
-    |> Enum.join("; ")
+    |> Enum.map(fn {field, [msg | _]} -> {field, msg} end)
+    |> Map.new()
   end
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
@@ -400,22 +539,25 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
           <% end %>
         </div>
 
-        <%!-- メタデータ入力フォーム --%>
-        <div class="metadata-form">
+        <%!-- メタデータ入力フォーム（phx-change でリアルタイムバリデーション） --%>
+        <form phx-change="validate_metadata" class="metadata-form">
           <div class="form-group">
             <label for="caption-input" class="form-label">📝 キャプション（図の説明）</label>
             <input
               type="text"
               id="caption-input"
-              class="form-input form-input-large"
+              class={["form-input form-input-large", @validation_errors[:caption] && "input-error"]}
               value={@caption}
-              phx-blur="update_field"
+              phx-blur="blur_save_field"
               phx-value-field="caption"
-              phx-value-value={@caption}
               placeholder="例: 第3図 土器出土状況"
               name="caption"
               maxlength="1000"
             />
+            <%!-- キャプションエラー --%>
+            <%= if @validation_errors[:caption] do %>
+              <p class="field-error-text">⚠️ {@validation_errors[:caption]}</p>
+            <% end %>
           </div>
 
           <div class="form-group">
@@ -423,13 +565,16 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             <input
               type="text"
               id="label-input"
-              class={["form-input form-input-large", @duplicate_record && "input-error"]}
+              class={[
+                "form-input form-input-large",
+                (@duplicate_record || @validation_errors[:label]) && "input-error"
+              ]}
               value={@label}
-              phx-blur="update_field"
+              phx-blur="blur_save_field"
               phx-value-field="label"
-              phx-value-value={@label}
               placeholder="例: fig-1-1"
               name="label"
+              maxlength="100"
             />
 
             <%!-- ラベル形式エラー --%>
@@ -473,9 +618,8 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               id="site-input"
               class={["form-input form-input-large", @validation_errors[:site] && "input-error"]}
               value={@site}
-              phx-blur="update_field"
+              phx-blur="blur_save_field"
               phx-value-field="site"
-              phx-value-value={@site}
               placeholder="例: 新潟市中野遺跡"
               name="site"
               maxlength="100"
@@ -491,15 +635,18 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             <input
               type="text"
               id="period-input"
-              class="form-input form-input-large"
+              class={["form-input form-input-large", @validation_errors[:period] && "input-error"]}
               value={@period}
-              phx-blur="update_field"
+              phx-blur="blur_save_field"
               phx-value-field="period"
-              phx-value-value={@period}
               placeholder="例: 縄文時代"
               name="period"
               maxlength="100"
             />
+            <%!-- 時代エラー --%>
+            <%= if @validation_errors[:period] do %>
+              <p class="field-error-text">⚠️ {@validation_errors[:period]}</p>
+            <% end %>
           </div>
 
           <div class="form-group">
@@ -507,17 +654,23 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             <input
               type="text"
               id="artifact-type-input"
-              class="form-input form-input-large"
+              class={[
+                "form-input form-input-large",
+                @validation_errors[:artifact_type] && "input-error"
+              ]}
               value={@artifact_type}
-              phx-blur="update_field"
+              phx-blur="blur_save_field"
               phx-value-field="artifact_type"
-              phx-value-value={@artifact_type}
               placeholder="例: 土器"
               name="artifact_type"
               maxlength="100"
             />
+            <%!-- 遺物種別エラー --%>
+            <%= if @validation_errors[:artifact_type] do %>
+              <p class="field-error-text">⚠️ {@validation_errors[:artifact_type]}</p>
+            <% end %>
           </div>
-        </div>
+        </form>
 
         <%!-- Undo ボタン --%>
         <div class="undo-bar">
