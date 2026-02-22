@@ -414,6 +414,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-value={@caption}
               placeholder="例: 第3図 土器出土状況"
               name="caption"
+              maxlength="1000"
             />
           </div>
 
@@ -477,6 +478,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-value={@site}
               placeholder="例: 新潟市中野遺跡"
               name="site"
+              maxlength="100"
             />
             <%!-- 遺跡名エラー --%>
             <%= if @validation_errors[:site] do %>
@@ -496,6 +498,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-value={@period}
               placeholder="例: 縄文時代"
               name="period"
+              maxlength="100"
             />
           </div>
 
@@ -511,6 +514,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-value={@artifact_type}
               placeholder="例: 土器"
               name="artifact_type"
+              maxlength="100"
             />
           </div>
         </div>

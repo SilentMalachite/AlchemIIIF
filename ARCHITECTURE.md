@@ -276,6 +276,9 @@ IIIF クライアント (Mirador, Universal Viewer 等)
     *   `extracted_images` テーブルに `lock_version` カラムを追加し、Ecto の `optimistic_lock` 機能を利用。
     *   複数ユーザー（またはタブ）による同時編集時の「後勝ち」更新を防止し、データの整合性を維持します。
     *   競合検出時は `Ecto.StaleEntryError` が発生し、UI 側で適切なエラーメッセージを表示します。
+5.  **入力値の長さ制限**:
+    *   `caption` (1000文字)、`site` / `period` / `artifact_type` (各100文字) に厳格な `validate_length` を適用。
+    *   XSS や過大なデータ投入によるリソース枯渇攻撃への対策として機能します。
 
 
 ---
