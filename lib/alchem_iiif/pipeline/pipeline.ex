@@ -35,6 +35,12 @@ defmodule AlchemIiif.Pipeline do
   def topic(pipeline_id), do: "pipeline:#{pipeline_id}"
 
   @doc """
+  PDF パイプラインのユーザー通知トピック名を返します。
+  バックグラウンド処理完了時に LiveView へ画面遷移を通知するために使用します。
+  """
+  def pdf_pipeline_topic(user_id), do: "pdf_pipeline:#{user_id}"
+
+  @doc """
   PDF を PNG に変換し、抽出画像を並列で DB に登録します。
 
   ## 引数
@@ -132,6 +138,17 @@ defmodule AlchemIiif.Pipeline do
             failed: 0,
             pdf_source_id: pdf_source.id
           })
+
+          # ユーザーへの完了通知（LiveView 画面遷移用）
+          owner_id = opts[:owner_id]
+
+          if owner_id do
+            PubSub.broadcast(
+              @pubsub,
+              pdf_pipeline_topic(owner_id),
+              {:extraction_complete, pdf_source.id}
+            )
+          end
 
           {:ok, %{page_count: page_count, images: images}}
 

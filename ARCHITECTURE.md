@@ -56,6 +56,44 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > (`alchemiiif_job_{uuid}`) を使用し、`try/after` パターンで確実にクリーンアップ。
 > 並行実行される複数ジョブ間でのファイル衝突を防止します。
 
+### OTP バックグラウンド処理基盤
+
+PDF 抽出などの重い処理を LiveView プロセスから分離し、UI のレスポンスを保証するためのOTP 基盤です。
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                  Application Supervision Tree                 │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│  AlchemIiif.UserWorkerRegistry  (Registry)                    │
+│  └── ユーザー ID → PID のマッピング                             │
+│                                                               │
+│  AlchemIiif.UserWorkerSupervisor  (DynamicSupervisor)         │
+│  └── UserWorker (GenServer) × N  ← ユーザーごとに 1 プロセス  │
+│                                                               │
+├──────────────────────────────────────────────────────────────┤
+│                     処理フロー                                 │
+│                                                               │
+│  LiveView (Upload)                                            │
+│    │  UserWorker.process_pdf/4 (cast)                         │
+│    ▼                                                          │
+│  UserWorker (GenServer)                                       │
+│    │  Task.start で非同期実行                                  │
+│    ▼                                                          │
+│  Pipeline.run_pdf_extraction/4                                │
+│    │  成功時                                                   │
+│    ├── PubSub broadcast {:extraction_complete, pdf_source_id} │
+│    │   (トピック: pdf_pipeline:{owner_id})                     │
+│    ▼                                                          │
+│  LiveView (handle_info)                                       │
+│    └── UI 更新 → Browse 画面へ遷移                            │
+└──────────────────────────────────────────────────────────────┘
+```
+
+> **ワーカー自動起動**: `UserAuth.mount_current_user` フック内で、認証済みユーザーの
+> `UserWorker` を自動起動します。既に起動済み (`{:error, {:already_started, _}}`) の
+> 場合は安全に無視されます。
+
 ### Stage-Gate フロー
 
 ```

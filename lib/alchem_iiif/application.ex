@@ -14,6 +14,8 @@ defmodule AlchemIiif.Application do
       {Phoenix.PubSub, name: AlchemIiif.PubSub},
       # リソース監視 GenServer（CPU/メモリの動的検出）
       AlchemIiif.Pipeline.ResourceMonitor,
+      {Registry, keys: :unique, name: AlchemIiif.UserWorkerRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: AlchemIiif.UserWorkerSupervisor},
       # Start to serve requests, typically the last entry
       AlchemIiifWeb.Endpoint
     ]

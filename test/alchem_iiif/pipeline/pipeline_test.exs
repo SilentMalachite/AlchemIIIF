@@ -148,4 +148,113 @@ defmodule AlchemIiif.PipelineTest do
                      5_000
     end
   end
+
+  describe "pdf_pipeline_topic/1" do
+    test "ユーザーIDからユーザー通知トピック名を生成する" do
+      assert Pipeline.pdf_pipeline_topic(123) == "pdf_pipeline:123"
+    end
+
+    test "異なるユーザーIDで異なるトピックを返す" do
+      topic_a = Pipeline.pdf_pipeline_topic(1)
+      topic_b = Pipeline.pdf_pipeline_topic(2)
+
+      refute topic_a == topic_b
+    end
+  end
+
+  describe "extraction_complete ブロードキャスト" do
+    test "成功時に owner_id 指定で {:extraction_complete, pdf_source_id} を配信する" do
+      user = insert_user()
+      pdf_source = insert_pdf_source(%{status: "uploading", user_id: user.id})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      # テスト用の最小 PDF をインラインで生成
+      # (1ページの空白 PDF — pdftoppm が正常に処理できる)
+      pdf_content = """
+      %PDF-1.0
+      1 0 obj
+      << /Type /Catalog /Pages 2 0 R >>
+      endobj
+      2 0 obj
+      << /Type /Pages /Kids [3 0 R] /Count 1 >>
+      endobj
+      3 0 obj
+      << /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] >>
+      endobj
+      xref
+      0 4
+      0000000000 65535 f
+      0000000009 00000 n
+      0000000058 00000 n
+      0000000115 00000 n
+      trailer
+      << /Size 4 /Root 1 0 R >>
+      startxref
+      190
+      %%EOF
+      """
+
+      tmp_pdf =
+        Path.join(System.tmp_dir!(), "pipeline_test_#{System.unique_integer([:positive])}.pdf")
+
+      File.write!(tmp_pdf, pdf_content)
+
+      # テスト終了時にクリーンアップ
+      output_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+
+      on_exit(fn ->
+        File.rm(tmp_pdf)
+        File.rm_rf(output_dir)
+      end)
+
+      # ユーザー通知トピックを購読
+      Phoenix.PubSub.subscribe(@pubsub, Pipeline.pdf_pipeline_topic(user.id))
+
+      # 同期実行して結果を検証
+      result =
+        Pipeline.run_pdf_extraction(pdf_source, tmp_pdf, pipeline_id, %{
+          owner_id: user.id
+        })
+
+      assert {:ok, %{page_count: 1, images: [_image]}} = result
+
+      # 完了通知メッセージを受信
+      expected_id = pdf_source.id
+      assert_receive {:extraction_complete, ^expected_id}, 5_000
+    end
+
+    test "エラー時は owner_id 指定でも {:extraction_complete, _} を配信しない" do
+      user = insert_user()
+      pdf_source = insert_pdf_source(%{status: "uploading", user_id: user.id})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      # ユーザー通知トピックを購読
+      Phoenix.PubSub.subscribe(@pubsub, Pipeline.pdf_pipeline_topic(user.id))
+
+      Task.start(fn ->
+        Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id, %{
+          owner_id: user.id
+        })
+      end)
+
+      # PDF が存在しないためエラーパスに入り、extraction_complete は配信されない
+      refute_receive {:extraction_complete, _}, 2_000
+    end
+
+    test "owner_id 未指定時に {:extraction_complete, _} を配信しない" do
+      pdf_source = insert_pdf_source(%{status: "uploading"})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      # パイプライントピックを購読
+      Phoenix.PubSub.subscribe(@pubsub, Pipeline.topic(pipeline_id))
+
+      Task.start(fn ->
+        Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
+      end)
+
+      # パイプライン進捗イベントは受信するが、extraction_complete は受信しない
+      assert_receive {:pipeline_progress, %{event: :pipeline_started}}, 5_000
+      refute_receive {:extraction_complete, _}, 1_000
+    end
+  end
 end

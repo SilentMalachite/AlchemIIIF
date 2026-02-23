@@ -264,8 +264,13 @@ defmodule AlchemIiifWeb.UserAuth do
     Phoenix.Component.assign_new(socket, :current_user, fn ->
       if token = session["user_token"] do
         case Accounts.get_user_by_session_token(token) do
-          {user, _inserted_at} -> user
-          _ -> nil
+          {user, _inserted_at} ->
+            # ユーザー専属ワーカーの起動（すでに起動済みの場合は無視される）
+            AlchemIiif.Workers.UserWorker.start_user_worker(user.id)
+            user
+
+          _ ->
+            nil
         end
       end
     end)

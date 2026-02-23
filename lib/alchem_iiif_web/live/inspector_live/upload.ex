@@ -14,6 +14,15 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   @impl true
   def mount(_params, _session, socket) do
     current_user = socket.assigns.current_user
+
+    # WebSocket 接続時のみユーザー単位の完了通知を購読
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(
+        AlchemIiif.PubSub,
+        Pipeline.pdf_pipeline_topic(current_user.id)
+      )
+    end
+
     rejected_images = Ingestion.list_rejected_images(current_user)
 
     {:ok,
@@ -73,25 +82,48 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
         # パイプラインIDを生成
         pipeline_id = Pipeline.generate_pipeline_id()
 
-        # 非同期で並列パイプラインを開始（owner_id を伝搬）
         owner_id = socket.assigns.current_user.id
 
-        Task.start(fn ->
-          Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{owner_id: owner_id})
-        end)
+        # ユーザーに紐付くWorkerに処理を委譲
+        AlchemIiif.Workers.UserWorker.process_pdf(owner_id, pdf_source, pdf_path, pipeline_id)
 
-        # PipelineLive に遷移して進捗を表示
+        # 完了メッセージを購読する
+        Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
+
+        # 処理中のUI状態を維持
         {:noreply,
          socket
-         |> assign(:uploading, false)
-         |> put_flash(:info, "PDF変換パイプラインを開始しました！")
-         |> push_navigate(to: ~p"/lab/pipeline/#{pipeline_id}")}
+         |> assign(:uploading, true)
+         |> assign(:processing_pdf_id, pdf_source.id)
+         |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
 
       _ ->
         {:noreply,
          socket
          |> assign(:uploading, false)
          |> assign(:error_message, "PDFファイルを選択してください")}
+    end
+  end
+
+  @impl true
+  def handle_info({:extraction_complete, document_id}, socket) do
+    {:noreply,
+     socket
+     |> assign(:uploading, false)
+     |> put_flash(:info, "PDFの処理が完了しました！")
+     |> push_navigate(to: ~p"/lab/browse/#{document_id}")}
+  end
+
+  @impl true
+  def handle_info({:pdf_processed, pdf_source_id}, socket) do
+    if socket.assigns[:processing_pdf_id] == pdf_source_id do
+      {:noreply,
+       socket
+       |> assign(:uploading, false)
+       |> put_flash(:info, "PDFの処理が完了しました！")
+       |> push_navigate(to: ~p"/lab/browse/#{pdf_source_id}")}
+    else
+      {:noreply, socket}
     end
   end
 

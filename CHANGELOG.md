@@ -4,6 +4,32 @@
 
 ---
 
+## [0.2.14] - 2026-02-23
+
+### ⚙️ OTP バックグラウンド処理基盤の導入
+- **ユーザー専属 `UserWorker` (GenServer) の新設**
+  - `lib/alchem_iiif/workers/user_worker.ex` を新設。ユーザーごとに 1 プロセスが起動し、PDF 処理を裏側で実行。
+  - `Registry` (`AlchemIiif.UserWorkerRegistry`) と `DynamicSupervisor` (`AlchemIiif.UserWorkerSupervisor`) をスーパービジョンツリーに追加し、プロセスの名前解決と動的起動を実現。
+  - `start_user_worker/1` — ユーザー ID に紐づくワーカーを起動。
+  - `process_pdf/4` — GenServer に PDF 処理を非同期に委譲 (`cast`)。
+- **LiveView からの同期処理の排除 (Upload 画面)**
+  - `InspectorLive.Upload` での PDF 処理を `Task.start` から `UserWorker.process_pdf/4` への委譲に移行。
+  - 処理完了を PubSub (`{:extraction_complete, pdf_source_id}`) で受信し、UI を自動更新。
+  - 処理中は `uploading: true` のままスピナーを表示し、完了後に Browse 画面へ遷移。
+- **PubSub 完了通知の追加 (Pipeline)**
+  - `Pipeline.run_pdf_extraction/4` の成功パスで `{:extraction_complete, pdf_source.id}` を `pdf_pipeline:{owner_id}` トピックに配信。
+  - `Pipeline.pdf_pipeline_topic/1` ヘルパー関数を追加。
+- **ワーカー自動起動 (UserAuth)**
+  - `user_auth.ex` の `mount_current_user` フック内で、認証済みユーザーの `UserWorker` を自動起動。既に起動済みの場合は安全に無視。
+
+### ✅ テスト
+- **PubSub ブロードキャストテストの追加**
+  - `pdf_pipeline_topic/1` のトピック名生成テスト。
+  - `run_pdf_extraction/4` 成功時に `{:extraction_complete, pdf_source_id}` が配信されることの検証。
+  - エラー時および `owner_id` 未指定時に完了通知が配信されないことの検証。
+
+---
+
 ## [0.2.13] - 2026-02-23
 
 ### 🐛 バグ修正 & 改善
