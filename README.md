@@ -204,8 +204,8 @@ mix phx.server
 
 > [!TIP]
 > **初回ログイン**: `mix ecto.setup` でデフォルトユーザーが自動作成されます。
-> - **管理者**: `admin@example.com` (パスワード: `password1234`)
-> - **一般**: `tester@example.com` (パスワード: `password1234`)
+> - **管理者**: `admin@example.com` (パスワード: `Password1234!`)
+> - **一般**: `user@example.com` (パスワード: `Password1234!`)
 
 ---
 
