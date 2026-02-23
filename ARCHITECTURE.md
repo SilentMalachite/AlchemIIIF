@@ -277,8 +277,8 @@ IIIF クライアント (Mirador, Universal Viewer 等)
     *   複数ユーザー（またはタブ）による同時編集時の「後勝ち」更新を防止し、データの整合性を維持します。
     *   競合検出時は `Ecto.StaleEntryError` が発生し、UI 側で適切なエラーメッセージを表示します。
 5.  **入力値の長さ制限**:
-    *   `caption` (1000文字)、`site` / `period` / `artifact_type` (各100文字) に厳格な `validate_length` を適用。
-    *   XSS や過大なデータ投入によるリソース枯渇攻撃への対策として機能します。
+    *   `caption` (1000文字)、`site` / `period` / `artifact_type` (各30文字) に厳格な `validate_length` を適用。
+    *   フロントエンドの制限に依存せず、サーバーサイドでのバリデーションエラーを日本語で明示し、意図しないデータ投入やXSSをサーバーレベルで阻止します。
 
 
 ---

@@ -203,9 +203,9 @@ mix phx.server
 ブラウザで [`http://localhost:4000/lab`](http://localhost:4000/lab) にアクセスしてください。
 
 > [!TIP]
-> **初回ログイン**: `mix ecto.setup` でデフォルト管理者ユーザーが自動作成されます。
-> - **メール**: `admin@example.com`
-> - **パスワード**: `password1234`
+> **初回ログイン**: `mix ecto.setup` でデフォルトユーザーが自動作成されます。
+> - **管理者**: `admin@example.com` (パスワード: `password1234`)
+> - **一般**: `tester@example.com` (パスワード: `password1234`)
 
 ---
 
