@@ -4,6 +4,30 @@
 
 ---
 
+## [0.2.15] - 2026-02-23
+
+### ⚡ パフォーマンス最適化
+- **libvips グローバル制約の導入 (`application.ex`)**
+  - `Vix.Vips.concurrency_set(1)` — Elixir 側で並行処理を管理するため、libvips 内部のスレッド競合を防止。
+  - `Vix.Vips.cache_set_max(100)` / `cache_set_max_mem(512MB)` — libvips キャッシュの上限を設定し、VPS 環境でのメモリ使用量を制限。
+- **PDF チャンク逐次処理 (`pdf_processor.ex`)**
+  - 大規模 PDF（200+ ページ）でも OOM を起こさないよう、10 ページ単位のチャンクに分割して逐次処理する方式に変更。
+  - `pdfinfo` でページ数を事前取得し、`Task.async_stream(max_concurrency: 1)` で順次変換。
+  - 変換ロジックを `run_chunked_conversion/4`, `build_chunks/1`, `run_pdftoppm_chunk/5`, `collect_and_rename_images/1` 等のプライベート関数に分割し、可読性を向上。
+
+### 📝 コード品質
+- **`UserWorker` に `@moduledoc` を追加**
+  - モジュールの責務と位置づけを明記するドキュメントを追加。
+
+### ✅ テスト安定化
+- **`pipeline_test.exs` の `Task.start` → `Task.async` + `await` 移行**
+  - テスト終了後に Task が残り `StaleEntryError` が発生する問題を修正。`Task.async/1` + `Task.await/2` で完了を保証するパターンに変更。
+  - `refute_receive` のタイムアウトを 2000ms → 500ms に短縮（`Task.await` で完了保証済みのため）。
+- **`user_registration_controller_test.exs` の `~p` シジル置換**
+  - 招待制移行によりコメントアウト済みの `/users/register` ルートに対して `~p` シジルがコンパイル時ルート検証で warning を出す問題を修正。通常の文字列リテラルに置換。
+
+---
+
 ## [0.2.14] - 2026-02-23
 
 ### ⚙️ OTP バックグラウンド処理基盤の導入

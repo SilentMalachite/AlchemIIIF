@@ -140,12 +140,18 @@ defmodule AlchemIiif.PipelineTest do
 
       Phoenix.PubSub.subscribe(@pubsub, Pipeline.topic(pipeline_id))
 
-      Task.start(fn ->
-        Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
-      end)
+      # Task.start だとテスト終了後に Task が残り StaleEntryError が出るため
+      # Task.async + await で完了を保証する
+      task =
+        Task.async(fn ->
+          Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
+        end)
 
       assert_receive {:pipeline_progress, %{event: :pipeline_started, phase: :pdf_extraction}},
                      5_000
+
+      # Task の完了を待ってから Sandbox がクリーンアップされるようにする
+      Task.await(task, 10_000)
     end
   end
 
@@ -231,14 +237,20 @@ defmodule AlchemIiif.PipelineTest do
       # ユーザー通知トピックを購読
       Phoenix.PubSub.subscribe(@pubsub, Pipeline.pdf_pipeline_topic(user.id))
 
-      Task.start(fn ->
-        Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id, %{
-          owner_id: user.id
-        })
-      end)
+      # Task.start だとテスト終了後に Task が残り StaleEntryError が出るため
+      # Task.async + await で完了を保証する
+      task =
+        Task.async(fn ->
+          Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id, %{
+            owner_id: user.id
+          })
+        end)
+
+      # Task の完了を待ってから refute する
+      Task.await(task, 10_000)
 
       # PDF が存在しないためエラーパスに入り、extraction_complete は配信されない
-      refute_receive {:extraction_complete, _}, 2_000
+      refute_receive {:extraction_complete, _}, 500
     end
 
     test "owner_id 未指定時に {:extraction_complete, _} を配信しない" do

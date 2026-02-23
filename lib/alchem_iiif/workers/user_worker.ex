@@ -1,4 +1,10 @@
 defmodule AlchemIiif.Workers.UserWorker do
+  @moduledoc """
+  ユーザーごとのバックグラウンドワーカー GenServer。
+
+  DynamicSupervisor 配下で起動され、PDF 抽出などの重い処理を
+  LiveView プロセスから分離して非同期実行します。
+  """
   use GenServer
   require Logger
 

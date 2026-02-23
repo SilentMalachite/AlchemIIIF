@@ -7,6 +7,12 @@ defmodule AlchemIiif.Application do
 
   @impl true
   def start(_type, _args) do
+    # libvips のグローバル制約: Elixir 側で並行処理を管理するため、
+    # libvips 内部のスレッド競合を防止し、メモリ/CPU 使用量を制限する
+    Vix.Vips.concurrency_set(1)
+    Vix.Vips.cache_set_max(100)
+    Vix.Vips.cache_set_max_mem(512 * 1024 * 1024)
+
     children = [
       AlchemIiifWeb.Telemetry,
       AlchemIiif.Repo,

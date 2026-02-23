@@ -56,6 +56,17 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > (`alchemiiif_job_{uuid}`) を使用し、`try/after` パターンで確実にクリーンアップ。
 > 並行実行される複数ジョブ間でのファイル衝突を防止します。
 
+> **libvips グローバル制約**: `Application.start/2` で libvips の並行処理パラメータを設定
+> します。`concurrency_set(1)` で libvips 内部のスレッド競合を防止し、`cache_set_max(100)`
+> / `cache_set_max_mem(512MB)` でキャッシュ上限を設定します。Elixir 側で Task.async_stream
+> による並行処理を管理し、libvips はシングルスレッドで動作させることで OOM を防止します。
+
+> **PDF チャンク逐次処理**: 大規模 PDF（200+ ページ）でも OOM を回避するため、
+> `PdfProcessor` は PDF を 10 ページ単位のチャンクに分割し、
+> `Task.async_stream(max_concurrency: 1)` で逐次 `pdftoppm` を実行します。
+> `pdfinfo` でページ数を事前取得し、チャンク完了後に `Path.wildcard` で PNG を
+> 収集・ソート・タイムスタンプ付きリネームします。
+
 ### OTP バックグラウンド処理基盤
 
 PDF 抽出などの重い処理を LiveView プロセスから分離し、UI のレスポンスを保証するためのOTP 基盤です。
@@ -151,7 +162,10 @@ SearchLive               ステータス変更          IIIF API 配信
 PDF ファイル
     │  Step 1: アップロード (/lab)
     ▼
-[pdftoppm] ──── 300 DPI PNG 生成
+[pdfinfo] ──── ページ数を取得
+    │
+    ▼
+[pdftoppm] ──── 10 ページ単位でチャンク分割 → 300 DPI PNG 逐次生成
     │
     ▼
 サムネイルグリッド (/lab/browse/:pdf_source_id)
