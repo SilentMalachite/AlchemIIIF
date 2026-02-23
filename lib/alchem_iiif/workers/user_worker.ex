@@ -18,8 +18,11 @@ defmodule AlchemIiif.Workers.UserWorker do
     DynamicSupervisor.start_child(@supervisor, {__MODULE__, [user_id: user_id, name: name]})
   end
 
-  def process_pdf(user_id, pdf_source, pdf_path, pipeline_id) do
-    GenServer.cast(via_tuple(user_id), {:process_pdf, pdf_source, pdf_path, pipeline_id})
+  def process_pdf(user_id, pdf_source, pdf_path, pipeline_id, color_mode \\ "mono") do
+    GenServer.cast(
+      via_tuple(user_id),
+      {:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}
+    )
   end
 
   defp via_tuple(user_id), do: {:via, Registry, {@registry, user_id}}
@@ -39,14 +42,15 @@ defmodule AlchemIiif.Workers.UserWorker do
   end
 
   @impl true
-  def handle_cast({:process_pdf, pdf_source, pdf_path, pipeline_id}, state) do
+  def handle_cast({:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}, state) do
     Logger.info("⚙️ ユーザー(#{state.user_id})のPDF(ID:#{pdf_source.id})の裏側処理を開始します...")
 
     # Run the heavy processing in a separate Task
     Task.start(fn ->
-      # Use the correct extraction function
+      # Use the correct extraction function（カラーモードを opts に含める）
       AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{
-        owner_id: state.user_id
+        owner_id: state.user_id,
+        color_mode: color_mode
       })
 
       # Notify the UI that processing is complete

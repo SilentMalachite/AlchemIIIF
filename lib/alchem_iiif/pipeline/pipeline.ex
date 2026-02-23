@@ -72,7 +72,10 @@ defmodule AlchemIiif.Pipeline do
     )
 
     try do
-      case PdfProcessor.convert_to_images(pdf_path, tmp_dir, %{user_id: opts[:owner_id]}) do
+      # カラーモードを PdfProcessor に伝搬（デフォルト: "mono"）
+      processor_opts = %{user_id: opts[:owner_id], color_mode: opts[:color_mode] || "mono"}
+
+      case PdfProcessor.convert_to_images(pdf_path, tmp_dir, processor_opts) do
         {:ok, %{page_count: page_count, image_paths: tmp_image_paths}} ->
           # 一時ディレクトリから最終出力先へファイルを移動
           image_paths =

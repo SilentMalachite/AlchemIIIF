@@ -65,6 +65,65 @@
   @apply border-primary bg-base-200/30;
 }
 
+/* カラーモード切替ラジオボタン */
+.color-mode-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 0.875rem 1rem;
+  background: var(--color-base-200, #f3f4f6);
+  border-radius: 12px;
+  border: 1px solid var(--color-base-300, #d1d5db);
+}
+
+.color-mode-label {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--color-base-content, #333);
+  white-space: nowrap;
+}
+
+.color-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.color-mode-option:hover {
+  background: var(--color-base-100, #fff);
+  border-color: var(--color-base-300, #d1d5db);
+}
+
+.color-mode-option.selected {
+  background: var(--color-base-100, #fff);
+  border-color: #E6B422;
+  box-shadow: 0 1px 4px rgba(230, 180, 34, 0.2);
+}
+
+.color-mode-option input[type="radio"] {
+  accent-color: #E6B422;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* モバイル: 縦積み */
+@media (max-width: 480px) {
+  .color-mode-selector {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .section-title {
   @apply text-2xl font-bold mb-2;
 }

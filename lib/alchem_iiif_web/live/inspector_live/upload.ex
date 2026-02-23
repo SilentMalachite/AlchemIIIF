@@ -36,12 +36,14 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:rejected_count, length(rejected_images))
      |> assign(:current_page, 0)
      |> assign(:total_pages, 0)
+     |> assign(:color_mode, "mono")
      |> allow_upload(:pdf, accept: ~w(.pdf), max_entries: 1, max_file_size: 500_000_000)}
   end
 
   @impl true
-  def handle_event("validate", _params, socket) do
-    {:noreply, socket}
+  def handle_event("validate", params, socket) do
+    color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
+    {:noreply, assign(socket, :color_mode, color_mode)}
   end
 
   @impl true
@@ -52,8 +54,9 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   @impl true
   # セキュリティ注記: upload_dir は固定パス（priv/static/uploads/pdfs）、
   # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
-  def handle_event("upload_pdf", _params, socket) do
-    socket = assign(socket, :uploading, true)
+  def handle_event("upload_pdf", params, socket) do
+    color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
+    socket = assign(socket, uploading: true, color_mode: color_mode)
 
     uploaded_files =
       consume_uploaded_entries(socket, :pdf, fn %{path: path}, entry ->
@@ -86,8 +89,14 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
         owner_id = socket.assigns.current_user.id
 
-        # ユーザーに紐付くWorkerに処理を委譲
-        AlchemIiif.Workers.UserWorker.process_pdf(owner_id, pdf_source, pdf_path, pipeline_id)
+        # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
+        AlchemIiif.Workers.UserWorker.process_pdf(
+          owner_id,
+          pdf_source,
+          pdf_path,
+          pipeline_id,
+          socket.assigns.color_mode
+        )
 
         # 完了メッセージを購読する
         Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
@@ -172,6 +181,31 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
           <p class="section-description">考古学報告書のPDFファイルを選択してください。</p>
 
           <form id="upload-form" phx-submit="upload_pdf" phx-change="validate">
+            <%!-- カラーモード切替ラジオボタン --%>
+            <div class="color-mode-selector">
+              <span class="color-mode-label">変換モード:</span>
+              <label class={"color-mode-option #{if @color_mode == "mono", do: "selected", else: ""}"}
+              >
+                <input
+                  type="radio"
+                  name="color_mode"
+                  value="mono"
+                  checked={@color_mode == "mono"}
+                />
+                🖤 モノクロモード（高速）
+              </label>
+              <label class={"color-mode-option #{if @color_mode == "color", do: "selected", else: ""}"}
+              >
+                <input
+                  type="radio"
+                  name="color_mode"
+                  value="color"
+                  checked={@color_mode == "color"}
+                />
+                🎨 カラーモード（標準）
+              </label>
+            </div>
+
             <div class="upload-dropzone" phx-drop-target={@uploads.pdf.ref}>
               <.live_file_input upload={@uploads.pdf} class="file-input" />
               <div class="dropzone-content">

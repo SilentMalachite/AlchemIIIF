@@ -88,7 +88,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
         chunks
         |> Task.async_stream(
           fn {first, last} ->
-            result = run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first, last)
+            result = run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first, last, opts)
 
             # チャンク完了ごとに進捗をブロードキャスト（UI プログレスバー用）
             if result == :ok do
@@ -127,20 +127,28 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
   end
 
   # 1チャンク分の pdftoppm 実行
-  defp run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first_page, last_page) do
+  defp run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first_page, last_page, opts) do
     cmd = "pdftoppm"
+    color_mode = Map.get(opts, :color_mode, "mono")
 
-    args = [
-      "-png",
-      "-r",
-      "300",
-      "-f",
-      Integer.to_string(first_page),
-      "-l",
-      Integer.to_string(last_page),
-      abs_pdf_path,
-      abs_output_prefix
-    ]
+    # カラーモードに応じてフラグを構築
+    # "mono" → -gray（グレースケール変換で高速化）
+    # "color" → フラグなし（フルカラー出力）
+    gray_flag = if color_mode == "mono", do: ["-gray"], else: []
+
+    args =
+      gray_flag ++
+        [
+          "-png",
+          "-r",
+          "300",
+          "-f",
+          Integer.to_string(first_page),
+          "-l",
+          Integer.to_string(last_page),
+          abs_pdf_path,
+          abs_output_prefix
+        ]
 
     Logger.info("[PdfProcessor] Chunk: pages #{first_page}-#{last_page}")
 

@@ -67,6 +67,11 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > `pdfinfo` でページ数を事前取得し、チャンク完了後に `Path.wildcard` で PNG を
 > 収集・ソート・タイムスタンプ付きリネームします。
 
+> **PDF カラーモード**: Upload 画面で「モノクロ（高速）」と「カラー（標準）」を選択可能です。
+> カラーモードは `UserWorker.process_pdf/5` → `Pipeline` → `PdfProcessor` へと伝搬され、
+> モノクロモード時は `pdftoppm` に `-gray` フラグを付与してグレースケール変換します。
+> デフォルトはモノクロモードで、線画中心の考古学報告書では処理速度とファイルサイズの両面で有利です。
+
 > **チャンク進捗ブロードキャスト**: `convert_to_images/3` に `opts` (`%{user_id: ...}`) を
 > 渡すことで、チャンク完了ごとに `{:extraction_progress, current_page, total_pages}` を
 > PubSub (`pdf_pipeline:{user_id}`) に配信します。Upload 画面はこの通知を受信して
@@ -91,7 +96,7 @@ PDF 抽出などの重い処理を LiveView プロセスから分離し、UI の
 │                     処理フロー                                 │
 │                                                               │
 │  LiveView (Upload)                                            │
-│    │  UserWorker.process_pdf/4 (cast)                         │
+│    │  UserWorker.process_pdf/5 (cast, color_mode 付き)        │
 │    ▼                                                          │
 │  UserWorker (GenServer)                                       │
 │    │  Task.start で非同期実行                                  │
