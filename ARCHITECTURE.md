@@ -67,6 +67,11 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > `pdfinfo` でページ数を事前取得し、チャンク完了後に `Path.wildcard` で PNG を
 > 収集・ソート・タイムスタンプ付きリネームします。
 
+> **チャンク進捗ブロードキャスト**: `convert_to_images/3` に `opts` (`%{user_id: ...}`) を
+> 渡すことで、チャンク完了ごとに `{:extraction_progress, current_page, total_pages}` を
+> PubSub (`pdf_pipeline:{user_id}`) に配信します。Upload 画面はこの通知を受信して
+> プログレスバーをリアルタイムに更新します。`user_id` が未指定の場合は安全にスキップします。
+
 ### OTP バックグラウンド処理基盤
 
 PDF 抽出などの重い処理を LiveView プロセスから分離し、UI のレスポンスを保証するためのOTP 基盤です。
@@ -92,12 +97,18 @@ PDF 抽出などの重い処理を LiveView プロセスから分離し、UI の
 │    │  Task.start で非同期実行                                  │
 │    ▼                                                          │
 │  Pipeline.run_pdf_extraction/4                                │
+│    │  PdfProcessor.convert_to_images/3                        │
+│    │    └── チャンク完了ごとに                                  │
+│    │        PubSub {:extraction_progress, current, total}     │
+│    │        (トピック: pdf_pipeline:{owner_id})                │
+│    │                                                          │
 │    │  成功時                                                   │
 │    ├── PubSub broadcast {:extraction_complete, pdf_source_id} │
 │    │   (トピック: pdf_pipeline:{owner_id})                     │
 │    ▼                                                          │
 │  LiveView (handle_info)                                       │
-│    └── UI 更新 → Browse 画面へ遷移                            │
+│    ├── {:extraction_progress, ...} → プログレスバー更新       │
+│    └── {:extraction_complete, ...} → Browse 画面へ遷移        │
 └──────────────────────────────────────────────────────────────┘
 ```
 

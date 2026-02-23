@@ -4,6 +4,23 @@
 
 ---
 
+## [0.2.16] - 2026-02-23
+
+### 🔄 PDF チャンク進捗のリアルタイム表示
+- **`PdfProcessor` に進捗ブロードキャスト機能を追加 (`pdf_processor.ex`)**
+  - `convert_to_images/2` → `convert_to_images/3` に `opts` 引数（`%{user_id: ...}`）を追加。
+  - チャンク変換完了ごとに `broadcast_chunk_progress/3` で `{:extraction_progress, current_page, total_pages}` を PubSub に配信。
+  - `user_id` が `opts` に含まれない場合は安全にスキップ（no-op）。
+- **`Pipeline` からの `user_id` 伝播 (`pipeline.ex`)**
+  - `PdfProcessor.convert_to_images/3` 呼び出し時に `%{user_id: opts[:owner_id]}` を渡すように変更。
+- **Upload 画面にプログレスバー UI を追加 (`upload.ex`)**
+  - `current_page` / `total_pages` assigns を追加し、チャンク進捗を LiveView 状態で管理。
+  - `handle_info({:extraction_progress, current, total}, socket)` コールバックで進捗を受信。
+  - アップロード中かつ `total_pages > 0` の場合、ページ数とパーセンテージ付きのプログレスバーを表示。
+  - 抽出完了時（`{:extraction_complete, ...}`）にカウンターをリセット。
+
+---
+
 ## [0.2.15] - 2026-02-23
 
 ### ⚡ パフォーマンス最適化

@@ -72,7 +72,7 @@ defmodule AlchemIiif.Pipeline do
     )
 
     try do
-      case PdfProcessor.convert_to_images(pdf_path, tmp_dir) do
+      case PdfProcessor.convert_to_images(pdf_path, tmp_dir, %{user_id: opts[:owner_id]}) do
         {:ok, %{page_count: page_count, image_paths: tmp_image_paths}} ->
           # 一時ディレクトリから最終出力先へファイルを移動
           image_paths =

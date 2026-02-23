@@ -36,7 +36,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     - {:ok, %{page_count: integer, image_paths: [String.t()]}}
     - {:error, reason}
   """
-  def convert_to_images(pdf_path, output_dir) do
+  def convert_to_images(pdf_path, output_dir, opts \\ %{}) do
     # セキュリティ注記: output_dir は内部生成パス（priv/static/uploads/pages/{id}）、
     # cmd は固定文字列 "pdftoppm" — 外部入力由来ではないため安全。
     File.mkdir_p!(output_dir)
@@ -47,7 +47,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     # まずページ数を取得してチャンクリストを生成
     case get_page_count(abs_pdf_path) do
       {:ok, total_pages} ->
-        run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages)
+        run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages, opts)
 
       {:error, reason} ->
         Logger.error("[PdfProcessor] Command failed with exit code (pdfinfo): #{reason}")
@@ -75,7 +75,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
   # --- Private Functions ---
 
   # チャンク逐次処理の実行
-  defp run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages) do
+  defp run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages, opts) do
     chunks = build_chunks(total_pages)
 
     Logger.info(
@@ -88,7 +88,14 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
         chunks
         |> Task.async_stream(
           fn {first, last} ->
-            run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first, last)
+            result = run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first, last)
+
+            # チャンク完了ごとに進捗をブロードキャスト（UI プログレスバー用）
+            if result == :ok do
+              broadcast_chunk_progress(last, total_pages, opts)
+            end
+
+            result
           end,
           max_concurrency: 1,
           timeout: :infinity,
@@ -185,6 +192,18 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
       {:ok, %{page_count: length(image_paths), image_paths: image_paths}}
     end
   end
+
+  # チャンク完了時の進捗ブロードキャスト（user_id が opts に含まれる場合のみ）
+  defp broadcast_chunk_progress(current_page, total_pages, %{user_id: user_id})
+       when not is_nil(user_id) do
+    Phoenix.PubSub.broadcast(
+      AlchemIiif.PubSub,
+      "pdf_pipeline:#{user_id}",
+      {:extraction_progress, current_page, total_pages}
+    )
+  end
+
+  defp broadcast_chunk_progress(_current_page, _total_pages, _opts), do: :ok
 
   # ErlangError ハンドリング（enoent 対応）
   defp handle_erlang_error(e) do

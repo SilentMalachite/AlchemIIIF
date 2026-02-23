@@ -34,6 +34,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:active_tab, :upload)
      |> assign(:rejected_images, rejected_images)
      |> assign(:rejected_count, length(rejected_images))
+     |> assign(:current_page, 0)
+     |> assign(:total_pages, 0)
      |> allow_upload(:pdf, accept: ~w(.pdf), max_entries: 1, max_file_size: 500_000_000)}
   end
 
@@ -106,10 +108,17 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   @impl true
+  def handle_info({:extraction_progress, current, total}, socket) do
+    {:noreply, assign(socket, current_page: current, total_pages: total)}
+  end
+
+  @impl true
   def handle_info({:extraction_complete, document_id}, socket) do
     {:noreply,
      socket
      |> assign(:uploading, false)
+     |> assign(:current_page, 0)
+     |> assign(:total_pages, 0)
      |> put_flash(:info, "PDFの処理が完了しました！")
      |> push_navigate(to: ~p"/lab/browse/#{document_id}")}
   end
@@ -214,6 +223,24 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                 📤 アップロードして変換する
               <% end %>
             </button>
+
+            <%= if @uploading && @total_pages > 0 do %>
+              <div class="mt-4">
+                <div class="flex justify-between mb-1">
+                  <span class="text-sm font-medium text-gray-700">PDFを読み込み中...</span>
+                  <span class="text-sm font-medium text-gray-700">
+                    {@current_page} / {@total_pages} ページ
+                  </span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    class="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
+                    style={"width: #{trunc(@current_page / max(@total_pages, 1) * 100)}%"}
+                  >
+                  </div>
+                </div>
+              </div>
+            <% end %>
           </form>
         </div>
       <% end %>
