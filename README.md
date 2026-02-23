@@ -1,5 +1,6 @@
 # AlchemIIIF
 
+[![CI](https://github.com/SilentMalachite/AlchemIIIF/actions/workflows/ci.yml/badge.svg)](https://github.com/SilentMalachite/AlchemIIIF/actions/workflows/ci.yml)
 [![Elixir](https://img.shields.io/badge/Elixir-1.15+-4B275F?logo=elixir)](https://elixir-lang.org/)
 [![Phoenix](https://img.shields.io/badge/Phoenix-1.8+-E8562A?logo=phoenix-framework)](https://www.phoenixframework.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -106,6 +107,19 @@ AlchemIIIF は、静的な PDF の考古学報告書を、国際的な画像相�
 - **Credo**: `--strict` モードでコードスタイルを検査
 - **Sobelow**: セキュリティ脆弱性の静的解析
 - **Dialyzer**: 型レベルの安全性チェック
+
+### 🚀 GitHub Actions CI
+
+`push` (main) / `pull_request` で自動実行される CI パイプライン（`.github/workflows/ci.yml`）：
+
+| ステップ | 内容 |
+|:---|:---|
+| 環境 | `ubuntu-latest` + PostgreSQL 15 サービスコンテナ |
+| 言語 | Elixir `1.18.x` / OTP `27`（`erlef/setup-beam`） |
+| キャッシュ | `deps` & `_build` を `mix.lock` ハッシュでキャッシュ |
+| 厳格コンパイル | `mix compile --warnings-as-errors` |
+| フォーマット | `mix format --check-formatted` |
+| テスト | `mix test`（PostgreSQL 接続） |
 
 ---
 
@@ -448,6 +462,7 @@ AlchemIIIF/
 │   └── image_selection_hook.js         # クロップ選択 JS Hook
 ├── priv/repo/migrations/              # DB マイグレーション
 ├── test/                              # テストコード
+├── .github/workflows/ci.yml         # GitHub Actions CI パイプライン
 ├── .credo.exs                        # Credo 静的解析設定
 ├── .sobelow-conf                     # Sobelow セキュリティ設定
 ├── .dialyzer_ignore.exs              # Dialyzer 既知警告除外

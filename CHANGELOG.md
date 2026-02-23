@@ -4,6 +4,21 @@
 
 ---
 
+## [0.2.18] - 2026-02-23
+
+### 🚀 GitHub Actions CI パイプライン
+- **`.github/workflows/ci.yml` を新設**
+  - `push` (main) および `pull_request` をトリガーとした自動品質ゲート。
+  - `ubuntu-latest` + PostgreSQL 15 サービスコンテナで実行。
+  - Elixir `1.18.x` / OTP `27` をセットアップ（`erlef/setup-beam@v1`）。
+  - `deps` / `_build` を `mix.lock` ハッシュでキャッシュし、ビルド高速化。
+  - 品質チェックステップ:
+    - `mix compile --warnings-as-errors` — 厳格コンパイル（警告ゼロ保証）
+    - `mix format --check-formatted` — コードフォーマットチェック
+    - `mix test` — ExUnit テスト実行
+
+---
+
 ## [0.2.17] - 2026-02-23
 
 ### 🎨 PDF カラーモード選択機能

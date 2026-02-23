@@ -562,6 +562,23 @@ Harvest Gold アクセントカラーによるホバーエフェクトとモバ�
 
 各ステップは失敗時に即座に停止し、サマリータスクが実行されることが全チェック通過を意味します。
 
+### GitHub Actions CI パイプライン
+
+`push` (main) / `pull_request` を トリガーとした自動 CI を `.github/workflows/ci.yml` で定義しています。
+
+```
+① actions/checkout            → コードチェックアウト
+② erlef/setup-beam            → Elixir 1.18.x / OTP 27 セットアップ
+③ actions/cache               → deps & _build キャッシュ (mix.lock ハッシュキー)
+④ mix deps.get                → 依存関係インストール
+⑤ mix compile --warnings-as-errors → 厳格コンパイル
+⑥ mix format --check-formatted     → フォーマットチェック
+⑦ mix test                         → ExUnit テスト (PostgreSQL 15 サービスコンテナ)
+```
+
+> **サービスコンテナ**: PostgreSQL 15 をヘルスチェック付きで起動し、`config/test.exs` の
+> `DB_USERNAME` / `DB_PASSWORD` / `DB_HOST` 環境変数経由で接続します。
+
 ### 設定ファイル
 
 | ファイル | 役割 |
