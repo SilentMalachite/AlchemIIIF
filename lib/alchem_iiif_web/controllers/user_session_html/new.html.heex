@@ -30,7 +30,11 @@
             autocomplete="current-password"
             required
           />
-          <.button class="btn bg-[#d4a844] text-[#1a1a2e] border-none hover:bg-[#c49a38] w-full mt-4" name={@form[:remember_me].name} value="true">
+          <.button
+            class="btn bg-[#d4a844] text-[#1a1a2e] border-none hover:bg-[#c49a38] w-full mt-4"
+            name={@form[:remember_me].name}
+            value="true"
+          >
             ログイン（次回から自動ログイン） <span aria-hidden="true">→</span>
           </.button>
           <.button class="btn btn-ghost w-full mt-2 text-base-content/60">

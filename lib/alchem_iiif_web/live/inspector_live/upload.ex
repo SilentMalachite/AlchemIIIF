@@ -184,25 +184,21 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
             <%!-- カラーモード切替ラジオボタン --%>
             <div class="color-mode-selector">
               <span class="color-mode-label">変換モード:</span>
-              <label class={"color-mode-option #{if @color_mode == "mono", do: "selected", else: ""}"}
-              >
+              <label class={"color-mode-option #{if @color_mode == "mono", do: "selected", else: ""}"}>
                 <input
                   type="radio"
                   name="color_mode"
                   value="mono"
                   checked={@color_mode == "mono"}
-                />
-                🖤 モノクロモード（高速）
+                /> 🖤 モノクロモード（高速）
               </label>
-              <label class={"color-mode-option #{if @color_mode == "color", do: "selected", else: ""}"}
-              >
+              <label class={"color-mode-option #{if @color_mode == "color", do: "selected", else: ""}"}>
                 <input
                   type="radio"
                   name="color_mode"
                   value="color"
                   checked={@color_mode == "color"}
-                />
-                🎨 カラーモード（標準）
+                /> 🎨 カラーモード（標準）
               </label>
             </div>
 

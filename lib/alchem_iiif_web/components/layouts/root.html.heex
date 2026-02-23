@@ -34,13 +34,20 @@
               </.link>
             </li>
             <li>
-              <.link href={~p"/users/log-out"} method="delete" class="text-[#e8d5a3] hover:text-white">
+              <.link
+                href={~p"/users/log-out"}
+                method="delete"
+                class="text-[#e8d5a3] hover:text-white"
+              >
                 ログアウト
               </.link>
             </li>
           <% else %>
             <li>
-              <.link href={~p"/users/log-in"} class="btn btn-sm bg-[#d4a844] text-[#1a1a2e] border-none hover:bg-[#c49a38]">
+              <.link
+                href={~p"/users/log-in"}
+                class="btn btn-sm bg-[#d4a844] text-[#1a1a2e] border-none hover:bg-[#c49a38]"
+              >
                 ログイン
               </.link>
             </li>
