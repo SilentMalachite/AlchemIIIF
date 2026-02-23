@@ -339,69 +339,77 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
         {:noreply, put_flash(socket, :error, "⚠️ クロップ範囲が設定されていません。先にクロップ画面で範囲を指定してください。")}
 
       true ->
-        # rejected 画像の場合は resubmit_image を使用
-        save_result =
-          if socket.assigns.is_rejected do
-            # まずメタデータを保存
-            case save_metadata(socket, %{}) do
-              {:ok, _} ->
-                # 再提出（rejected → pending_review + review_comment クリア）
-                updated = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
-                Ingestion.resubmit_image(updated)
+        process_save(socket, action)
+    end
+  end
 
-              error ->
-                error
-            end
-          else
-            # 通常: 全保存パスで status: "pending_review" を強制設定
-            save_metadata(socket, %{status: "pending_review"})
-          end
+  defp process_save(socket, action) do
+    save_result = execute_save_operation(socket)
+    handle_save_result(save_result, socket, action)
+  end
 
-        case save_result do
-          {:ok, _updated} ->
-            # PTIF をバックグラウンド生成（全アクション共通）
-            updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+  defp execute_save_operation(socket) do
+    if socket.assigns.is_rejected do
+      case save_metadata(socket, %{}) do
+        {:ok, _} ->
+          updated = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+          Ingestion.resubmit_image(updated)
 
-            Task.start(fn ->
-              AlchemIiif.Pipeline.generate_single_ptif(updated_image)
-            end)
+        error ->
+          error
+      end
+    else
+      # 通常: 全保存パスで status: "pending_review" を強制設定
+      save_metadata(socket, %{status: "pending_review"})
+    end
+  end
 
-            {flash_msg, route} =
-              if socket.assigns.is_rejected do
-                # 再提出の場合は Lab ダッシュボードに戻る
-                {"✅ 再提出しました！レビューをお待ちください。", ~p"/lab"}
-              else
-                case action do
-                  "continue" ->
-                    {"✅ レビューに提出しました！次の図版を選択してください。",
-                     ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
+  defp handle_save_result({:ok, _updated}, socket, action) do
+    # PTIF をバックグラウンド生成（全アクション共通）
+    updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
 
-                  _finish ->
-                    {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
-                end
-              end
+    Task.start(fn ->
+      AlchemIiif.Pipeline.generate_single_ptif(updated_image)
+    end)
 
-            {:noreply,
-             socket
-             |> put_flash(:info, flash_msg)
-             |> push_navigate(to: route)}
+    {flash_msg, route} = determine_success_navigation(socket, action)
 
-          {:error, :stale} ->
-            {:noreply,
-             put_flash(
-               socket,
-               :error,
-               "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected)."
-             )}
+    {:noreply,
+     socket
+     |> put_flash(:info, flash_msg)
+     |> push_navigate(to: route)}
+  end
 
-          {:error, changeset} ->
-            errors = extract_changeset_field_errors(changeset)
+  defp handle_save_result({:error, :stale}, socket, _action) do
+    {:noreply,
+     put_flash(
+       socket,
+       :error,
+       "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected)."
+     )}
+  end
 
-            {:noreply,
-             socket
-             |> assign(:validation_errors, Map.merge(socket.assigns.validation_errors, errors))
-             |> put_flash(:error, "保存に失敗しました。入力内容を確認してください。")}
-        end
+  defp handle_save_result({:error, changeset}, socket, _action) do
+    errors = extract_changeset_field_errors(changeset)
+
+    {:noreply,
+     socket
+     |> assign(:validation_errors, Map.merge(socket.assigns.validation_errors, errors))
+     |> put_flash(:error, "保存に失敗しました。入力内容を確認してください。")}
+  end
+
+  defp determine_success_navigation(socket, action) do
+    if socket.assigns.is_rejected do
+      {"✅ 再提出しました！レビューをお待ちください。", ~p"/lab"}
+    else
+      case action do
+        "continue" ->
+          {"✅ レビューに提出しました！次の図版を選択してください。",
+           ~p"/lab/browse/#{socket.assigns.extracted_image.pdf_source_id}"}
+
+        _finish ->
+          {"✅ 提出しました！高解像度レビュー用に画像を処理中です。", ~p"/lab"}
+      end
     end
   end
 
@@ -416,56 +424,56 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   # インラインバリデーション（入力時にエラーメッセージを表示）
   defp run_inline_validation(socket, field, value) do
-    errors = socket.assigns.validation_errors
-
-    errors =
-      case field do
-        "label" ->
-          if value != "" and not Regex.match?(~r/^fig-\d+-\d+$/, value) do
-            Map.put(errors, :label, "形式は 'fig-番号-番号' にしてください（例: fig-1-1）")
-          else
-            Map.delete(errors, :label)
-          end
-
-        "site" ->
-          cond do
-            String.length(value) > 30 ->
-              Map.put(errors, :site, "30文字以内で入力してください")
-
-            value != "" and not String.contains?(value, ["市", "町", "村"]) ->
-              Map.put(errors, :site, "市町村名（市・町・村）を含めてください（例: 新潟市中野遺跡）")
-
-            true ->
-              Map.delete(errors, :site)
-          end
-
-        "period" ->
-          if String.length(value) > 30 do
-            Map.put(errors, :period, "30文字以内で入力してください")
-          else
-            Map.delete(errors, :period)
-          end
-
-        "artifact_type" ->
-          if String.length(value) > 30 do
-            Map.put(errors, :artifact_type, "30文字以内で入力してください")
-          else
-            Map.delete(errors, :artifact_type)
-          end
-
-        "caption" ->
-          if String.length(value) > 1000 do
-            Map.put(errors, :caption, "1000文字以内で入力してください")
-          else
-            Map.delete(errors, :caption)
-          end
-
-        _ ->
-          errors
-      end
-
+    errors = validate_field(socket.assigns.validation_errors, field, value)
     assign(socket, :validation_errors, errors)
   end
+
+  defp validate_field(errors, "label", value) do
+    if value != "" and not Regex.match?(~r/^fig-\d+-\d+$/, value) do
+      Map.put(errors, :label, "形式は 'fig-番号-番号' にしてください（例: fig-1-1）")
+    else
+      Map.delete(errors, :label)
+    end
+  end
+
+  defp validate_field(errors, "site", value) do
+    cond do
+      String.length(value) > 30 ->
+        Map.put(errors, :site, "30文字以内で入力してください")
+
+      value != "" and not String.contains?(value, ["市", "町", "村"]) ->
+        Map.put(errors, :site, "市町村名（市・町・村）を含めてください（例: 新潟市中野遺跡）")
+
+      true ->
+        Map.delete(errors, :site)
+    end
+  end
+
+  defp validate_field(errors, "period", value) do
+    if String.length(value) > 30 do
+      Map.put(errors, :period, "30文字以内で入力してください")
+    else
+      Map.delete(errors, :period)
+    end
+  end
+
+  defp validate_field(errors, "artifact_type", value) do
+    if String.length(value) > 30 do
+      Map.put(errors, :artifact_type, "30文字以内で入力してください")
+    else
+      Map.delete(errors, :artifact_type)
+    end
+  end
+
+  defp validate_field(errors, "caption", value) do
+    if String.length(value) > 1000 do
+      Map.put(errors, :caption, "1000文字以内で入力してください")
+    else
+      Map.delete(errors, :caption)
+    end
+  end
+
+  defp validate_field(errors, _field, _value), do: errors
 
   # changeset からフィールドごとのエラーメッセージを抽出
   defp extract_changeset_field_errors(changeset) do

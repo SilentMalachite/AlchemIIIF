@@ -14,6 +14,10 @@
   - `mix ecto.setup` 時、管理者 (`admin@example.com`) に確実に `admin` ロールが付与されるよう修正。
   - 権限テスト用に一般ユーザー (`user@example.com` / `Password1234!`) も自動作成するよう追加。
 
+### 🛠️ コード品質の改善 (Credo 対応)
+- **`label.ex` のリファクタリング**
+  - `mix review`（Credo）の警告に対処するため、`LabelLive` モジュール内の `run_inline_validation/3` および `do_save/2` の Cyclomatic Complexity（複雑度）を削減。関数を適切に分割し、可読性と保守性を向上。
+
 ---
 
 ## [0.2.12] - 2026-02-21
