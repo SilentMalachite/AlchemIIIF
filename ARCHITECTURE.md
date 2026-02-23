@@ -77,6 +77,13 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > PubSub (`pdf_pipeline:{user_id}`) に配信します。Upload 画面はこの通知を受信して
 > プログレスバーをリアルタイムに更新します。`user_id` が未指定の場合は安全にスキップします。
 
+> **DB 挿入の最適化 (Bulk Insert)**: `Pipeline` での `ExtractedImage` レコード登録は、
+> 個別 `Repo.insert` ループではなく `Ingestion.bulk_create_extracted_images/1`
+> (`Repo.insert_all/3`) による一括挿入を使用します。DB ラウンドトリップを N 回から 1 回に
+> 削減し、Ecto changeset オーバーヘッドを排除することで大規模 PDF の処理を高速化します。
+> タイムスタンプ (`inserted_at` / `updated_at`) やデフォルト値 (`status`, `lock_version`)
+> は `insert_all` が Ecto の auto-timestamp をバイパスするため、明示的に設定しています。
+
 ### OTP バックグラウンド処理基盤
 
 PDF 抽出などの重い処理を LiveView プロセスから分離し、UI のレスポンスを保証するためのOTP 基盤です。

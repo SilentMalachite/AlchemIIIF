@@ -4,6 +4,21 @@
 
 ---
 
+## [0.2.19] - 2026-02-24
+
+### ⚡ DB 挿入レイヤーの最適化（Bulk Insert）
+- **`Ingestion.bulk_create_extracted_images/1` を新設 (`ingestion.ex`)**
+  - `Repo.insert_all/3` を使用して 1 回の SQL INSERT で全 `ExtractedImage` レコードを一括挿入。
+  - `insert_all` は Ecto の changeset / auto-timestamp をバイパスするため、`inserted_at` / `updated_at` およびデフォルト値（`status: "draft"`, `lock_version: 1`）を明示的に設定。
+  - `returning: true` で挿入後のレコードを取得。
+- **`Pipeline` の DB 挿入処理をバルクインサートに移行 (`pipeline.ex`)**
+  - 従来の `Task.async_stream` + 個別 `Ingestion.create_extracted_image/1` ループを廃止。
+  - `Enum.map` で属性リストを構築後、`Ingestion.bulk_create_extracted_images/1` で一括挿入。
+  - DB ラウンドトリップを N 回 → 1 回に削減し、Ecto オーバーヘッドを最小化。
+  - 進捗ブロードキャストは挿入後に一括送信する方式に変更。
+
+---
+
 ## [0.2.18] - 2026-02-23
 
 ### 🚀 GitHub Actions CI パイプライン

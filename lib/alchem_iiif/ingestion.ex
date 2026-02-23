@@ -332,6 +332,34 @@ defmodule AlchemIiif.Ingestion do
     |> Repo.insert()
   end
 
+  @doc """
+  抽出画像を一括作成（Bulk Insert）。
+
+  `Repo.insert_all/3` を使用して1回の SQL INSERT で全レコードを挿入します。
+  `insert_all` は Ecto の changeset / auto-timestamp をバイパスするため、
+  `inserted_at` / `updated_at` およびデフォルト値を明示的に設定します。
+
+  ## 引数
+    - attrs_list: マップのリスト（各マップに pdf_source_id, page_number, image_path 等を含む）
+
+  ## 戻り値
+    - {挿入件数, [%ExtractedImage{}, ...]}
+  """
+  def bulk_create_extracted_images(attrs_list) when is_list(attrs_list) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    rows =
+      Enum.map(attrs_list, fn attrs ->
+        attrs
+        |> Map.put(:inserted_at, now)
+        |> Map.put(:updated_at, now)
+        |> Map.put_new(:status, "draft")
+        |> Map.put_new(:lock_version, 1)
+      end)
+
+    Repo.insert_all(ExtractedImage, rows, returning: true)
+  end
+
   @doc "抽出画像を更新（クロップデータ等）"
   def update_extracted_image(%ExtractedImage{} = image, attrs) do
     image

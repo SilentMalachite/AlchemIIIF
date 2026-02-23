@@ -100,38 +100,31 @@ defmodule AlchemIiif.Pipeline do
             total: page_count
           })
 
-          # 並列で ExtractedImage レコードを DB に登録
-          concurrency = ResourceMonitor.pipeline_concurrency()
-
-          images =
+          # Bulk Insert で ExtractedImage レコードを一括登録
+          attrs_list =
             image_paths
             |> Enum.with_index(1)
-            |> Task.async_stream(
-              fn {image_path, page_number} ->
-                {:ok, image} =
-                  Ingestion.create_extracted_image(
-                    %{
-                      pdf_source_id: pdf_source.id,
-                      page_number: page_number,
-                      image_path: image_path
-                    }
-                    |> maybe_put_owner_id(opts)
-                  )
+            |> Enum.map(fn {image_path, page_number} ->
+              %{
+                pdf_source_id: pdf_source.id,
+                page_number: page_number,
+                image_path: image_path
+              }
+              |> maybe_put_owner_id(opts)
+            end)
 
-                broadcast_progress(pipeline_id, %{
-                  event: :task_progress,
-                  task_id: "page-#{page_number}",
-                  status: :completed,
-                  progress: round(page_number / page_count * 100),
-                  message: "ページ #{page_number} を登録しました"
-                })
+          {_count, images} = Ingestion.bulk_create_extracted_images(attrs_list)
 
-                image
-              end,
-              max_concurrency: concurrency,
-              timeout: 60_000
-            )
-            |> Enum.map(fn {:ok, image} -> image end)
+          # 進捗ブロードキャスト（挿入後に一括送信）
+          Enum.each(Enum.with_index(images, 1), fn {_image, page_number} ->
+            broadcast_progress(pipeline_id, %{
+              event: :task_progress,
+              task_id: "page-#{page_number}",
+              status: :completed,
+              progress: round(page_number / page_count * 100),
+              message: "ページ #{page_number} を登録しました"
+            })
+          end)
 
           broadcast_progress(pipeline_id, %{
             event: :pipeline_complete,
