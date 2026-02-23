@@ -27,9 +27,9 @@ end
 
 # --- シードデータの投入 ---
 
-# デフォルト管理者ユーザーの作成
+# 1. デフォルト管理者ユーザーの作成
 admin_email = "admin@example.com"
-admin_password = "password1234"
+admin_password = "Password1234!"
 
 case AlchemIiif.Repo.get_by(AlchemIiif.Accounts.User, email: admin_email) do
   nil ->
@@ -39,13 +39,36 @@ case AlchemIiif.Repo.get_by(AlchemIiif.Accounts.User, email: admin_email) do
         password: admin_password
       })
 
-    # メール確認済みに設定（開発用）
+    # adminロール付与 + メール確認済みに設定（開発用）
     admin
-    |> Ecto.Changeset.change(%{confirmed_at: DateTime.utc_now(:second)})
+    |> Ecto.Changeset.change(%{role: "admin", confirmed_at: DateTime.utc_now(:second)})
     |> AlchemIiif.Repo.update!()
 
-    IO.puts("👤 管理者ユーザーを作成しました: #{admin_email}")
+    IO.puts("🔑 管理者ユーザーを作成しました: #{admin_email} (role: admin)")
 
   _existing ->
     IO.puts("👤 管理者ユーザーは既に存在します: #{admin_email}")
+end
+
+# 2. QAテスト用の一般ユーザーの作成
+user_email = "user@example.com"
+user_password = "Password1234!"
+
+case AlchemIiif.Repo.get_by(AlchemIiif.Accounts.User, email: user_email) do
+  nil ->
+    {:ok, user} =
+      AlchemIiif.Accounts.register_user(%{
+        email: user_email,
+        password: user_password
+      })
+
+    # メール確認済みに設定（開発用）
+    user
+    |> Ecto.Changeset.change(%{confirmed_at: DateTime.utc_now(:second)})
+    |> AlchemIiif.Repo.update!()
+
+    IO.puts("👤 一般ユーザーを作成しました: #{user_email} (role: user)")
+
+  _existing ->
+    IO.puts("👤 一般ユーザーは既に存在します: #{user_email}")
 end

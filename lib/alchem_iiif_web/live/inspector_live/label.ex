@@ -245,7 +245,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   defp auto_save_field(socket, field, value) do
     # 保存前の文字数制限チェック（非同期保存を試みる前にブロック）
-    max_len = if field in ["caption"], do: 1000, else: 100
+    max_len = if field in ["caption"], do: 1000, else: 30
 
     if field in ["site", "period", "artifact_type", "caption"] and
          String.length(to_string(value)) > max_len do
@@ -429,8 +429,8 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
         "site" ->
           cond do
-            String.length(value) > 100 ->
-              Map.put(errors, :site, "100文字以内で入力してください")
+            String.length(value) > 30 ->
+              Map.put(errors, :site, "30文字以内で入力してください")
 
             value != "" and not String.contains?(value, ["市", "町", "村"]) ->
               Map.put(errors, :site, "市町村名（市・町・村）を含めてください（例: 新潟市中野遺跡）")
@@ -440,15 +440,15 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
           end
 
         "period" ->
-          if String.length(value) > 100 do
-            Map.put(errors, :period, "100文字以内で入力してください")
+          if String.length(value) > 30 do
+            Map.put(errors, :period, "30文字以内で入力してください")
           else
             Map.delete(errors, :period)
           end
 
         "artifact_type" ->
-          if String.length(value) > 100 do
-            Map.put(errors, :artifact_type, "100文字以内で入力してください")
+          if String.length(value) > 30 do
+            Map.put(errors, :artifact_type, "30文字以内で入力してください")
           else
             Map.delete(errors, :artifact_type)
           end
@@ -622,7 +622,6 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-field="site"
               placeholder="例: 新潟市中野遺跡"
               name="site"
-              maxlength="100"
             />
             <%!-- 遺跡名エラー --%>
             <%= if @validation_errors[:site] do %>
@@ -641,7 +640,6 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-field="period"
               placeholder="例: 縄文時代"
               name="period"
-              maxlength="100"
             />
             <%!-- 時代エラー --%>
             <%= if @validation_errors[:period] do %>
@@ -663,7 +661,6 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               phx-value-field="artifact_type"
               placeholder="例: 土器"
               name="artifact_type"
-              maxlength="100"
             />
             <%!-- 遺物種別エラー --%>
             <%= if @validation_errors[:artifact_type] do %>

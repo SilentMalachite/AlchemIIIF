@@ -151,5 +151,53 @@ defmodule AlchemIiif.Ingestion.ExtractedImageTest do
       changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
       assert changeset.valid?
     end
+
+    # --- 文字数制限バリデーション (30文字) ---
+
+    test "31文字の site を拒否する" do
+      pdf_source = insert_pdf_source()
+      # 31文字の文字列（市町村を含む）
+      long_site = "新潟市" <> String.duplicate("あ", 28)
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, site: long_site}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      refute changeset.valid?
+      assert %{site: [msg]} = errors_on(changeset)
+      assert msg =~ "30文字以内"
+    end
+
+    test "31文字の period を拒否する" do
+      pdf_source = insert_pdf_source()
+      long_period = String.duplicate("あ", 31)
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, period: long_period}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      refute changeset.valid?
+      assert %{period: [msg]} = errors_on(changeset)
+      assert msg =~ "30文字以内"
+    end
+
+    test "31文字の artifact_type を拒否する" do
+      pdf_source = insert_pdf_source()
+      long_type = String.duplicate("あ", 31)
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, artifact_type: long_type}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      refute changeset.valid?
+      assert %{artifact_type: [msg]} = errors_on(changeset)
+      assert msg =~ "30文字以内"
+    end
+
+    test "30文字以内のメタデータフィールドは受け入れられる" do
+      pdf_source = insert_pdf_source()
+
+      attrs = %{
+        pdf_source_id: pdf_source.id,
+        page_number: 1,
+        site: "新潟市" <> String.duplicate("あ", 27),
+        period: String.duplicate("あ", 30),
+        artifact_type: String.duplicate("あ", 30)
+      }
+
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      assert changeset.valid?
+    end
   end
 end
