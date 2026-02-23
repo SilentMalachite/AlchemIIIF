@@ -4,7 +4,7 @@ defmodule AlchemIiif.MixProject do
   def project do
     [
       app: :alchem_iiif,
-      version: "0.2.7",
+      version: "0.2.19",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
