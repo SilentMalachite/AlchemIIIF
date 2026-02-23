@@ -72,6 +72,10 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
+      # ── システム依存パッケージのインストール ──
+      - name: Install system dependencies (poppler-utils)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       # ── ExUnit テスト ──
       - name: Run tests
         run: mix test
