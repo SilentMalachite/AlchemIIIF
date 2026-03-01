@@ -137,6 +137,9 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
          |> close_inspector_if_selected(image_id)
          |> put_flash(:info, "「#{image.label || "名称未設定"}」を公開しました！ 🎉")}
 
+      {:error, {:ptiff_generation_failed, reason}} ->
+        {:noreply, put_flash(socket, :error, "PTIFF 生成に失敗しました: #{inspect(reason)}")}
+
       {:error, :invalid_status_transition} ->
         {:noreply, put_flash(socket, :error, "この画像は承認できません。")}
     end
@@ -347,6 +350,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                       class={"btn-approve btn-large #{if is_nil(item.image.ptif_path), do: "btn-disabled", else: ""}"}
                       phx-click="approve"
                       phx-value-id={item.image.id}
+                      phx-disable-with="⏳ PTIFF生成中..."
                       disabled={is_nil(item.image.ptif_path)}
                       aria-label={"「#{item.image.label || "名称未設定"}」を承認して公開"}
                     >
@@ -487,6 +491,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                 class="btn-approve btn-large inspector-action-btn"
                 phx-click="approve"
                 phx-value-id={@selected_image.image.id}
+                phx-disable-with="⏳ PTIFF生成中..."
               >
                 ✅ 承認して公開
               </button>

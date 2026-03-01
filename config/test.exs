@@ -38,3 +38,6 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+# PTIFF 生成をモックに差し替え（テスト時はファイル I/O を回避）
+config :alchem_iiif, :ptiff_generator, AlchemIiif.IIIF.PtiffGeneratorMock

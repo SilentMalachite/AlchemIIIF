@@ -40,6 +40,9 @@ defmodule AlchemIiifWeb.ApprovalLive do
          |> assign(:pending_count, length(pending_images))
          |> put_flash(:info, "「#{image.label || "名称未設定"}」を公開しました！")}
 
+      {:error, {:ptiff_generation_failed, reason}} ->
+        {:noreply, put_flash(socket, :error, "PTIFF 生成に失敗しました: #{inspect(reason)}")}
+
       {:error, :invalid_status_transition} ->
         {:noreply, put_flash(socket, :error, "この画像は承認できません。")}
     end
@@ -129,6 +132,7 @@ defmodule AlchemIiifWeb.ApprovalLive do
                   class="btn-approve btn-large"
                   phx-click="approve"
                   phx-value-id={image.id}
+                  phx-disable-with="⏳ PTIFF生成中..."
                   aria-label={"「#{image.label || "名称未設定"}」を承認して公開"}
                 >
                   ✅ 承認して公開

@@ -72,6 +72,11 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > モノクロモード時は `pdftoppm` に `-gray` フラグを付与してグレースケール変換します。
 > デフォルトはモノクロモードで、線画中心の考古学報告書では処理速度とファイルサイズの両面で有利です。
 
+> **Lazy PTIFF 生成**: メタデータ編集中に毎回 PTIFF を生成すると CPU/ストレージを浪費します。
+> `Ingestion.approve_and_publish/1` において、管理者が明示的に「承認」した時点でのみ
+> `AlchemIiif.IIIF.PtiffGenerator` を呼び出し、公開用 PTIFF を生成します。
+> 線画の品質を保つため、DEFLATE 可逆圧縮を採用しています。
+
 > **チャンク進捗ブロードキャスト**: `convert_to_images/3` に `opts` (`%{user_id: ...}`) を
 > 渡すことで、チャンク完了ごとに `{:extraction_progress, current_page, total_pages}` を
 > PubSub (`pdf_pipeline:{user_id}`) に配信します。Upload 画面はこの通知を受信して
@@ -200,15 +205,19 @@ ImageSelection Hook ──── D-Pad による手動クロップ (/lab/crop/:p
     ▼
 メタデータ入力フォーム (/lab/label/:image_id)
     │  Step 4: caption, label, site, period, artifact_type を手入力。自動ラベリング保存。
-    │          Save & Finish 時に PTIF 生成ジョブを自動 dispatch。
     │          geometry nil の場合は保存をブロック。
     ▼
-[vix/libvips] ── クロップ画像 → PTIF 生成 (バックグラウンド)
-    │  Step 5: 提出ステータスの確認 (/lab/finalize/:id)
+レビュー提出ステータスの確認 (/lab/finalize/:id)
+    │  Step 5: 入力内容の最終確認とレビュー依頼。
     ▼
-PostgreSQL ──── geometry(JSONB) + metadata 保存
-                IIIF Manifest レコード登録
-                status: draft
+[管理者承認ゲート] ──── /admin/review
+    │  Admin が「承認」をクリック。
+    ▼
+[AlchemIiif.IIIF.PtiffGenerator] ── クロップ画像 → PTIF 生成 (DEFLATE圧縮)
+    │  ここで初めて IIIF 公開用の実ファイルが生成される (Lazy Generation)。
+    ▼
+PostgreSQL ──── status: published
+                Gallery に公開
 ```
 
 ### 承認パイプライン (Stage-Gate)

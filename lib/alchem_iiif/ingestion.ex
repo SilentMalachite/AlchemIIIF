@@ -403,21 +403,48 @@ defmodule AlchemIiif.Ingestion do
 
   def submit_for_review(_image), do: {:error, :invalid_status_transition}
 
-  @doc "承認して公開 (pending_review → published)。PubSub で IIIF コレクション更新を通知。"
+  @doc """
+  承認して公開 (pending_review → published)。
+  承認時に PTIFF（Pyramid TIFF）を遅延生成し、成功した場合のみ
+  ステータスを published に変更して PubSub で IIIF コレクション更新を通知します。
+
+  ## PTIFF 遅延生成の理由
+
+  メタデータ編集中に毎回 PTIFF を生成すると 2GB VPS の CPU/Storage を浪費します。
+  管理者が明示的に「承認」した時点でのみ生成することで、
+  不要な再生成を防ぎます。
+  """
   def approve_and_publish(%ExtractedImage{status: "pending_review"} = image) do
-    case update_extracted_image(image, %{status: "published"}) do
-      {:ok, updated} ->
-        # IIIF コレクション更新をバックグラウンドワーカーに通知
-        Phoenix.PubSub.broadcast(
-          AlchemIiif.PubSub,
-          "iiif:collection",
-          {:image_published, updated.id}
-        )
+    # 1. ソース画像パスから PTIFF 出力パスを構築
+    source_path = image.image_path
+    ptif_filename = Path.basename(source_path, Path.extname(source_path)) <> ".tif"
+    dest_path = Path.join(["priv", "static", "uploads", "ptifs", ptif_filename])
 
-        {:ok, updated}
+    # 2. 出力ディレクトリを確保
+    File.mkdir_p!(Path.dirname(dest_path))
 
-      error ->
-        error
+    # 3. PTIFF を生成（テスト時はモック差し替え可能）
+    case ptiff_generator().generate_ptiff(source_path, dest_path) do
+      {:ok, ptif_path} ->
+        # 4. 成功時: ptif_path とステータスを一括更新
+        case update_extracted_image(image, %{status: "published", ptif_path: ptif_path}) do
+          {:ok, updated} ->
+            # IIIF コレクション更新をバックグラウンドワーカーに通知
+            Phoenix.PubSub.broadcast(
+              AlchemIiif.PubSub,
+              "iiif:collection",
+              {:image_published, updated.id}
+            )
+
+            {:ok, updated}
+
+          error ->
+            error
+        end
+
+      {:error, reason} ->
+        # 5. 失敗時: ステータスを変更せずエラーを返す
+        {:error, {:ptiff_generation_failed, reason}}
     end
   end
 
@@ -588,5 +615,10 @@ defmodule AlchemIiif.Ingestion do
       [] -> {:ok, :valid}
       _ -> {:error, Enum.map(failed, fn {name, _} -> name end)}
     end
+  end
+
+  # PTIFF 生成モジュールの取得（テスト時はモック差し替え可能）
+  defp ptiff_generator do
+    Application.get_env(:alchem_iiif, :ptiff_generator, AlchemIiif.IIIF.PtiffGenerator)
   end
 end
