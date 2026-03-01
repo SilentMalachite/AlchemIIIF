@@ -14,8 +14,10 @@ defmodule AlchemIiif.Ingestion do
     コンパイル時ではなく実行時にパターンマッチで防ぎます。
   """
   import Ecto.Query
+  alias Ecto.Multi
   alias AlchemIiif.Accounts.User
-  alias AlchemIiif.Ingestion.{ExtractedImage, PdfSource}
+  alias AlchemIiif.Iiif.Manifest
+  alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor, PdfSource}
   alias AlchemIiif.Repo
 
   # === PdfSource ===
@@ -406,29 +408,69 @@ defmodule AlchemIiif.Ingestion do
   @doc """
   承認して公開 (pending_review → published)。
   承認時に PTIFF（Pyramid TIFF）を遅延生成し、成功した場合のみ
-  ステータスを published に変更して PubSub で IIIF コレクション更新を通知します。
+  ステータスを published に変更し、IIIF Manifest を作成して
+  PubSub で IIIF コレクション更新を通知します。
 
   ## PTIFF 遅延生成の理由
 
   メタデータ編集中に毎回 PTIFF を生成すると 2GB VPS の CPU/Storage を浪費します。
   管理者が明示的に「承認」した時点でのみ生成することで、
   不要な再生成を防ぎます。
+
+  ## アトミック保証
+
+  Ecto.Multi で Image ステータス更新と Manifest 作成をラップし、
+  片方が失敗した場合はロールバックします。公開済み画像に Manifest が
+  存在しない不整合状態を防ぎます。
   """
   def approve_and_publish(%ExtractedImage{status: "pending_review"} = image) do
-    # 1. ソース画像パスから PTIFF 出力パスを構築
-    source_path = image.image_path
-    ptif_filename = Path.basename(source_path, Path.extname(source_path)) <> ".tif"
-    dest_path = Path.join(["priv", "static", "uploads", "ptifs", ptif_filename])
+    # 1. ユニーク識別子を生成（Manifest / PTIF ファイル名に使用）
+    identifier = "img-#{image.id}-#{Base.encode16(:crypto.strong_rand_bytes(4))}"
 
-    # 2. 出力ディレクトリを確保
-    File.mkdir_p!(Path.dirname(dest_path))
+    # 2. PTIF 出力パスを構築（iiif_images に統一）
+    ptif_dir = Path.join(["priv", "static", "iiif_images"])
+    File.mkdir_p!(ptif_dir)
+    dest_path = Path.join(ptif_dir, "#{identifier}.tif")
 
-    # 3. PTIFF を生成（テスト時はモック差し替え可能）
-    case ptiff_generator().generate_ptiff(source_path, dest_path) do
+    # 3. ソース画像を準備（geometry がある場合はクロップ）
+    {source_path, cleanup_path} = prepare_source_for_ptif(image, ptif_dir, identifier)
+
+    # 4. PTIFF を生成（テスト時はモック差し替え可能）
+    result = ptiff_generator().generate_ptiff(source_path, dest_path)
+
+    # クロップ一時ファイルをクリーンアップ
+    if cleanup_path, do: File.rm(cleanup_path)
+
+    case result do
       {:ok, ptif_path} ->
-        # 4. 成功時: ptif_path とステータスを一括更新
-        case update_extracted_image(image, %{status: "published", ptif_path: ptif_path}) do
-          {:ok, updated} ->
+        # 5. 成功時: Ecto.Multi で Image 更新 + Manifest 作成をアトミックに実行
+        multi =
+          Multi.new()
+          |> Multi.update(
+            :image,
+            ExtractedImage.changeset(image, %{status: "published", ptif_path: ptif_path})
+          )
+          |> Multi.insert(
+            :manifest,
+            %Manifest{}
+            |> Manifest.changeset(%{
+              extracted_image_id: image.id,
+              identifier: identifier,
+              metadata: %{
+                "label" => %{
+                  "en" => [image.label || identifier],
+                  "ja" => [image.label || identifier]
+                },
+                "summary" => %{
+                  "en" => [image.caption || ""],
+                  "ja" => [image.caption || ""]
+                }
+              }
+            })
+          )
+
+        case Repo.transaction(multi) do
+          {:ok, %{image: updated}} ->
             # IIIF コレクション更新をバックグラウンドワーカーに通知
             Phoenix.PubSub.broadcast(
               AlchemIiif.PubSub,
@@ -438,12 +480,15 @@ defmodule AlchemIiif.Ingestion do
 
             {:ok, updated}
 
-          error ->
-            error
+          {:error, :image, changeset, _changes} ->
+            {:error, changeset}
+
+          {:error, :manifest, changeset, _changes} ->
+            {:error, changeset}
         end
 
       {:error, reason} ->
-        # 5. 失敗時: ステータスを変更せずエラーを返す
+        # 6. 失敗時: ステータスを変更せずエラーを返す
         {:error, {:ptiff_generation_failed, reason}}
     end
   end
@@ -617,8 +662,23 @@ defmodule AlchemIiif.Ingestion do
     end
   end
 
+  # ソース画像の準備（geometry がある場合はクロップ画像を一時生成）
+  # pipeline.ex の generate_single_ptif と同じクロップロジック
+  defp prepare_source_for_ptif(image, ptif_dir, identifier) do
+    if image.geometry do
+      cropped_path = Path.join(ptif_dir, "#{identifier}_cropped.png")
+
+      case ImageProcessor.crop_image(image.image_path, image.geometry, cropped_path) do
+        :ok -> {cropped_path, cropped_path}
+        _error -> {image.image_path, nil}
+      end
+    else
+      {image.image_path, nil}
+    end
+  end
+
   # PTIFF 生成モジュールの取得（テスト時はモック差し替え可能）
   defp ptiff_generator do
-    Application.get_env(:alchem_iiif, :ptiff_generator, AlchemIiif.IIIF.PtiffGenerator)
+    Application.get_env(:alchem_iiif, :ptiff_generator, AlchemIiif.Iiif.PtiffGenerator)
   end
 end

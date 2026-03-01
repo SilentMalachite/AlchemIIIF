@@ -16,7 +16,7 @@ defmodule AlchemIiifWeb.IIIF.ImageController do
   """
   use AlchemIiifWeb, :controller
 
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Repo
 

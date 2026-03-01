@@ -26,13 +26,19 @@ import { hooks as colocatedHooks } from "phoenix-colocated/alchem_iiif"
 import topbar from "../vendor/topbar"
 
 import ImageSelection from "./hooks/image_selection_hook"
+import OpenSeadragonViewer from "./hooks/openseadragon_hook"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-const customHooks = { ImageSelection }
+// すべての Hook を統合（colocated + カスタム）
+const Hooks = {
+  ...colocatedHooks,
+  ImageSelection,
+  OpenSeadragonViewer,
+}
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks, ...customHooks },
+  hooks: Hooks,
 })
 
 // Show progress bar on live navigation and form submits

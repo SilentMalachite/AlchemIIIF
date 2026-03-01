@@ -41,7 +41,7 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
     field :lock_version, :integer, default: 1
 
     belongs_to :pdf_source, AlchemIiif.Ingestion.PdfSource
-    has_one :iiif_manifest, AlchemIiif.IIIF.Manifest
+    has_one :iiif_manifest, AlchemIiif.Iiif.Manifest
     # 所有者（アップロードした人）
     belongs_to :owner, AlchemIiif.Accounts.User
     # 作業者（現在編集中の人）

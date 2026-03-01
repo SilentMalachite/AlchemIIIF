@@ -1,4 +1,4 @@
-defmodule AlchemIiif.IIIF.PtiffGenerator do
+defmodule AlchemIiif.Iiif.PtiffGenerator do
   @moduledoc """
   高解像度 PNG 画像から Pyramid TIFF (PTIFF) を生成するモジュール。
 
@@ -54,7 +54,7 @@ defmodule AlchemIiif.IIIF.PtiffGenerator do
 
   ## 例
 
-      iex> AlchemIiif.IIIF.PtiffGenerator.generate_ptiff(
+      iex> AlchemIiif.Iiif.PtiffGenerator.generate_ptiff(
       ...>   "/data/images/page-001.png",
       ...>   "/data/ptiff/page-001.tif"
       ...> )

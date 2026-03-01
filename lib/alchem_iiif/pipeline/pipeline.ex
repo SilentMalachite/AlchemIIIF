@@ -18,7 +18,7 @@ defmodule AlchemIiif.Pipeline do
   """
   require Logger
 
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.{ImageProcessor, PdfProcessor}
   alias AlchemIiif.Pipeline.ResourceMonitor

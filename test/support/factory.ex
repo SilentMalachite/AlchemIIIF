@@ -3,7 +3,7 @@ defmodule AlchemIiif.Factory do
   テスト用のデータファクトリモジュール。
   各スキーマのテストデータ生成ヘルパーを提供します。
   """
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, PdfSource}
   alias AlchemIiif.Repo
 

@@ -1,4 +1,4 @@
-defmodule AlchemIiif.IIIF.Manifest do
+defmodule AlchemIiif.Iiif.Manifest do
   @moduledoc """
   IIIF Manifest を管理する Ecto スキーマ。
   メタデータ(多言語ラベル等)をJSONBで保持します。

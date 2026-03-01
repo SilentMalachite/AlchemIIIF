@@ -8,7 +8,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   """
   use AlchemIiifWeb, :controller
 
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor}
   alias AlchemIiif.Repo
 

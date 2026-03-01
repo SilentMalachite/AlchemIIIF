@@ -1,4 +1,4 @@
-defmodule AlchemIiif.IIIF.PtiffGeneratorMock do
+defmodule AlchemIiif.Iiif.PtiffGeneratorMock do
   @moduledoc """
   テスト用の PtiffGenerator スタブモジュール。
   実際のファイル I/O を行わず、常に成功を返します。

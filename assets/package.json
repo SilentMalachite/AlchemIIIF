@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "cropperjs": "^1.6.2",
-    "daisyui": "^5.5.18"
+    "daisyui": "^5.5.18",
+    "openseadragon": "^4.1.0"
   }
 }

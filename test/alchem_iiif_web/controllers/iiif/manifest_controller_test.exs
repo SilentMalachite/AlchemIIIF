@@ -3,7 +3,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
 
   import AlchemIiif.Factory
 
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Repo
 
   describe "GET /iiif/manifest/:identifier" do

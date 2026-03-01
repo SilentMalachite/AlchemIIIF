@@ -1,7 +1,7 @@
-defmodule AlchemIiif.IIIF.ManifestTest do
+defmodule AlchemIiif.Iiif.ManifestTest do
   use AlchemIiif.DataCase, async: true
 
-  alias AlchemIiif.IIIF.Manifest
+  alias AlchemIiif.Iiif.Manifest
   import AlchemIiif.Factory
 
   describe "changeset/2" do

@@ -35,7 +35,8 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:match_count, match_count)
      |> assign(:dims_map, dims_map)
      |> assign(:selected_image, nil)
-     |> assign(:selected_dims, {0, 0})}
+     |> assign(:selected_dims, {0, 0})
+     |> assign(:iiif_image_info_url, nil)}
   end
 
   @impl true
@@ -98,11 +99,13 @@ defmodule AlchemIiifWeb.GalleryLive do
 
       image ->
         dims = read_source_dimensions(image.image_path)
+        info_url = build_iiif_info_url(image)
 
         {:noreply,
          socket
          |> assign(:selected_image, image)
-         |> assign(:selected_dims, dims)}
+         |> assign(:selected_dims, dims)
+         |> assign(:iiif_image_info_url, info_url)}
     end
   end
 
@@ -111,7 +114,8 @@ defmodule AlchemIiifWeb.GalleryLive do
     {:noreply,
      socket
      |> assign(:selected_image, nil)
-     |> assign(:selected_dims, {0, 0})}
+     |> assign(:selected_dims, {0, 0})
+     |> assign(:iiif_image_info_url, nil)}
   end
 
   # Esc キーによるモーダル閉鎖（常時リッスン、モーダル開時のみ反応）
@@ -121,7 +125,8 @@ defmodule AlchemIiifWeb.GalleryLive do
       {:noreply,
        socket
        |> assign(:selected_image, nil)
-       |> assign(:selected_dims, {0, 0})}
+       |> assign(:selected_dims, {0, 0})
+       |> assign(:iiif_image_info_url, nil)}
     else
       {:noreply, socket}
     end
@@ -366,33 +371,65 @@ defmodule AlchemIiifWeb.GalleryLive do
           phx-click="close_modal"
         >
           <div
-            class="relative w-full max-w-6xl h-full flex items-center justify-center"
+            class="relative w-full max-w-6xl h-full flex flex-col items-center justify-center"
             phx-click={JS.dispatch("phx:noop")}
           >
-            <%!-- 画像表示エリア --%>
-            <div class="relative w-full h-full flex items-center justify-center pointer-events-none">
-              <%= if @selected_image.geometry do %>
-                <% geo = @selected_image.geometry %>
-                <% {orig_w, orig_h} = @selected_dims %>
-                <svg
-                  viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
-                  class="max-w-full max-h-[90vh] shadow-2xl"
-                  preserveAspectRatio="xMidYMid meet"
-                >
-                  <image
-                    href={image_thumbnail_url(@selected_image)}
-                    width={orig_w}
-                    height={orig_h}
-                  />
-                </svg>
-              <% else %>
-                <img
-                  src={image_thumbnail_url(@selected_image)}
-                  alt={@selected_image.caption || "図版"}
-                  class="max-w-full max-h-[90vh] object-contain shadow-2xl"
-                />
+            <%!-- 画像ラベル --%>
+            <div class="mb-2 text-center">
+              <h3 class="text-white text-lg font-semibold">
+                {@selected_image.label || "名称未設定"}
+              </h3>
+              <%= if @selected_image.caption do %>
+                <p class="text-gray-400 text-sm">{@selected_image.caption}</p>
               <% end %>
             </div>
+
+            <%!-- OpenSeadragon Deep Zoom ビューア（IIIF manifest がある場合） --%>
+            <%= if @iiif_image_info_url do %>
+              <div
+                id="osd-viewer"
+                phx-hook="OpenSeadragonViewer"
+                phx-update="ignore"
+                data-info-url={@iiif_image_info_url}
+                class="w-full min-h-[70vh] bg-black relative z-[9999] pointer-events-auto touch-none"
+              >
+              </div>
+            <% else %>
+              <%!-- フォールバック: 従来の静止画表示（PTIFF 未生成時） --%>
+              <div class="relative w-full h-full flex items-center justify-center">
+                <%= if @selected_image.geometry do %>
+                  <% geo = @selected_image.geometry %>
+                  <% {orig_w, orig_h} = @selected_dims %>
+                  <svg
+                    viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                    class="max-w-full max-h-[90vh] shadow-2xl"
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    <image
+                      href={image_thumbnail_url(@selected_image)}
+                      width={orig_w}
+                      height={orig_h}
+                    />
+                  </svg>
+                <% else %>
+                  <img
+                    src={image_thumbnail_url(@selected_image)}
+                    alt={@selected_image.caption || "図版"}
+                    class="max-w-full max-h-[90vh] object-contain shadow-2xl"
+                  />
+                <% end %>
+              </div>
+            <% end %>
+
+            <%!-- 閉じるボタン --%>
+            <button
+              type="button"
+              class="absolute top-2 right-2 text-white/70 hover:text-white bg-black/50 hover:bg-black/80 rounded-full w-10 h-10 flex items-center justify-center transition-colors z-10"
+              phx-click="close_modal"
+              aria-label="閉じる"
+            >
+              ✕
+            </button>
           </div>
         </div>
       <% end %>
@@ -430,16 +467,20 @@ defmodule AlchemIiifWeb.GalleryLive do
   end
 
   # サムネイル URL の生成
+  # サムネイルは常に元画像の静的パスを使用する。
+  # SVG viewBox クロップは元画像のピクセル座標系で動作するため、
+  # IIIF 経由のリサイズ済み画像では座標が合わなくなる。
+  # IIIF Image API は OpenSeadragon Deep Zoom（モーダル）でのみ使用する。
   defp image_thumbnail_url(image) do
-    case image.iiif_manifest do
-      nil ->
-        # PTIF なし：元画像を使用
-        image.image_path
-        |> String.replace_leading("priv/static/", "/")
+    image.image_path
+    |> String.replace_leading("priv/static/", "/")
+  end
 
-      manifest ->
-        # IIIF Image API でサムネイルを取得
-        "/iiif/image/#{manifest.identifier}/full/300,/0/default.jpg"
+  # IIIF Image API info.json URL の構築
+  defp build_iiif_info_url(image) do
+    case image.iiif_manifest do
+      nil -> nil
+      manifest -> "/iiif/image/#{manifest.identifier}/info.json"
     end
   end
 end
