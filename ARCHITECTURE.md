@@ -23,6 +23,7 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 │ • PDF アップロード │ • 全文検索 (FTS) │ • Image API v3.0          │
 │ • pdftoppm 変換   │ • ファセット検索  │ • Presentation API v3.0   │
 │ • 手動クロップ    │ • メタデータ検索  │ • タイルキャッシュ          │
+│   (矩形・ポリゴン) │                  │                            │
 │ • PTIF 生成       │                  │ • JSON-LD Manifest        │
 │ • メタデータ入力  │                  │                            │
 └────────┬─────────┴────────┬─────────┴──────────────┬─────────────┘
@@ -201,9 +202,10 @@ PDF ファイル
 サムネイルグリッド (/lab/browse/:pdf_source_id)
     │  Step 2: ユーザーがページ選択（レコード作成なし — Write-on-Action）
     ▼
-ImageSelection Hook ──── D-Pad による手動クロップ (/lab/crop/:pdf_source_id/:page_number)
-    │  Step 3: 図版の範囲を指定。**ダブルクリック**で確定・保存。
-    │          ★ ここで初めて ExtractedImage レコードを INSERT。
+ImageSelection Hook ──── ポリゴン手動クロップ (/lab/crop/:pdf_source_id/:page_number)
+    │  Step 3: クリックで頂点追加 → ダブルクリック（または始点クリック/Enter）で
+    │          多角形を閉じて保存。★ ここで初めて ExtractedImage レコードを INSERT。
+    │          D-Pad でポリゴン全体を微調整可能。
     ▼
 メタデータ入力フォーム (/lab/label/:image_id)
     │  Step 4: caption, label, site, period, artifact_type を手入力。自動ラベリング保存。
@@ -308,6 +310,7 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 
 **`extracted_images.geometry`** — クロップ座標
 
+矩形形式（旧データ・後方互換）：
 ```json
 {
   "x": 150,
@@ -316,6 +319,24 @@ IIIF クライアント (Mirador, Universal Viewer 等)
   "height": 600
 }
 ```
+
+ポリゴン形式（v0.2.22 以降）：
+```json
+{
+  "points": [
+    {"x": 100, "y": 150},
+    {"x": 500, "y": 120},
+    {"x": 520, "y": 600},
+    {"x": 80,  "y": 580}
+  ]
+}
+```
+
+> **ポリゴンクロップの処理**: `ImageProcessor` は `points` 配列を検出すると、
+> バウンディングボックスで `extract_area` → SVG マスク生成 → `ifthenelse` 白背景合成
+> の 4 段階パイプラインで処理します。ポリゴン外は純白 (255,255,255) で塗りつぶされ、
+> JPEG 互換の 3バンド RGB 画像として出力されます（アルファチャンネル不要）。
+> プレビュー表示では SVG `clipPath` + `<polygon>` によるマスキングを使用します。
 
 **`iiif_manifests.metadata`** — IIIF メタデータ (多言語)
 
