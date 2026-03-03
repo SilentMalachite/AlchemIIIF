@@ -65,13 +65,21 @@ defmodule AlchemIiif.Iiif.PtiffGenerator do
   def generate_ptiff(input_png_path, output_tiff_path) do
     Logger.info("PTIFF 生成開始: #{input_png_path} → #{output_tiff_path}")
 
-    with {:ok, image} <- Image.new_from_file(input_png_path),
-         :ok <- Image.write_to_file(image, output_tiff_path, @tiff_options) do
-      Logger.info("PTIFF 生成完了: #{output_tiff_path}")
-      {:ok, output_tiff_path}
+    with {:ok, image} <- Image.new_from_file(input_png_path) do
+      # 白背景マスキングは crop_image 時に完了済みのため、そのまま PTIFF を生成
+
+      case Image.write_to_file(image, output_tiff_path, @tiff_options) do
+        :ok ->
+          Logger.info("PTIFF 生成完了: #{output_tiff_path}")
+          {:ok, output_tiff_path}
+
+        {:error, reason} = error ->
+          Logger.error("PTIFF 生成失敗: #{inspect(reason)}")
+          error
+      end
     else
       {:error, reason} = error ->
-        Logger.error("PTIFF 生成失敗: #{inspect(reason)}")
+        Logger.error("PTIFF 読み込み失敗: #{inspect(reason)}")
         error
     end
   end

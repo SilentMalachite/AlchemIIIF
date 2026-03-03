@@ -43,8 +43,8 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
         %{image: image, validation: validation}
       end)
 
-    # カード用の画像寸法マップを構築（SVG viewBox クロップ表示用）
-    dims_map = build_dims_map(images_with_validation)
+    # カード用のプレビューマップを構築（SVG viewBox + ポリゴン クロップ表示用）
+    preview_map = build_preview_map(images_with_validation)
 
     {:ok,
      socket
@@ -57,7 +57,9 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
      |> assign(:reject_target_id, nil)
      |> assign(:fading_ids, MapSet.new())
      |> assign(:selected_image_dims, {0, 0})
-     |> assign(:dims_map, dims_map)}
+     |> assign(:selected_polygon_points, nil)
+     |> assign(:selected_bbox, nil)
+     |> assign(:preview_map, preview_map)}
   end
 
   # --- イベントハンドラ ---
@@ -74,10 +76,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
     # 元画像の寸法を取得（SVG viewBox クロップ表示用）
     dims = read_source_dimensions(selected.image.image_path)
 
+    # ジオメトリからポリゴン/バウンディングボックスを抽出
+    {polygon_points, bbox} = extract_preview_data(selected.image.geometry)
+
     {:noreply,
      socket
      |> assign(:selected_image, selected)
-     |> assign(:selected_image_dims, dims)}
+     |> assign(:selected_image_dims, dims)
+     |> assign(:selected_polygon_points, polygon_points)
+     |> assign(:selected_bbox, bbox)}
   end
 
   @impl true
@@ -94,14 +101,14 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
             item.image.id == image_id
           end)
 
-        # dims_map から該当IDを削除
-        updated_dims_map = Map.delete(socket.assigns.dims_map, image_id)
+        # preview_map から該当IDを削除
+        updated_preview_map = Map.delete(socket.assigns.preview_map, image_id)
 
         {:noreply,
          socket
          |> assign(:pending_images, updated_images)
          |> assign(:pending_count, length(updated_images))
-         |> assign(:dims_map, updated_dims_map)
+         |> assign(:preview_map, updated_preview_map)
          |> close_inspector_if_selected(image_id)
          |> put_flash(:info, "「#{image.label || "名称未設定"}」を削除しました。")}
 
@@ -115,7 +122,9 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
     {:noreply,
      socket
      |> assign(:selected_image, nil)
-     |> assign(:selected_image_dims, {0, 0})}
+     |> assign(:selected_image_dims, {0, 0})
+     |> assign(:selected_polygon_points, nil)
+     |> assign(:selected_bbox, nil)}
   end
 
   @impl true
@@ -185,15 +194,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
             %{image: img, validation: validation}
           end)
 
-        # dims_map を再構築
-        dims_map = build_dims_map(images_with_validation)
+        # preview_map を再構築
+        preview_map = build_preview_map(images_with_validation)
         image_id = String.to_integer(id)
 
         {:noreply,
          socket
          |> assign(:pending_images, images_with_validation)
          |> assign(:pending_count, length(images_with_validation))
-         |> assign(:dims_map, dims_map)
+         |> assign(:preview_map, preview_map)
          |> assign(:show_reject_modal, false)
          |> assign(:reject_target_id, nil)
          |> assign(:reject_note, "")
@@ -217,15 +226,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
       end)
 
     fading_ids = MapSet.delete(socket.assigns.fading_ids, image_id)
-    # dims_map から該当IDを削除
-    updated_dims_map = Map.delete(socket.assigns.dims_map, image_id)
+    # preview_map から該当IDを削除
+    updated_preview_map = Map.delete(socket.assigns.preview_map, image_id)
 
     {:noreply,
      socket
      |> assign(:pending_images, updated_images)
      |> assign(:pending_count, length(updated_images))
      |> assign(:fading_ids, fading_ids)
-     |> assign(:dims_map, updated_dims_map)}
+     |> assign(:preview_map, updated_preview_map)}
   end
 
   # --- レンダリング ---
@@ -296,21 +305,47 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                       </div>
                     <% else %>
                       <%= if item.image.geometry do %>
-                        <% geo = item.image.geometry %>
-                        <% {orig_w, orig_h} = Map.get(@dims_map, item.image.id, {0, 0}) %>
-                        <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
-                          <svg
-                            viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
-                            class="w-full h-auto"
-                            preserveAspectRatio="xMidYMid meet"
-                          >
-                            <image
-                              href={image_thumbnail_url(item.image)}
-                              width={orig_w}
-                              height={orig_h}
-                            />
-                          </svg>
-                        </div>
+                        <% {orig_w, orig_h, poly_pts, card_bbox} =
+                          Map.get(@preview_map, item.image.id, {0, 0, nil, nil}) %>
+                        <%= if card_bbox do %>
+                          <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                            <svg
+                              viewBox={"#{card_bbox.x} #{card_bbox.y} #{card_bbox.width} #{card_bbox.height}"}
+                              class="w-full h-auto"
+                              preserveAspectRatio="xMidYMid meet"
+                            >
+                              <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                              <rect
+                                x={card_bbox.x}
+                                y={card_bbox.y}
+                                width={card_bbox.width}
+                                height={card_bbox.height}
+                                fill="white"
+                              />
+                              <%= if poly_pts do %>
+                                <%!-- ポリゴンデータ: clipPath でマスク --%>
+                                <defs>
+                                  <clipPath id={"review-card-clip-#{item.image.id}"}>
+                                    <polygon points={poly_pts} />
+                                  </clipPath>
+                                </defs>
+                                <image
+                                  href={image_thumbnail_url(item.image)}
+                                  width={orig_w}
+                                  height={orig_h}
+                                  clip-path={"url(#review-card-clip-#{item.image.id})"}
+                                />
+                              <% else %>
+                                <%!-- 旧矩形データ: クリップなし --%>
+                                <image
+                                  href={image_thumbnail_url(item.image)}
+                                  width={orig_w}
+                                  height={orig_h}
+                                />
+                              <% end %>
+                            </svg>
+                          </div>
+                        <% end %>
                       <% else %>
                         <img
                           src={image_thumbnail_url(item.image)}
@@ -400,21 +435,44 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               </button>
             </div>
 
-            <%!-- クロップ画像（SVG viewBox）またはフル画像 --%>
+            <%!-- クロップ画像（SVG viewBox + ポリゴン clipPath）またはフル画像 --%>
             <div class="inspector-image-container">
-              <%= if @selected_image.image.geometry do %>
-                <% geo = @selected_image.image.geometry %>
+              <%= if @selected_image.image.geometry && @selected_bbox do %>
                 <% {orig_w, orig_h} = @selected_image_dims %>
                 <svg
-                  viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                  viewBox={"#{@selected_bbox.x} #{@selected_bbox.y} #{@selected_bbox.width} #{@selected_bbox.height}"}
                   class="inspector-crop-svg"
                   preserveAspectRatio="xMidYMid meet"
                 >
-                  <image
-                    href={image_full_url(@selected_image.image)}
-                    width={orig_w}
-                    height={orig_h}
+                  <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                  <rect
+                    x={@selected_bbox.x}
+                    y={@selected_bbox.y}
+                    width={@selected_bbox.width}
+                    height={@selected_bbox.height}
+                    fill="white"
                   />
+                  <%= if @selected_polygon_points do %>
+                    <%!-- ポリゴンデータ: clipPath でマスク --%>
+                    <defs>
+                      <clipPath id={"review-polygon-clip-#{@selected_image.image.id}"}>
+                        <polygon points={@selected_polygon_points} />
+                      </clipPath>
+                    </defs>
+                    <image
+                      href={image_full_url(@selected_image.image)}
+                      width={orig_w}
+                      height={orig_h}
+                      clip-path={"url(#review-polygon-clip-#{@selected_image.image.id})"}
+                    />
+                  <% else %>
+                    <%!-- 旧矩形データ: クリップなし --%>
+                    <image
+                      href={image_full_url(@selected_image.image)}
+                      width={orig_w}
+                      height={orig_h}
+                    />
+                  <% end %>
                 </svg>
               <% else %>
                 <img
@@ -612,11 +670,13 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
     end
   end
 
-  # 画像寸法マップの構築（SVGカードクロップ表示用）
-  defp build_dims_map(images_with_validation) do
+  # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
+  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持
+  defp build_preview_map(images_with_validation) do
     Map.new(images_with_validation, fn item ->
-      dims = read_source_dimensions(item.image.image_path)
-      {item.image.id, dims}
+      {orig_w, orig_h} = read_source_dimensions(item.image.image_path)
+      {polygon_points, bbox} = extract_preview_data(item.image.geometry)
+      {item.image.id, {orig_w, orig_h, polygon_points, bbox}}
     end)
   end
 
@@ -627,6 +687,53 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
       _error -> {0, 0}
     end
   end
+
+  # ジオメトリデータからプレビュー用のポリゴン頂点とバウンディングボックスを抽出
+  defp extract_preview_data(%{"points" => points}) when is_list(points) and length(points) >= 3 do
+    xs = Enum.map(points, fn p -> safe_int(p["x"]) end)
+    ys = Enum.map(points, fn p -> safe_int(p["y"]) end)
+
+    min_x = Enum.min(xs)
+    min_y = Enum.min(ys)
+    max_x = Enum.max(xs)
+    max_y = Enum.max(ys)
+
+    bbox = %{
+      x: min_x,
+      y: min_y,
+      width: max_x - min_x,
+      height: max_y - min_y
+    }
+
+    # SVG polygon points 文字列を事前生成
+    polygon_points_str =
+      points
+      |> Enum.map(fn p -> "#{safe_int(p["x"])},#{safe_int(p["y"])}" end)
+      |> Enum.join(" ")
+
+    {polygon_points_str, bbox}
+  end
+
+  # 旧矩形データの場合（後方互換性）
+  defp extract_preview_data(%{"x" => x, "y" => y, "width" => w, "height" => h}) do
+    bbox = %{x: safe_int(x), y: safe_int(y), width: safe_int(w), height: safe_int(h)}
+    {nil, bbox}
+  end
+
+  defp extract_preview_data(_), do: {nil, nil}
+
+  # 安全な整数変換
+  defp safe_int(val) when is_integer(val), do: val
+  defp safe_int(val) when is_float(val), do: round(val)
+
+  defp safe_int(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+
+  defp safe_int(_), do: 0
 
   # バリデーション項目のラベル
   defp validation_issue_label(:image_file), do: "画像ファイルパスが未設定です"

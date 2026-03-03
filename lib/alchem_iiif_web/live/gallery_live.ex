@@ -23,7 +23,7 @@ defmodule AlchemIiifWeb.GalleryLive do
     # 公開済み画像のみ表示
     results = Search.search_published_images()
     match_count = Search.count_published_results()
-    dims_map = build_dims_map(results)
+    preview_map = build_preview_map(results)
 
     {:ok,
      socket
@@ -33,9 +33,11 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filter_options, filter_options)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:dims_map, dims_map)
+     |> assign(:preview_map, preview_map)
      |> assign(:selected_image, nil)
      |> assign(:selected_dims, {0, 0})
+     |> assign(:selected_polygon_points, nil)
+     |> assign(:selected_bbox, nil)
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -43,14 +45,14 @@ defmodule AlchemIiifWeb.GalleryLive do
   def handle_event("search", %{"query" => query}, socket) do
     results = Search.search_published_images(query, socket.assigns.filters)
     match_count = Search.count_published_results(query, socket.assigns.filters)
-    dims_map = build_dims_map(results)
+    preview_map = build_preview_map(results)
 
     {:noreply,
      socket
      |> assign(:query, query)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:dims_map, dims_map)}
+     |> assign(:preview_map, preview_map)}
   end
 
   @impl true
@@ -67,28 +69,28 @@ defmodule AlchemIiifWeb.GalleryLive do
 
     results = Search.search_published_images(socket.assigns.query, updated_filters)
     match_count = Search.count_published_results(socket.assigns.query, updated_filters)
-    dims_map = build_dims_map(results)
+    preview_map = build_preview_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, updated_filters)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:dims_map, dims_map)}
+     |> assign(:preview_map, preview_map)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
     results = Search.search_published_images(socket.assigns.query, %{})
     match_count = Search.count_published_results(socket.assigns.query, %{})
-    dims_map = build_dims_map(results)
+    preview_map = build_preview_map(results)
 
     {:noreply,
      socket
      |> assign(:filters, %{})
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:dims_map, dims_map)}
+     |> assign(:preview_map, preview_map)}
   end
 
   @impl true
@@ -100,11 +102,14 @@ defmodule AlchemIiifWeb.GalleryLive do
       image ->
         dims = read_source_dimensions(image.image_path)
         info_url = build_iiif_info_url(image)
+        {polygon_points, bbox} = extract_preview_data(image.geometry)
 
         {:noreply,
          socket
          |> assign(:selected_image, image)
          |> assign(:selected_dims, dims)
+         |> assign(:selected_polygon_points, polygon_points)
+         |> assign(:selected_bbox, bbox)
          |> assign(:iiif_image_info_url, info_url)}
     end
   end
@@ -115,6 +120,8 @@ defmodule AlchemIiifWeb.GalleryLive do
      socket
      |> assign(:selected_image, nil)
      |> assign(:selected_dims, {0, 0})
+     |> assign(:selected_polygon_points, nil)
+     |> assign(:selected_bbox, nil)
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -126,6 +133,8 @@ defmodule AlchemIiifWeb.GalleryLive do
        socket
        |> assign(:selected_image, nil)
        |> assign(:selected_dims, {0, 0})
+       |> assign(:selected_polygon_points, nil)
+       |> assign(:selected_bbox, nil)
        |> assign(:iiif_image_info_url, nil)}
     else
       {:noreply, socket}
@@ -296,21 +305,47 @@ defmodule AlchemIiifWeb.GalleryLive do
             >
               <div class="result-card-link">
                 <%= if image.geometry do %>
-                  <% geo = image.geometry %>
-                  <% {orig_w, orig_h} = Map.get(@dims_map, image.id, {0, 0}) %>
-                  <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
-                    <svg
-                      viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
-                      class="w-full h-auto"
-                      preserveAspectRatio="xMidYMid meet"
-                    >
-                      <image
-                        href={image_thumbnail_url(image)}
-                        width={orig_w}
-                        height={orig_h}
-                      />
-                    </svg>
-                  </div>
+                  <% {orig_w, orig_h, poly_pts, card_bbox} =
+                    Map.get(@preview_map, image.id, {0, 0, nil, nil}) %>
+                  <%= if card_bbox do %>
+                    <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
+                      <svg
+                        viewBox={"#{card_bbox.x} #{card_bbox.y} #{card_bbox.width} #{card_bbox.height}"}
+                        class="w-full h-auto"
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                        <rect
+                          x={card_bbox.x}
+                          y={card_bbox.y}
+                          width={card_bbox.width}
+                          height={card_bbox.height}
+                          fill="white"
+                        />
+                        <%= if poly_pts do %>
+                          <%!-- ポリゴンデータ: clipPath でマスク --%>
+                          <defs>
+                            <clipPath id={"gallery-polygon-clip-#{image.id}"}>
+                              <polygon points={poly_pts} />
+                            </clipPath>
+                          </defs>
+                          <image
+                            href={image_thumbnail_url(image)}
+                            width={orig_w}
+                            height={orig_h}
+                            clip-path={"url(#gallery-polygon-clip-#{image.id})"}
+                          />
+                        <% else %>
+                          <%!-- 旧矩形データ: クリップなし --%>
+                          <image
+                            href={image_thumbnail_url(image)}
+                            width={orig_w}
+                            height={orig_h}
+                          />
+                        <% end %>
+                      </svg>
+                    </div>
+                  <% end %>
                 <% else %>
                   <img
                     src={image_thumbnail_url(image)}
@@ -397,19 +432,40 @@ defmodule AlchemIiifWeb.GalleryLive do
             <% else %>
               <%!-- フォールバック: 従来の静止画表示（PTIFF 未生成時） --%>
               <div class="relative w-full h-full flex items-center justify-center">
-                <%= if @selected_image.geometry do %>
-                  <% geo = @selected_image.geometry %>
+                <%= if @selected_image.geometry && @selected_bbox do %>
                   <% {orig_w, orig_h} = @selected_dims %>
                   <svg
-                    viewBox={"#{geo["x"]} #{geo["y"]} #{geo["width"]} #{geo["height"]}"}
+                    viewBox={"#{@selected_bbox.x} #{@selected_bbox.y} #{@selected_bbox.width} #{@selected_bbox.height}"}
                     class="max-w-full max-h-[90vh] shadow-2xl"
                     preserveAspectRatio="xMidYMid meet"
                   >
-                    <image
-                      href={image_thumbnail_url(@selected_image)}
-                      width={orig_w}
-                      height={orig_h}
+                    <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                    <rect
+                      x={@selected_bbox.x}
+                      y={@selected_bbox.y}
+                      width={@selected_bbox.width}
+                      height={@selected_bbox.height}
+                      fill="white"
                     />
+                    <%= if @selected_polygon_points do %>
+                      <defs>
+                        <clipPath id={"gallery-modal-clip-#{@selected_image.id}"}>
+                          <polygon points={@selected_polygon_points} />
+                        </clipPath>
+                      </defs>
+                      <image
+                        href={image_thumbnail_url(@selected_image)}
+                        width={orig_w}
+                        height={orig_h}
+                        clip-path={"url(#gallery-modal-clip-#{@selected_image.id})"}
+                      />
+                    <% else %>
+                      <image
+                        href={image_thumbnail_url(@selected_image)}
+                        width={orig_w}
+                        height={orig_h}
+                      />
+                    <% end %>
                   </svg>
                 <% else %>
                   <img
@@ -450,11 +506,13 @@ defmodule AlchemIiifWeb.GalleryLive do
   defp result_text(0), do: "結果なし"
   defp result_text(count), do: "#{count} 件の図版が見つかりました"
 
-  # 画像寸法マップの構築（SVG viewBox クロップ表示用）
-  defp build_dims_map(images) do
+  # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
+  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持
+  defp build_preview_map(images) do
     Map.new(images, fn image ->
-      dims = read_source_dimensions(image.image_path)
-      {image.id, dims}
+      {orig_w, orig_h} = read_source_dimensions(image.image_path)
+      {polygon_points, bbox} = extract_preview_data(image.geometry)
+      {image.id, {orig_w, orig_h, polygon_points, bbox}}
     end)
   end
 
@@ -465,6 +523,53 @@ defmodule AlchemIiifWeb.GalleryLive do
       _error -> {0, 0}
     end
   end
+
+  # ジオメトリデータからプレビュー用のポリゴン頂点とバウンディングボックスを抽出
+  defp extract_preview_data(%{"points" => points}) when is_list(points) and length(points) >= 3 do
+    xs = Enum.map(points, fn p -> safe_int(p["x"]) end)
+    ys = Enum.map(points, fn p -> safe_int(p["y"]) end)
+
+    min_x = Enum.min(xs)
+    min_y = Enum.min(ys)
+    max_x = Enum.max(xs)
+    max_y = Enum.max(ys)
+
+    bbox = %{
+      x: min_x,
+      y: min_y,
+      width: max_x - min_x,
+      height: max_y - min_y
+    }
+
+    # SVG polygon points 文字列を事前生成
+    polygon_points_str =
+      points
+      |> Enum.map(fn p -> "#{safe_int(p["x"])},#{safe_int(p["y"])}" end)
+      |> Enum.join(" ")
+
+    {polygon_points_str, bbox}
+  end
+
+  # 旧矩形データの場合（後方互換性）
+  defp extract_preview_data(%{"x" => x, "y" => y, "width" => w, "height" => h}) do
+    bbox = %{x: safe_int(x), y: safe_int(y), width: safe_int(w), height: safe_int(h)}
+    {nil, bbox}
+  end
+
+  defp extract_preview_data(_), do: {nil, nil}
+
+  # 安全な整数変換
+  defp safe_int(val) when is_integer(val), do: val
+  defp safe_int(val) when is_float(val), do: round(val)
+
+  defp safe_int(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+
+  defp safe_int(_), do: 0
 
   # サムネイル URL の生成
   # サムネイルは常に元画像の静的パスを使用する。

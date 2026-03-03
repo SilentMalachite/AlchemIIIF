@@ -1,14 +1,18 @@
 defmodule AlchemIiifWeb.InspectorLive.Crop do
   @moduledoc """
   ウィザード Step 3: クロップ専用画面。
-  カスタム ImageSelection Hook を使用して図版の範囲を定義し、
-  Nudge コントロール（上下左右 + 拡大/縮小）で微調整を行います。
+  カスタム ImageSelection Hook を使用してポリゴン（多角形）で図版の範囲を定義し、
+  Nudge コントロール（上下左右）で微調整を行います。
   SVG オーバーレイで選択範囲を可視化。
   Undo 機能を搭載。ダブルクリック（ダブルタップ）で明示的に保存。
 
   ## Write-on-Action ポリシー
   ExtractedImage レコードは save_crop 時に初めて作成されます。
   Browse からはレコードIDを受け取らず、pdf_source_id と page_number で動作します。
+
+  ## Phase 1 注記
+  ポリゴン頂点配列（points）を受信・表示するが、
+  バックエンドの vix 処理は Phase 2 で対応予定。
   """
   use AlchemIiifWeb, :live_view
 
@@ -48,14 +52,23 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       if page_filename, do: "/uploads/pages/#{pdf_source.id}/#{page_filename}", else: nil
 
     # 既存レコードがある場合はそのクロップデータをロード
-    crop_rect =
+    # 矩形データとポリゴンデータの両方に対応
+    {crop_rect, polygon_points} =
       case existing_image do
-        %{geometry: %{"x" => _, "y" => _, "width" => _, "height" => _} = geo} -> geo
-        _ -> nil
+        %{geometry: %{"points" => points}} when is_list(points) ->
+          # ポリゴンデータ
+          {nil, points}
+
+        %{geometry: %{"x" => _, "y" => _, "width" => _, "height" => _} = geo} ->
+          # 旧矩形データ（後方互換性: 表示のみ、JS側で4頂点に変換）
+          {geo, nil}
+
+        _ ->
+          {nil, nil}
       end
 
     # DB に保存済みデータがあれば :saved、なければ :idle
-    initial_state = if crop_rect, do: :saved, else: :idle
+    initial_state = if crop_rect || polygon_points, do: :saved, else: :idle
 
     {:ok,
      socket
@@ -67,13 +80,34 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:image_path, image_path)
      |> assign(:image_url, image_url)
      |> assign(:crop_rect, crop_rect)
+     |> assign(:polygon_points, polygon_points)
      |> assign(:undo_stack, [])
      |> assign(:save_state, initial_state)}
   end
 
-  # JS Hook からのプレビューイベント（DB保存なし、UIのみ更新）
+  # JS Hook からのプレビューイベント（ポリゴン頂点配列）
   @impl true
-  def handle_event("preview_crop", params, socket) do
+  def handle_event("preview_crop", %{"points" => points} = _params, socket)
+      when is_list(points) do
+    # Phase 1: ポリゴン頂点を IO.inspect で確認
+    IO.inspect(points, label: "[Phase1] preview_crop polygon points")
+
+    normalized_points = normalize_points(points)
+
+    # 現在の値を Undo スタックに保存
+    undo_stack = push_undo(socket.assigns.polygon_points, socket.assigns.undo_stack)
+
+    {:noreply,
+     socket
+     |> assign(:polygon_points, normalized_points)
+     |> assign(:crop_rect, nil)
+     |> assign(:undo_stack, undo_stack)
+     |> assign(:save_state, :draft)}
+  end
+
+  # 旧矩形フォーマットの preview_crop（後方互換性）
+  @impl true
+  def handle_event("preview_crop", params, socket) when is_map_key(params, "x") do
     crop_rect = %{
       "x" => to_int(params["x"]),
       "y" => to_int(params["y"]),
@@ -81,7 +115,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       "height" => to_int(params["height"])
     }
 
-    # 現在の値を Undo スタックに保存
     undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
 
     {:noreply,
@@ -91,9 +124,65 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
      |> assign(:save_state, :draft)}
   end
 
-  # ダブルクリック/ダブルタップによる明示的保存（Write-on-Action: レコードの遅延作成）
+  # ダブルクリック/ダブルタップによる明示的保存（ポリゴン）
   @impl true
-  def handle_event("save_crop", params, socket) do
+  def handle_event("save_crop", %{"points" => points} = _params, socket) when is_list(points) do
+    IO.inspect(points, label: "[Phase1] save_crop polygon points")
+
+    normalized_points = normalize_points(points)
+    geometry = %{"points" => normalized_points}
+
+    result =
+      case socket.assigns.extracted_image do
+        nil ->
+          # 新規作成（Write-on-Action: 初めてここでレコードを作成）
+          Ingestion.create_extracted_image(%{
+            pdf_source_id: socket.assigns.pdf_source.id,
+            page_number: socket.assigns.page_number,
+            image_path: socket.assigns.image_path,
+            geometry: geometry
+          })
+
+        existing ->
+          # 既存レコードの更新
+          old_path = existing.image_path
+
+          result =
+            Ingestion.update_extracted_image(existing, %{
+              geometry: geometry,
+              image_path: socket.assigns.image_path
+            })
+
+          # 旧バージョンのファイルを削除（パスが異なる場合のみ）
+          if old_path && old_path != socket.assigns.image_path do
+            File.rm(old_path)
+          end
+
+          result
+      end
+
+    case result do
+      {:ok, updated_image} ->
+        {:noreply,
+         socket
+         |> assign(:extracted_image, updated_image)
+         |> assign(:polygon_points, normalized_points)
+         |> assign(:crop_rect, nil)
+         |> assign(:save_state, :saved)
+         |> push_event("save_confirmed", %{})}
+
+      {:error, :stale} ->
+        {:noreply,
+         put_flash(socket, :error, "他ユーザーによって更新されました。ページをリロードしてください (Data conflict detected).")}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "保存に失敗しました")}
+    end
+  end
+
+  # 旧矩形フォーマットの save_crop（後方互換性）
+  @impl true
+  def handle_event("save_crop", params, socket) when is_map_key(params, "x") do
     crop_rect = %{
       "x" => to_int(params["x"]),
       "y" => to_int(params["y"]),
@@ -104,7 +193,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     result =
       case socket.assigns.extracted_image do
         nil ->
-          # 新規作成（Write-on-Action: 初めてここでレコードを作成）
           Ingestion.create_extracted_image(%{
             pdf_source_id: socket.assigns.pdf_source.id,
             page_number: socket.assigns.page_number,
@@ -113,7 +201,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
           })
 
         existing ->
-          # 既存レコードの更新（image_path も最新に更新）
           old_path = existing.image_path
 
           result =
@@ -122,7 +209,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
               image_path: socket.assigns.image_path
             })
 
-          # 旧バージョンのファイルを削除（パスが異なる場合のみ）
           if old_path && old_path != socket.assigns.image_path do
             File.rm(old_path)
           end
@@ -148,6 +234,20 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     end
   end
 
+  # ポリゴンクリア
+  @impl true
+  def handle_event("clear_polygon", _params, socket) do
+    undo_stack = push_undo(socket.assigns.polygon_points, socket.assigns.undo_stack)
+
+    {:noreply,
+     socket
+     |> assign(:polygon_points, nil)
+     |> assign(:crop_rect, nil)
+     |> assign(:undo_stack, undo_stack)
+     |> assign(:save_state, :idle)
+     |> push_event("clear_polygon", %{})}
+  end
+
   # 旧イベント名の後方互換性（update_crop → preview_crop として動作）
   @impl true
   def handle_event("update_crop", params, socket) do
@@ -171,7 +271,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     amount = to_int(params["amount"] || @nudge_amount)
 
     # 現在の値を Undo スタックに保存
-    undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
+    undo_data = socket.assigns.polygon_points || socket.assigns.crop_rect
+    undo_stack = push_undo(undo_data, socket.assigns.undo_stack)
 
     {:noreply,
      socket
@@ -185,7 +286,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     direction = arrow_key_to_direction(key)
 
     if direction do
-      undo_stack = push_undo(socket.assigns.crop_rect, socket.assigns.undo_stack)
+      undo_data = socket.assigns.polygon_points || socket.assigns.crop_rect
+      undo_stack = push_undo(undo_data, socket.assigns.undo_stack)
 
       {:noreply,
        socket
@@ -200,12 +302,29 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   def handle_event("undo", _params, socket) do
     case socket.assigns.undo_stack do
       [previous | rest] ->
+        # 復元データがポリゴンかどうか判定
+        {crop_rect, polygon_points, restore_data} =
+          cond do
+            is_list(previous) ->
+              {nil, previous, %{points: previous}}
+
+            is_map(previous) && Map.has_key?(previous, "points") ->
+              {nil, previous["points"], %{points: previous["points"]}}
+
+            is_map(previous) ->
+              {previous, nil, %{crop_data: previous}}
+
+            true ->
+              {nil, nil, %{}}
+          end
+
         {:noreply,
          socket
-         |> assign(:crop_rect, previous)
+         |> assign(:crop_rect, crop_rect)
+         |> assign(:polygon_points, polygon_points)
          |> assign(:undo_stack, rest)
          |> assign(:save_state, :draft)
-         |> push_event("restore_crop", %{crop_data: previous})}
+         |> push_event("restore_crop", restore_data)}
 
       [] ->
         {:noreply, put_flash(socket, :info, "元に戻す操作はありません")}
@@ -214,11 +333,12 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
   @impl true
   def handle_event("proceed_to_label", _params, socket) do
+    polygon_points = socket.assigns.polygon_points
     crop_rect = socket.assigns.crop_rect
     extracted_image = socket.assigns.extracted_image
 
     cond do
-      is_nil(crop_rect) ->
+      is_nil(polygon_points) && is_nil(crop_rect) ->
         {:noreply, put_flash(socket, :error, "クロップ範囲を指定してください")}
 
       is_nil(extracted_image) ->
@@ -227,8 +347,15 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
       true ->
         # クロップデータを最終保存してラベリング画面に遷移
+        geometry =
+          if polygon_points do
+            %{"points" => polygon_points}
+          else
+            crop_rect
+          end
+
         case Ingestion.update_extracted_image(extracted_image, %{
-               geometry: crop_rect
+               geometry: geometry
              }) do
           {:ok, _updated_image} ->
             {:noreply, push_navigate(socket, to: ~p"/lab/label/#{extracted_image.id}")}
@@ -245,6 +372,16 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
             {:noreply, put_flash(socket, :error, "保存に失敗しました")}
         end
     end
+  end
+
+  # ポリゴン頂点配列の正規化（整数変換）
+  defp normalize_points(points) when is_list(points) do
+    Enum.map(points, fn p ->
+      %{
+        "x" => to_int(p["x"]),
+        "y" => to_int(p["y"])
+      }
+    end)
   end
 
   # Undo スタックにプッシュ（最大20件）
@@ -271,7 +408,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
   defp to_int(_), do: 0
 
-  # crop_rect からSVGオーバーレイ用の値を安全に取得
+  # crop_rect からSVGオーバーレイ用の値を安全に取得（後方互換性）
   defp crop_x(nil), do: 0
   defp crop_x(%{"x" => x}), do: x
   defp crop_x(_), do: 0
@@ -297,7 +434,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
       <div class="crop-area">
         <h2 class="section-title">✂️ 図版の範囲を指定してください</h2>
         <p class="section-description">
-          画像上でドラッグして図版の範囲を選択します。<br /> 方向ボタンで微調整できます。
+          シングルクリックで頂点を追加し、ダブルクリック（または始点をクリック）で多角形を閉じます。<br />
+          Enterキーでも多角形を閉じることができます。方向ボタンで全体を微調整できます。
         </p>
 
         <%!-- Save ステータス --%>
@@ -314,7 +452,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
                 alt="クロップ対象の画像"
                 class="crop-image"
               />
-              <%!-- 初期クロップデータ（JS に渡すための data 属性） --%>
+              <%!-- 初期クロップデータ（JS に渡すための data 属性 — 旧矩形形式の後方互換性） --%>
               <span
                 class="crop-init-data"
                 data-crop-x={crop_x(@crop_rect)}
@@ -329,7 +467,8 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
                   <defs>
                     <mask id="crop-dim-mask">
                       <rect class="dim-mask" fill="white" x="0" y="0" width="100%" height="100%" />
-                      <rect class="dim-cutout" fill="black" x="0" y="0" width="0" height="0" />
+                      <%!-- ポリゴン用のカットアウト --%>
+                      <polygon class="dim-cutout" fill="black" points="" />
                     </mask>
                   </defs>
                   <%!-- 半透明の暗転マスク --%>
@@ -342,32 +481,37 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
                     fill="rgba(0,0,0,0.45)"
                     mask="url(#crop-dim-mask)"
                   />
-                  <%!-- 選択範囲の枠線（Harvest Gold テーマ） --%>
-                  <rect
-                    class="selection-rect"
-                    x="0"
-                    y="0"
-                    width="0"
-                    height="0"
-                    fill="#E6B422"
-                    fill-opacity="0.2"
-                    stroke="#E6B422"
-                    stroke-width="2"
-                    stroke-dasharray="8 4"
-                    style="display:none;"
-                  />
+                  <%!-- ポリゴン、頂点、ラバーバンドはJSで動的に追加 --%>
                 </svg>
               </div>
-              <%!-- ダブルクリックヒント --%>
+              <%!-- 操作ヒント --%>
               <div class="crop-save-hint" role="status">
-                💾 選択範囲をダブルクリックで保存
+                🔷 クリックで頂点追加 → ダブルクリックで閉じて保存
               </div>
+            </div>
+
+            <%!-- クリア/リセットボタン --%>
+            <div class="mt-3 flex gap-3">
+              <button
+                type="button"
+                class="btn-secondary"
+                phx-click="clear_polygon"
+              >
+                🗑️ クリア（やり直し）
+              </button>
+              <button
+                type="button"
+                class="btn-secondary"
+                phx-click="undo"
+              >
+                ↩️ 元に戻す
+              </button>
             </div>
           </div>
 
           <%!-- 右カラム: D-Pad コントロール (sticky サイドバー) --%>
           <div class="crop-sidebar">
-            <div class="sidebar-label">D-Pad 微調整</div>
+            <div class="sidebar-label">D-Pad 微調整（全体移動）</div>
             <%!-- D-Pad 3×3 Grid — インラインTailwindで明示的カラー指定 --%>
             <div
               class="grid grid-cols-3 gap-3 p-6 bg-[#1A2C42]/30 rounded-lg"
