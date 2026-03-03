@@ -14,11 +14,11 @@ defmodule AlchemIiif.Ingestion do
     コンパイル時ではなく実行時にパターンマッチで防ぎます。
   """
   import Ecto.Query
-  alias Ecto.Multi
   alias AlchemIiif.Accounts.User
   alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor, PdfSource}
   alias AlchemIiif.Repo
+  alias Ecto.Multi
 
   # === PdfSource ===
 

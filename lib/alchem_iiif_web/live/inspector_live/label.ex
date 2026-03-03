@@ -26,6 +26,10 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     # 元画像の寸法を取得（Vix はヘッダーのみ遅延読み込み）
     {orig_w, orig_h} = read_source_dimensions(extracted_image.image_path)
 
+    # ジオメトリからプレビュー用データを構築
+    geo = extracted_image.geometry
+    {polygon_points, bbox} = extract_preview_data(geo)
+
     {:ok,
      socket
      |> assign(:page_title, "ラベリング")
@@ -35,8 +39,10 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
      |> assign(:image_url, image_url)
      |> assign(:orig_w, orig_w)
      |> assign(:orig_h, orig_h)
-     |> assign(:geo, extracted_image.geometry)
-     |> assign(:has_crop, extracted_image.geometry != nil)
+     |> assign(:geo, geo)
+     |> assign(:has_crop, geo != nil)
+     |> assign(:polygon_points, polygon_points)
+     |> assign(:bbox, bbox)
      |> assign(:caption, extracted_image.caption || "")
      |> assign(:label, extracted_image.label || "")
      |> assign(:site, extracted_image.site || "")
@@ -490,6 +496,53 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     end
   end
 
+  # ジオメトリデータからプレビュー用のポリゴン頂点とバウンディングボックスを抽出
+  defp extract_preview_data(%{"points" => points}) when is_list(points) and length(points) >= 3 do
+    xs = Enum.map(points, fn p -> safe_int(p["x"]) end)
+    ys = Enum.map(points, fn p -> safe_int(p["y"]) end)
+
+    min_x = Enum.min(xs)
+    min_y = Enum.min(ys)
+    max_x = Enum.max(xs)
+    max_y = Enum.max(ys)
+
+    bbox = %{
+      x: min_x,
+      y: min_y,
+      width: max_x - min_x,
+      height: max_y - min_y
+    }
+
+    # SVG polygon points 文字列を事前生成
+    polygon_points_str =
+      points
+      |> Enum.map(fn p -> "#{safe_int(p["x"])},#{safe_int(p["y"])}" end)
+      |> Enum.join(" ")
+
+    {polygon_points_str, bbox}
+  end
+
+  # 旧矩形データの場合（後方互換性）
+  defp extract_preview_data(%{"x" => x, "y" => y, "width" => w, "height" => h}) do
+    bbox = %{x: safe_int(x), y: safe_int(y), width: safe_int(w), height: safe_int(h)}
+    {nil, bbox}
+  end
+
+  defp extract_preview_data(_), do: {nil, nil}
+
+  # 安全な整数変換
+  defp safe_int(val) when is_integer(val), do: val
+  defp safe_int(val) when is_float(val), do: round(val)
+
+  defp safe_int(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+
+  defp safe_int(_), do: 0
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -530,17 +583,35 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
         <%!-- クロッププレビュー画像 --%>
         <div class={if @has_crop, do: "label-crop-preview", else: "label-preview"}>
-          <%= if @has_crop do %>
+          <%= if @has_crop && @bbox do %>
             <svg
-              viewBox={"#{@geo["x"]} #{@geo["y"]} #{@geo["width"]} #{@geo["height"]}"}
+              viewBox={"#{@bbox.x} #{@bbox.y} #{@bbox.width} #{@bbox.height}"}
               class="label-crop-svg"
               preserveAspectRatio="xMidYMid meet"
             >
-              <image
-                href={@image_url}
-                width={@orig_w}
-                height={@orig_h}
-              />
+              <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+              <rect x={@bbox.x} y={@bbox.y} width={@bbox.width} height={@bbox.height} fill="white" />
+              <%= if @polygon_points do %>
+                <%!-- ポリゴンデータ: clipPath でマスク --%>
+                <defs>
+                  <clipPath id="polygon-clip">
+                    <polygon points={@polygon_points} />
+                  </clipPath>
+                </defs>
+                <image
+                  href={@image_url}
+                  width={@orig_w}
+                  height={@orig_h}
+                  clip-path="url(#polygon-clip)"
+                />
+              <% else %>
+                <%!-- 旧矩形データ: クリップなし --%>
+                <image
+                  href={@image_url}
+                  width={@orig_w}
+                  height={@orig_h}
+                />
+              <% end %>
             </svg>
           <% else %>
             <img src={@image_url} alt="選択した図版" class="label-preview-image" />

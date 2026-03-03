@@ -365,7 +365,8 @@ defmodule AlchemIiif.Pipeline do
 
     result =
       if extracted_image.geometry do
-        # クロップ画像を一時ファイルに保存してからPTIF変換
+        # ポリゴンの場合 crop_image が .png で出力する（透明度保持）ため、
+        # クロップ出力パスも .png を使用
         cropped_path = Path.join(ptif_dir, "#{identifier}_cropped.png")
 
         with :ok <-
@@ -373,10 +374,26 @@ defmodule AlchemIiif.Pipeline do
                  extracted_image.image_path,
                  extracted_image.geometry,
                  cropped_path
-               ),
-             :ok <- ImageProcessor.generate_ptif(cropped_path, ptif_path) do
-          File.rm(cropped_path)
-          :ok
+               ) do
+          # crop_image がポリゴンの場合、拡張子を .png に変更して保存する
+          # 実際に出力されたファイルパスを確認
+          actual_cropped =
+            if File.exists?(cropped_path) do
+              cropped_path
+            else
+              # crop_polygon が .png 拡張子で出力した場合（元が .png なら同じパス）
+              Path.rootname(cropped_path) <> ".png"
+            end
+
+          case ImageProcessor.generate_ptif(actual_cropped, ptif_path) do
+            :ok ->
+              File.rm(actual_cropped)
+              :ok
+
+            error ->
+              File.rm(actual_cropped)
+              error
+          end
         end
       else
         ImageProcessor.generate_ptif(extracted_image.image_path, ptif_path)
