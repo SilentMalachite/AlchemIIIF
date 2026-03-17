@@ -4,6 +4,23 @@
 
 ---
 
+## [Unreleased]
+
+### 🔒 承認導線とアクセス制御の整理
+- **一般ユーザー向け `/lab/approval` ルートを削除**
+  - 承認 UI が認証済み Lab スコープに露出していた状態を解消し、管理者レビュー導線を `/admin/review` に一本化。
+  - 併せて重複していた `ApprovalLive` と関連テストを削除。
+- **画像取得 API を owner / published スコープに対応**
+  - `Ingestion.get_extracted_image!/2` を追加し、Admin は全件、一般ユーザーは自身の `owner_id` または `PdfSource.user_id` に紐づく画像のみ取得可能に変更。
+  - `Ingestion.get_published_extracted_image_with_manifest/1` を追加し、公開ギャラリー側は `published` 画像のみをモーダル表示対象に制限。
+  - Lab の `label` / `finalize` 画面では、他ユーザーの `image_id` を直接指定した場合に `/lab` へリダイレクトするよう改善。
+
+### 📝 ドキュメント整合の修正
+- **`Write-on-Action` / `Lazy Creation` 前提の説明を現行実装に合わせて更新**
+  - README と `ARCHITECTURE.md` の「ページ選択時はレコード未作成」「クロップ時に初回 INSERT」といった古い説明を削除。
+  - 現在の実装どおり、PDF アップロード時にページ画像と対応する `ExtractedImage` レコードが準備され、その後 `Browse` / `Crop` / `Label` で編集する流れに文言を統一。
+  - `crop.ex`、`browse.ex`、`ingestion.ex`、関連テストのモジュールドキュメント・コメントも同じ前提に揃えた。
+
 ## [0.2.22] - 2026-03-03
 
 ### ✂️ 多角形（ポリゴン）クロップ機能の実装
