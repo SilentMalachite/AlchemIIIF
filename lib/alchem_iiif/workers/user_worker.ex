@@ -45,20 +45,13 @@ defmodule AlchemIiif.Workers.UserWorker do
   def handle_cast({:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}, state) do
     Logger.info("⚙️ ユーザー(#{state.user_id})のPDF(ID:#{pdf_source.id})の裏側処理を開始します...")
 
-    # Run the heavy processing in a separate Task
+    # Run the heavy processing in a separate Task.
+    # 成功・失敗のユーザー通知は Pipeline 側に一本化する。
     Task.start(fn ->
-      # Use the correct extraction function（カラーモードを opts に含める）
       AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{
         owner_id: state.user_id,
         color_mode: color_mode
       })
-
-      # Notify the UI that processing is complete
-      Phoenix.PubSub.broadcast(
-        AlchemIiif.PubSub,
-        "pdf_source_#{pdf_source.id}",
-        {:pdf_processed, pdf_source.id}
-      )
     end)
 
     {:noreply, state}

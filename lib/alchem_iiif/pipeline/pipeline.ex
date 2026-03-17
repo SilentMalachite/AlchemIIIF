@@ -36,7 +36,7 @@ defmodule AlchemIiif.Pipeline do
 
   @doc """
   PDF パイプラインのユーザー通知トピック名を返します。
-  バックグラウンド処理完了時に LiveView へ画面遷移を通知するために使用します。
+  バックグラウンド処理の成功・失敗を LiveView へ通知するために使用します。
   """
   def pdf_pipeline_topic(user_id), do: "pdf_pipeline:#{user_id}"
 
@@ -156,6 +156,16 @@ defmodule AlchemIiif.Pipeline do
             phase: :pdf_extraction,
             message: "PDF変換に失敗しました: #{reason}"
           })
+
+          owner_id = opts[:owner_id]
+
+          if owner_id do
+            PubSub.broadcast(
+              @pubsub,
+              pdf_pipeline_topic(owner_id),
+              {:extraction_failed, pdf_source.id, reason}
+            )
+          end
 
           {:error, reason}
       end

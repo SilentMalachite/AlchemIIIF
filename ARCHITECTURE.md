@@ -83,6 +83,13 @@ AlchemIIIF は **モジュラー・モノリス** アーキテクチャを採用
 > PubSub (`pdf_pipeline:{user_id}`) に配信します。Upload 画面はこの通知を受信して
 > プログレスバーをリアルタイムに更新します。`user_id` が未指定の場合は安全にスキップします。
 
+> **アップロード結果通知の明確化**: PDF 抽出のユーザー向け完了通知は `Pipeline` に一本化しています。
+> 成功時は `{:extraction_complete, pdf_source_id}`、失敗時は
+> `{:extraction_failed, pdf_source_id, reason}` を `pdf_pipeline:{user_id}` へ配信します。
+> Upload 画面は `processing_pdf_id` が一致する通知だけを受理し、成功時のみ Browse へ遷移、
+> 失敗時は画面に留まって汎用エラーメッセージを表示します。`UserWorker` は通知を直接送らず、
+> 処理委譲だけを担当します。
+
 > **DB 挿入の最適化 (Bulk Insert)**: `Pipeline` での `ExtractedImage` レコード登録は、
 > 個別 `Repo.insert` ループではなく `Ingestion.bulk_create_extracted_images/1`
 > (`Repo.insert_all/3`) による一括挿入を使用します。DB ラウンドトリップを N 回から 1 回に
@@ -123,10 +130,15 @@ PDF 抽出などの重い処理を LiveView プロセスから分離し、UI の
 │    │  成功時                                                   │
 │    ├── PubSub broadcast {:extraction_complete, pdf_source_id} │
 │    │   (トピック: pdf_pipeline:{owner_id})                     │
+│    │  失敗時                                                   │
+│    ├── PubSub broadcast {:extraction_failed, pdf_source_id,   │
+│    │                           reason}                         │
+│    │   (トピック: pdf_pipeline:{owner_id})                     │
 │    ▼                                                          │
 │  LiveView (handle_info)                                       │
 │    ├── {:extraction_progress, ...} → プログレスバー更新       │
 │    └── {:extraction_complete, ...} → Browse 画面へ遷移        │
+│        {:extraction_failed, ...} → Upload 画面に留まり表示   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
