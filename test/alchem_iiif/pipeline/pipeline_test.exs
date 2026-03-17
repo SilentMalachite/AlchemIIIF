@@ -168,7 +168,7 @@ defmodule AlchemIiif.PipelineTest do
     end
   end
 
-  describe "extraction_complete ブロードキャスト" do
+  describe "ユーザー通知ブロードキャスト" do
     test "成功時に owner_id 指定で {:extraction_complete, pdf_source_id} を配信する" do
       user = insert_user()
       pdf_source = insert_pdf_source(%{status: "uploading", user_id: user.id})
@@ -249,11 +249,14 @@ defmodule AlchemIiif.PipelineTest do
       # Task の完了を待ってから refute する
       Task.await(task, 10_000)
 
-      # PDF が存在しないためエラーパスに入り、extraction_complete は配信されない
+      expected_id = pdf_source.id
+      assert_receive {:extraction_failed, ^expected_id, reason}, 5_000
+      assert is_binary(reason)
+
       refute_receive {:extraction_complete, _}, 500
     end
 
-    test "owner_id 未指定時に {:extraction_complete, _} を配信しない" do
+    test "owner_id 未指定時に {:extraction_complete, _} も {:extraction_failed, _, _} も配信しない" do
       pdf_source = insert_pdf_source(%{status: "uploading"})
       pipeline_id = Pipeline.generate_pipeline_id()
 
@@ -267,6 +270,7 @@ defmodule AlchemIiif.PipelineTest do
       # パイプライン進捗イベントは受信するが、extraction_complete は受信しない
       assert_receive {:pipeline_progress, %{event: :pipeline_started}}, 5_000
       refute_receive {:extraction_complete, _}, 1_000
+      refute_receive {:extraction_failed, _, _}, 1_000
     end
   end
 end

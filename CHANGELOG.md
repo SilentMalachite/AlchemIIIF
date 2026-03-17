@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### 🚨 Upload エラーハンドリングの強化
+- **PDF アップロード完了通知を success / failure で明確に分離**
+  - `Pipeline.run_pdf_extraction/4` は成功時に `{:extraction_complete, pdf_source_id}`、失敗時に `{:extraction_failed, pdf_source_id, reason}` を `pdf_pipeline:{user_id}` トピックへ配信するよう変更。
+  - `pipeline_error` の進捗イベントは従来どおり維持し、`PipelineLive` 側の表示契約は変えない。
+- **`UserWorker` の無条件成功通知を削除**
+  - `UserWorker` は PDF 処理の実行委譲のみに責務を絞り、UI への成功・失敗通知は `Pipeline` に一本化。
+  - これにより、失敗時に `Upload` 画面が誤って「PDFの処理が完了しました！」と遷移する経路を解消。
+- **`Upload` LiveView の失敗時 UX を改善**
+  - `{:extraction_complete, ...}` は `processing_pdf_id` 一致時のみ Browse 画面遷移に使用。
+  - `{:extraction_failed, ...}` は `processing_pdf_id` 一致時のみ受け取り、画面に留まったままスピナーと進捗を解除し、汎用エラーメッセージを表示。
+  - 失敗理由の詳細文字列は UI に直接出さず、内部通知 payload とログに残す方式へ変更。
+- **テストを追加**
+  - `pipeline_test.exs` に失敗通知 `{:extraction_failed, ...}` の検証を追加。
+  - `upload_test.exs` に成功通知・失敗通知・不一致 ID の無視を確認する LiveView テストを追加。
+
 ### 🔒 承認導線とアクセス制御の整理
 - **一般ユーザー向け `/lab/approval` ルートを削除**
   - 承認 UI が認証済み Lab スコープに露出していた状態を解消し、管理者レビュー導線を `/admin/review` に一本化。

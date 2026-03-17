@@ -56,7 +56,14 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
   def handle_event("upload_pdf", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
-    socket = assign(socket, uploading: true, color_mode: color_mode)
+
+    socket =
+      socket
+      |> assign(:uploading, true)
+      |> assign(:color_mode, color_mode)
+      |> assign(:error_message, nil)
+      |> assign(:current_page, 0)
+      |> assign(:total_pages, 0)
 
     uploaded_files =
       consume_uploaded_entries(socket, :pdf, fn %{path: path}, entry ->
@@ -98,9 +105,6 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
           socket.assigns.color_mode
         )
 
-        # 完了メッセージを購読する
-        Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
-
         # 処理中のUI状態を維持
         {:noreply,
          socket
@@ -122,24 +126,32 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   @impl true
-  def handle_info({:extraction_complete, document_id}, socket) do
-    {:noreply,
-     socket
-     |> assign(:uploading, false)
-     |> assign(:current_page, 0)
-     |> assign(:total_pages, 0)
-     |> put_flash(:info, "PDFの処理が完了しました！")
-     |> push_navigate(to: ~p"/lab/browse/#{document_id}")}
-  end
-
-  @impl true
-  def handle_info({:pdf_processed, pdf_source_id}, socket) do
+  def handle_info({:extraction_complete, pdf_source_id}, socket) do
     if socket.assigns[:processing_pdf_id] == pdf_source_id do
       {:noreply,
        socket
        |> assign(:uploading, false)
+       |> assign(:processing_pdf_id, nil)
+       |> assign(:current_page, 0)
+       |> assign(:total_pages, 0)
+       |> assign(:error_message, nil)
        |> put_flash(:info, "PDFの処理が完了しました！")
        |> push_navigate(to: ~p"/lab/browse/#{pdf_source_id}")}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_info({:extraction_failed, pdf_source_id, _reason}, socket) do
+    if socket.assigns[:processing_pdf_id] == pdf_source_id do
+      {:noreply,
+       socket
+       |> assign(:uploading, false)
+       |> assign(:processing_pdf_id, nil)
+       |> assign(:current_page, 0)
+       |> assign(:total_pages, 0)
+       |> assign(:error_message, "PDF の処理に失敗しました。ログを確認するか、別の PDF をお試しください。")}
     else
       {:noreply, socket}
     end
