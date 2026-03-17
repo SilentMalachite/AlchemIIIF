@@ -73,6 +73,16 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert html =~ "図版の情報を入力してください"
       assert html =~ "キャプション"
     end
+
+    test "他ユーザーの画像 ID では Lab 一覧へリダイレクトされる", %{conn: conn} do
+      other_user = insert_user()
+      image = create_user_image(other_user)
+
+      assert {:error, {:live_redirect, %{to: "/lab", flash: flash}}} =
+               live(conn, ~p"/lab/label/#{image.id}")
+
+      assert flash["error"] =~ "指定された画像が見つかりません"
+    end
   end
 
   describe "ナビゲーション" do

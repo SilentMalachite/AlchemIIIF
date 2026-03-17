@@ -95,7 +95,7 @@ defmodule AlchemIiifWeb.GalleryLive do
 
   @impl true
   def handle_event("select_image", %{"id" => id}, socket) do
-    case Ingestion.get_extracted_image_with_manifest(id) do
+    case Ingestion.get_published_extracted_image_with_manifest(id) do
       nil ->
         {:noreply, socket}
 

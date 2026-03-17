@@ -47,7 +47,6 @@ defmodule AlchemIiifWeb.Router do
       live "/label/:image_id", InspectorLive.Label, :label
       live "/finalize/:image_id", InspectorLive.Finalize, :finalize
       live "/search", SearchLive, :index
-      live "/approval", ApprovalLive, :index
       live "/pipeline/:pipeline_id", PipelineLive, :show
     end
   end

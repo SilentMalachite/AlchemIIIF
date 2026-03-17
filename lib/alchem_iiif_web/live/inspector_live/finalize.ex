@@ -15,31 +15,45 @@ defmodule AlchemIiifWeb.InspectorLive.Finalize do
 
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
-    extracted_image = Ingestion.get_extracted_image!(image_id)
+    current_user = socket.assigns.current_user
 
-    # パイプラインIDを生成してサブスクライブ
-    pipeline_id = Pipeline.generate_pipeline_id()
+    extracted_image =
+      try do
+        Ingestion.get_extracted_image!(image_id, current_user)
+      rescue
+        Ecto.NoResultsError -> nil
+      end
 
-    if connected?(socket) do
-      Phoenix.PubSub.subscribe(AlchemIiif.PubSub, Pipeline.topic(pipeline_id))
+    if is_nil(extracted_image) do
+      {:ok,
+       socket
+       |> put_flash(:error, "指定された画像が見つかりません")
+       |> push_navigate(to: ~p"/lab")}
+    else
+      # パイプラインIDを生成してサブスクライブ
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      if connected?(socket) do
+        Phoenix.PubSub.subscribe(AlchemIiif.PubSub, Pipeline.topic(pipeline_id))
+      end
+
+      # システムリソース情報を取得
+      system_info = ResourceMonitor.system_info()
+
+      {:ok,
+       socket
+       |> assign(:page_title, "保存の確認")
+       |> assign(:current_step, 5)
+       |> assign(:extracted_image, extracted_image)
+       |> assign(:pipeline_id, pipeline_id)
+       |> assign(:system_info, system_info)
+       |> assign(:processing, false)
+       |> assign(:completed, false)
+       |> assign(:error_message, nil)
+       |> assign(:manifest_identifier, nil)
+       |> assign(:progress_tasks, %{})
+       |> assign(:overall_progress, 0)}
     end
-
-    # システムリソース情報を取得
-    system_info = ResourceMonitor.system_info()
-
-    {:ok,
-     socket
-     |> assign(:page_title, "保存の確認")
-     |> assign(:current_step, 5)
-     |> assign(:extracted_image, extracted_image)
-     |> assign(:pipeline_id, pipeline_id)
-     |> assign(:system_info, system_info)
-     |> assign(:processing, false)
-     |> assign(:completed, false)
-     |> assign(:error_message, nil)
-     |> assign(:manifest_identifier, nil)
-     |> assign(:progress_tasks, %{})
-     |> assign(:overall_progress, 0)}
   end
 
   @impl true

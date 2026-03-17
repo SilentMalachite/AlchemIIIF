@@ -152,6 +152,67 @@ defmodule AlchemIiif.IngestionTest do
     end
   end
 
+  describe "get_extracted_image!/2" do
+    test "Admin は任意の画像を取得できる" do
+      admin = insert_user(%{role: "admin"})
+      owner = insert_user()
+      pdf_source = insert_pdf_source(%{user_id: owner.id})
+      image = insert_extracted_image(%{pdf_source_id: pdf_source.id, label: "fig-99-2"})
+
+      assert Ingestion.get_extracted_image!(image.id, admin).id == image.id
+    end
+
+    test "一般ユーザーは自分の PdfSource に紐づく画像を取得できる" do
+      user = insert_user()
+      pdf_source = insert_pdf_source(%{user_id: user.id})
+      image = insert_extracted_image(%{pdf_source_id: pdf_source.id, label: "fig-99-3"})
+
+      assert Ingestion.get_extracted_image!(image.id, user).id == image.id
+    end
+
+    test "一般ユーザーは owner_id が一致する画像を取得できる" do
+      user = insert_user()
+      image = insert_extracted_image(%{owner_id: user.id, label: "fig-99-4"})
+
+      assert Ingestion.get_extracted_image!(image.id, user).id == image.id
+    end
+
+    test "一般ユーザーは他人の画像を取得できない" do
+      owner = insert_user()
+      other = insert_user()
+      pdf_source = insert_pdf_source(%{user_id: owner.id})
+      image = insert_extracted_image(%{pdf_source_id: pdf_source.id, label: "fig-99-5"})
+
+      assert_raise Ecto.NoResultsError, fn ->
+        Ingestion.get_extracted_image!(image.id, other)
+      end
+    end
+  end
+
+  describe "get_published_extracted_image_with_manifest/1" do
+    test "公開済み画像のみ取得できる" do
+      image =
+        insert_extracted_image(%{
+          status: "published",
+          ptif_path: "/tmp/published.tif",
+          label: "fig-99-6"
+        })
+
+      manifest = insert_manifest(%{extracted_image_id: image.id})
+
+      result = Ingestion.get_published_extracted_image_with_manifest(image.id)
+
+      assert result.id == image.id
+      assert result.iiif_manifest.identifier == manifest.identifier
+    end
+
+    test "非公開画像は取得できない" do
+      image = insert_extracted_image(%{status: "draft", label: "fig-99-7"})
+
+      assert Ingestion.get_published_extracted_image_with_manifest(image.id) == nil
+    end
+  end
+
   describe "create_extracted_image/1" do
     test "有効な属性で ExtractedImage を作成する" do
       pdf = insert_pdf_source()

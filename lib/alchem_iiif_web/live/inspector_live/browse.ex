@@ -60,12 +60,12 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   def handle_event("select_page", %{"page" => page_str}, socket) do
     case Integer.parse(to_string(page_str)) do
       {page_number, _} ->
-        # ページの存在確認のみ行い、レコードは作成しない（Write-on-Action）
+        # ページの存在確認のみ行い、対象ページの Crop 画面へ進む
         page_image =
           Enum.find(socket.assigns.page_images, &(&1.page_number == page_number))
 
         if page_image do
-          # ダイレクトに Crop 画面へ遷移（Lazy Creation ルート）
+          # ダイレクトに Crop 画面へ遷移
           pdf_id = socket.assigns.pdf_source.id
 
           {:noreply, push_navigate(socket, to: ~p"/lab/inspector/#{pdf_id}/page/#{page_number}")}

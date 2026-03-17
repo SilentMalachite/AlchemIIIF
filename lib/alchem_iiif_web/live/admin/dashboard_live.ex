@@ -86,7 +86,7 @@ defmodule AlchemIiifWeb.Admin.DashboardLive do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    image = Ingestion.get_extracted_image!(id)
+    image = Ingestion.get_extracted_image!(id, socket.assigns.current_user)
 
     # 公開済み画像は通常削除不可（force_delete を使用）
     if image.status == "published" do
@@ -98,7 +98,7 @@ defmodule AlchemIiifWeb.Admin.DashboardLive do
 
   @impl true
   def handle_event("force_delete", %{"id" => id}, socket) do
-    image = Ingestion.get_extracted_image!(id)
+    image = Ingestion.get_extracted_image!(id, socket.assigns.current_user)
     do_delete_image(image, id, socket)
   end
 

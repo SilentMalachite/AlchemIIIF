@@ -307,15 +307,37 @@ defmodule AlchemIiif.Ingestion do
   @doc "IDで抽出画像を取得"
   def get_extracted_image!(id), do: Repo.get!(ExtractedImage, id)
 
-  @doc "IDで抽出画像を取得（iiif_manifest プリロード付き、nil 安全）"
-  def get_extracted_image_with_manifest(id) do
-    case Repo.get(ExtractedImage, id) do
-      nil -> nil
-      image -> Repo.preload(image, :iiif_manifest)
-    end
+  @doc """
+  所有権チェック付きで抽出画像を取得。
+  Admin は任意の画像を取得可能。
+  一般ユーザーは owner_id または紐づく PdfSource.user_id が一致する画像のみ取得可能。
+  """
+  def get_extracted_image!(id, %User{role: "admin"}) do
+    Repo.get!(ExtractedImage, id)
   end
 
-  @doc "pdf_source_id と page_number で既存の抽出画像を検索（Write-on-Action 用）"
+  def get_extracted_image!(id, %User{id: user_id}) do
+    from(e in ExtractedImage,
+      left_join: p in PdfSource,
+      on: p.id == e.pdf_source_id,
+      where: e.id == ^id,
+      where: e.status != "deleted",
+      where: e.owner_id == ^user_id or p.user_id == ^user_id
+    )
+    |> Repo.one!()
+  end
+
+  @doc "公開済み画像を取得（iiif_manifest プリロード付き、nil 安全）"
+  def get_published_extracted_image_with_manifest(id) do
+    from(e in ExtractedImage,
+      where: e.id == ^id,
+      where: e.status == "published",
+      preload: [:iiif_manifest]
+    )
+    |> Repo.one()
+  end
+
+  @doc "pdf_source_id と page_number で既存の抽出画像を検索"
   def find_extracted_image_by_page(pdf_source_id, page_number) do
     from(e in ExtractedImage,
       where: e.pdf_source_id == ^pdf_source_id,

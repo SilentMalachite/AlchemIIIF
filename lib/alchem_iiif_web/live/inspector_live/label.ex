@@ -13,50 +13,63 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
-    extracted_image = Ingestion.get_extracted_image!(image_id)
+    current_user = socket.assigns.current_user
 
-    pdf_source =
-      Ingestion.get_pdf_source!(extracted_image.pdf_source_id, socket.assigns.current_user)
+    extracted_image =
+      try do
+        Ingestion.get_extracted_image!(image_id, current_user)
+      rescue
+        Ecto.NoResultsError -> nil
+      end
 
-    # 画像のURLを生成（プレビュー用）
-    image_url =
-      extracted_image.image_path
-      |> String.replace_leading("priv/static/", "/")
+    if is_nil(extracted_image) do
+      {:ok,
+       socket
+       |> put_flash(:error, "指定された画像が見つかりません")
+       |> push_navigate(to: ~p"/lab")}
+    else
+      pdf_source = Ingestion.get_pdf_source!(extracted_image.pdf_source_id, current_user)
 
-    # 元画像の寸法を取得（Vix はヘッダーのみ遅延読み込み）
-    {orig_w, orig_h} = read_source_dimensions(extracted_image.image_path)
+      # 画像のURLを生成（プレビュー用）
+      image_url =
+        extracted_image.image_path
+        |> String.replace_leading("priv/static/", "/")
 
-    # ジオメトリからプレビュー用データを構築
-    geo = extracted_image.geometry
-    {polygon_points, bbox} = extract_preview_data(geo)
+      # 元画像の寸法を取得（Vix はヘッダーのみ遅延読み込み）
+      {orig_w, orig_h} = read_source_dimensions(extracted_image.image_path)
 
-    {:ok,
-     socket
-     |> assign(:page_title, "ラベリング")
-     |> assign(:current_step, 4)
-     |> assign(:extracted_image, extracted_image)
-     |> assign(:pdf_source, pdf_source)
-     |> assign(:image_url, image_url)
-     |> assign(:orig_w, orig_w)
-     |> assign(:orig_h, orig_h)
-     |> assign(:geo, geo)
-     |> assign(:has_crop, geo != nil)
-     |> assign(:polygon_points, polygon_points)
-     |> assign(:bbox, bbox)
-     |> assign(:caption, extracted_image.caption || "")
-     |> assign(:label, extracted_image.label || "")
-     |> assign(:site, extracted_image.site || "")
-     |> assign(:period, extracted_image.period || "")
-     |> assign(:artifact_type, extracted_image.artifact_type || "")
-     |> assign(:undo_stack, [])
-     |> assign(:pre_edit_snapshot, nil)
-     |> assign(:duplicate_record, check_duplicate_label(extracted_image))
-     |> assign(:validation_errors, %{})
-     |> assign(:save_state, :idle)
-     |> assign(
-       :is_rejected,
-       extracted_image.status == "rejected" || pdf_source.workflow_status == "returned"
-     )}
+      # ジオメトリからプレビュー用データを構築
+      geo = extracted_image.geometry
+      {polygon_points, bbox} = extract_preview_data(geo)
+
+      {:ok,
+       socket
+       |> assign(:page_title, "ラベリング")
+       |> assign(:current_step, 4)
+       |> assign(:extracted_image, extracted_image)
+       |> assign(:pdf_source, pdf_source)
+       |> assign(:image_url, image_url)
+       |> assign(:orig_w, orig_w)
+       |> assign(:orig_h, orig_h)
+       |> assign(:geo, geo)
+       |> assign(:has_crop, geo != nil)
+       |> assign(:polygon_points, polygon_points)
+       |> assign(:bbox, bbox)
+       |> assign(:caption, extracted_image.caption || "")
+       |> assign(:label, extracted_image.label || "")
+       |> assign(:site, extracted_image.site || "")
+       |> assign(:period, extracted_image.period || "")
+       |> assign(:artifact_type, extracted_image.artifact_type || "")
+       |> assign(:undo_stack, [])
+       |> assign(:pre_edit_snapshot, nil)
+       |> assign(:duplicate_record, check_duplicate_label(extracted_image))
+       |> assign(:validation_errors, %{})
+       |> assign(:save_state, :idle)
+       |> assign(
+         :is_rejected,
+         extracted_image.status == "rejected" || pdf_source.workflow_status == "returned"
+       )}
+    end
   end
 
   # --- メタデータ更新イベント ---
@@ -358,7 +371,12 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
     if socket.assigns.is_rejected do
       case save_metadata(socket, %{}) do
         {:ok, _} ->
-          updated = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+          updated =
+            Ingestion.get_extracted_image!(
+              socket.assigns.extracted_image.id,
+              socket.assigns.current_user
+            )
+
           Ingestion.resubmit_image(updated)
 
         error ->
@@ -372,7 +390,11 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   defp handle_save_result({:ok, _updated}, socket, action) do
     # PTIF をバックグラウンド生成（全アクション共通）
-    updated_image = Ingestion.get_extracted_image!(socket.assigns.extracted_image.id)
+    updated_image =
+      Ingestion.get_extracted_image!(
+        socket.assigns.extracted_image.id,
+        socket.assigns.current_user
+      )
 
     Task.start(fn ->
       AlchemIiif.Pipeline.generate_single_ptif(updated_image)

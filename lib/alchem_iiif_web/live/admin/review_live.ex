@@ -89,7 +89,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
-    image = Ingestion.get_extracted_image!(id)
+    image = Ingestion.get_extracted_image!(id, socket.assigns.current_user)
 
     case Ingestion.soft_delete_image(image) do
       {:ok, _deleted} ->
@@ -129,7 +129,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
   @impl true
   def handle_event("approve", %{"id" => id}, socket) do
-    image = Ingestion.get_extracted_image!(id)
+    image = Ingestion.get_extracted_image!(id, socket.assigns.current_user)
 
     case Ingestion.approve_and_publish(image) do
       {:ok, _updated} ->
@@ -181,7 +181,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   def handle_event("confirm_reject", _params, socket) do
     id = socket.assigns.reject_target_id
     note = socket.assigns.reject_note
-    image = Ingestion.get_extracted_image!(id)
+    image = Ingestion.get_extracted_image!(id, socket.assigns.current_user)
 
     case Ingestion.reject_to_draft_with_note(image, note) do
       {:ok, _updated} ->

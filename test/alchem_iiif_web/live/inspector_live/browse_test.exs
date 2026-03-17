@@ -6,8 +6,8 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
   マウント時の初期表示、select_page イベントでのダイレクトナビゲーション、
   エラーハンドリングを検証します。
 
-  ## Lazy Creation ルート
-  select_page はレコードを作成せず、ダイレクトに Crop 画面へ遷移します。
+  ## ページ選択ルート
+  select_page は選択したページの Crop 画面へダイレクトに遷移します。
   ルート: /lab/inspector/:pdf_source_id/page/:page_number
   """
   use AlchemIiifWeb.ConnCase, async: false
@@ -73,7 +73,7 @@ defmodule AlchemIiifWeb.InspectorLive.BrowseTest do
 
       {:ok, view, _html} = live(conn, ~p"/lab/browse/#{pdf_source.id}")
 
-      # サムネイルクリック → ダイレクトに Crop 画面（Lazy Creation ルート）へ遷移
+      # サムネイルクリック → ダイレクトに Crop 画面へ遷移
       assert {:error, {:live_redirect, %{to: to}}} =
                view
                |> element("button.page-thumbnail", "ページ 1")

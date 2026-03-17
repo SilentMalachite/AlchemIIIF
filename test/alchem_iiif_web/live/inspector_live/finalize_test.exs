@@ -13,10 +13,15 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
 
   setup :register_and_log_in_user
 
+  defp create_user_image(user, overrides \\ %{}) do
+    pdf_source = insert_pdf_source(%{user_id: user.id})
+    insert_extracted_image(Map.put(overrides, :pdf_source_id, pdf_source.id))
+  end
+
   describe "マウント" do
-    test "初期状態で確認画面が表示される", %{conn: conn} do
+    test "初期状態で確認画面が表示される", %{conn: conn, user: user} do
       image =
-        insert_extracted_image(%{
+        create_user_image(user, %{
           page_number: 3,
           caption: "テスト土器第3図",
           label: "fig-3-1",
@@ -38,8 +43,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert html =~ "クロップ範囲"
     end
 
-    test "システムリソース情報が表示される", %{conn: conn} do
-      image = insert_extracted_image()
+    test "システムリソース情報が表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, _view, html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -50,8 +55,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert html =~ "GB"
     end
 
-    test "保存ボタンが表示される", %{conn: conn} do
-      image = insert_extracted_image()
+    test "保存ボタンが表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, view, html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -59,19 +64,29 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert has_element?(view, "button.btn-confirm")
     end
 
-    test "初期状態でプログレスバーは非表示", %{conn: conn} do
-      image = insert_extracted_image()
+    test "初期状態でプログレスバーは非表示", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, _view, html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
       # 処理中ではないのでプログレスバーは非表示
       refute html =~ "処理の進捗"
     end
+
+    test "他ユーザーの画像 ID では Lab 一覧へリダイレクトされる", %{conn: conn} do
+      other_user = insert_user()
+      image = create_user_image(other_user)
+
+      assert {:error, {:live_redirect, %{to: "/lab", flash: flash}}} =
+               live(conn, ~p"/lab/finalize/#{image.id}")
+
+      assert flash["error"] =~ "指定された画像が見つかりません"
+    end
   end
 
   describe "キャプション・ラベルなしの場合" do
-    test "キャプションがない場合は表示されない", %{conn: conn} do
-      image = insert_extracted_image(%{caption: nil, label: nil, geometry: nil})
+    test "キャプションがない場合は表示されない", %{conn: conn, user: user} do
+      image = create_user_image(user, %{caption: nil, label: nil, geometry: nil})
 
       {:ok, _view, html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -82,8 +97,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
   end
 
   describe "PubSub 進捗イベント" do
-    test "タスク進捗イベントで progress_tasks が更新される", %{conn: conn} do
-      image = insert_extracted_image()
+    test "タスク進捗イベントで progress_tasks が更新される", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -118,8 +133,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert html =~ "保存が完了しました"
     end
 
-    test "完了イベントで成功画面が表示される", %{conn: conn} do
-      image = insert_extracted_image()
+    test "完了イベントで成功画面が表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -138,8 +153,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert html =~ "レビューに提出"
     end
 
-    test "エラーイベントでエラーメッセージが表示される", %{conn: conn} do
-      image = insert_extracted_image()
+    test "エラーイベントでエラーメッセージが表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -152,8 +167,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
   end
 
   describe "レビュー提出" do
-    test "draft ステータスの画像をレビューに提出できる", %{conn: conn} do
-      image = insert_extracted_image(%{status: "draft", ptif_path: "/tmp/test.tif"})
+    test "draft ステータスの画像をレビューに提出できる", %{conn: conn, user: user} do
+      image = create_user_image(user, %{status: "draft", ptif_path: "/tmp/test.tif"})
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -179,8 +194,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
   end
 
   describe "ステータス表示" do
-    test "完了後に pending_review ステータスが表示される", %{conn: conn} do
-      image = insert_extracted_image(%{status: "draft"})
+    test "完了後に pending_review ステータスが表示される", %{conn: conn, user: user} do
+      image = create_user_image(user, %{status: "draft"})
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 
@@ -196,8 +211,8 @@ defmodule AlchemIiifWeb.InspectorLive.FinalizeTest do
       assert html =~ "レビュー待ち"
     end
 
-    test "完了後に published ステータスが表示される", %{conn: conn} do
-      image = insert_extracted_image(%{status: "draft"})
+    test "完了後に published ステータスが表示される", %{conn: conn, user: user} do
+      image = create_user_image(user, %{status: "draft"})
 
       {:ok, view, _html} = live(conn, ~p"/lab/finalize/#{image.id}")
 

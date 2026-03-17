@@ -170,11 +170,6 @@ SearchLive               ステータス変更          IIIF API 配信
 | 差し戻し | `return_project/2` | `pending_review` → `returned`。管理者メッセージを保存 |
 | 承認 | `approve_project/1` | `pending_review` → `approved` |
 
-> **Write-on-Action ポリシー**: Browse（Step 2）でページを選択しても DB にレコードは
-> 作成されません。ExtractedImage レコードは Crop（Step 3）でユーザーが明示的に
-> クロップ範囲を保存した時に初めて作成されます。これにより空のゴーストレコードの
-> 発生を防止します。
-
 > **ギャラリーモーダル**: 公開ギャラリーではカードクリックにより、IIIF 対応の
 > OpenSeadragon を使用したシームレスな拡大表示モーダルを表示します
 > （PTIFF 生成前の場合は SVG `viewBox` ベースのフォールバック表示）。
@@ -199,12 +194,15 @@ PDF ファイル
 [pdftoppm] ──── 10 ページ単位でチャンク分割 → 300 DPI PNG 逐次生成
     │
     ▼
+[Pipeline] ──── ページ画像を配置し、ExtractedImage レコードを一括登録
+    │
+    ▼
 サムネイルグリッド (/lab/browse/:pdf_source_id)
-    │  Step 2: ユーザーがページ選択（レコード作成なし — Write-on-Action）
+    │  Step 2: ユーザーが対象ページを選択
     ▼
 ImageSelection Hook ──── ポリゴン手動クロップ (/lab/crop/:pdf_source_id/:page_number)
     │  Step 3: クリックで頂点追加 → ダブルクリック（または始点クリック/Enter）で
-    │          多角形を閉じて保存。★ ここで初めて ExtractedImage レコードを INSERT。
+    │          多角形を閉じて保存。選択範囲を対応レコードに反映。
     │          D-Pad でポリゴン全体を微調整可能。
     ▼
 メタデータ入力フォーム (/lab/label/:image_id)
@@ -411,7 +409,7 @@ IIIF クライアント (Mirador, Universal Viewer 等)
 | `/lab/projects/:id` | `LabLive.Show` | Lab: プロジェクト詳細（画像グリッド） |
 | `/lab/upload` | `InspectorLive.Upload` | Lab: Step 1 — PDF アップロード |
 | `/lab/browse/:pdf_source_id` | `InspectorLive.Browse` | Lab: Step 2 — ページ選択 |
-| `/lab/crop/:pdf_source_id/:page_number` | `InspectorLive.Crop` | Lab: Step 3 — クロップ (Write-on-Action) |
+| `/lab/crop/:pdf_source_id/:page_number` | `InspectorLive.Crop` | Lab: Step 3 — クロップ |
 | `/lab/label/:image_id` | `InspectorLive.Label` | Lab: Step 4 — ラベリング |
 | `/lab/finalize/:image_id` | `InspectorLive.Finalize` | Lab: Step 5 — レビュー提出 |
 | `/lab/search` | `SearchLive` | Lab: 検索 |
@@ -556,7 +554,7 @@ LiveView (Elixir)              JS Hook (JavaScript)
 ### ギャラリー UI アーキテクチャ
 
 *   **Masonry Layout**: CSS Multi-column (`columns-xs`, `break-inside-avoid`) を採用し、Pinterest 風の不規則なグリッドレイアウトを実現。
-*   **Lazy Creation**: `Browse` 画面でのページ選択時は DB レコードを作成せず（Write-on-Action）、`Crop` 画面での明示的な保存操作をトリガーとすることで、ゴーストレコードの発生を抑制します。
+*   **段階的な編集フロー**: PDF アップロード後にページ画像と対応レコードを準備し、`Browse` / `Crop` / `Label` の各画面で必要な情報を順に編集します。
 
 ### 認知アクセシビリティの設計原則
 

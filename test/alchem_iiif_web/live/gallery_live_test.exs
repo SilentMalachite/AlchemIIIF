@@ -131,6 +131,23 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
       assert html =~ "bg-black/90"
     end
 
+    test "非公開画像の ID を直接送ってもモーダルは開かない", %{conn: conn} do
+      image =
+        insert_extracted_image(%{
+          ptif_path: "/path/to/draft-modal.tif",
+          status: "draft",
+          label: "fig-44-2",
+          image_path: "priv/static/uploads/test.png"
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      refute html =~ "bg-black/90"
+      refute html =~ "fig-44-2"
+    end
+
     test "close_modal でモーダルが閉じる", %{conn: conn} do
       image =
         insert_extracted_image(%{

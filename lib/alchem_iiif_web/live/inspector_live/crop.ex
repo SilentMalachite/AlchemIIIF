@@ -6,9 +6,10 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   SVG オーバーレイで選択範囲を可視化。
   Undo 機能を搭載。ダブルクリック（ダブルタップ）で明示的に保存。
 
-  ## Write-on-Action ポリシー
-  ExtractedImage レコードは save_crop 時に初めて作成されます。
-  Browse からはレコードIDを受け取らず、pdf_source_id と page_number で動作します。
+  ## データの扱い
+  通常はアップロード時に準備された ExtractedImage レコードを読み込み、
+  pdf_source_id と page_number を使って対象ページのクロップ情報を更新します。
+  既存レコードが見つからない場合の新規作成も後方互換としてサポートします。
 
   ## Phase 1 注記
   ポリゴン頂点配列（points）を受信・表示するが、
@@ -135,7 +136,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     result =
       case socket.assigns.extracted_image do
         nil ->
-          # 新規作成（Write-on-Action: 初めてここでレコードを作成）
+          # 既存レコードがない場合のみ新規作成（後方互換）
           Ingestion.create_extracted_image(%{
             pdf_source_id: socket.assigns.pdf_source.id,
             page_number: socket.assigns.page_number,
