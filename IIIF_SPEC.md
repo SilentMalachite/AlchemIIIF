@@ -70,6 +70,7 @@ To support academic research, specific archaeological metadata fields are indexe
 ### 5.2 Implementation Strategy
 - **PostgreSQL FTS:** Utilizes `tsvector` and `GIN` indexes for performant full-text search on captions.
 - **Faceted Search:** LiveView-driven filtering by Period and Artifact Type.
+- **Pagination:** Gallery search results are paginated at 10 items per page using a "Load More" button. Results are appended incrementally; search or filter changes reset to the first page.
 
 ## 6. IIIF Server Implementation (Delivery)
 
@@ -136,6 +137,7 @@ const ImageSelection = {
 - **Simplicity:** Clean UI with zero hidden menus. Use large, high-contrast, easily clickable elements.
 - **Linearity:** Use a "Wizard" pattern to prevent users from becoming lost in complex or non-linear navigation.
 - **Masonry Layout:** The Gallery uses a masonry grid layout (CSS Multi-column) to display images of varying aspect ratios without cropping, preserving their original composition.
+- **Progressive Loading:** The Gallery loads results in batches of 10 via a "Load More" button, reducing initial page load and DOM size.
 - **Write-on-Action:** Database records are only created when the user explicitly saves a crop (Step 3), preventing "ghost records" from cluttering the database during browsing.
 - **Immediate Feedback:** Provide clear visual confirmation (e.g., "Image Saved Successfully!") and require explicit confirmation for destructive actions.
 - **Human-in-the-loop:** Optimize manual data entry (captions/metadata) through structured, accessible forms rather than automated extraction.
