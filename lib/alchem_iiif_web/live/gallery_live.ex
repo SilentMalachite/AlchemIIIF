@@ -15,13 +15,15 @@ defmodule AlchemIiifWeb.GalleryLive do
   alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Search
 
+  @per_page 10
+
   @impl true
   def mount(_params, _session, socket) do
     # 利用可能なフィルターオプションを取得
     filter_options = Search.list_filter_options()
 
-    # 公開済み画像のみ表示
-    results = Search.search_published_images()
+    # 公開済み画像のみ表示（最初の10件）
+    results = Search.search_published_images("", %{}, limit: @per_page, offset: 0)
     match_count = Search.count_published_results()
     preview_map = build_preview_map(results)
 
@@ -34,6 +36,7 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:results, results)
      |> assign(:match_count, match_count)
      |> assign(:preview_map, preview_map)
+     |> assign(:page, 1)
      |> assign(:selected_image, nil)
      |> assign(:selected_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
@@ -43,7 +46,12 @@ defmodule AlchemIiifWeb.GalleryLive do
 
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
-    results = Search.search_published_images(query, socket.assigns.filters)
+    results =
+      Search.search_published_images(query, socket.assigns.filters,
+        limit: @per_page,
+        offset: 0
+      )
+
     match_count = Search.count_published_results(query, socket.assigns.filters)
     preview_map = build_preview_map(results)
 
@@ -52,7 +60,8 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:query, query)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:preview_map, preview_map)}
+     |> assign(:preview_map, preview_map)
+     |> assign(:page, 1)}
   end
 
   @impl true
@@ -67,7 +76,12 @@ defmodule AlchemIiifWeb.GalleryLive do
         Map.put(filters, type, value)
       end
 
-    results = Search.search_published_images(socket.assigns.query, updated_filters)
+    results =
+      Search.search_published_images(socket.assigns.query, updated_filters,
+        limit: @per_page,
+        offset: 0
+      )
+
     match_count = Search.count_published_results(socket.assigns.query, updated_filters)
     preview_map = build_preview_map(results)
 
@@ -76,12 +90,18 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filters, updated_filters)
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:preview_map, preview_map)}
+     |> assign(:preview_map, preview_map)
+     |> assign(:page, 1)}
   end
 
   @impl true
   def handle_event("clear_filters", _params, socket) do
-    results = Search.search_published_images(socket.assigns.query, %{})
+    results =
+      Search.search_published_images(socket.assigns.query, %{},
+        limit: @per_page,
+        offset: 0
+      )
+
     match_count = Search.count_published_results(socket.assigns.query, %{})
     preview_map = build_preview_map(results)
 
@@ -90,7 +110,28 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:filters, %{})
      |> assign(:results, results)
      |> assign(:match_count, match_count)
-     |> assign(:preview_map, preview_map)}
+     |> assign(:preview_map, preview_map)
+     |> assign(:page, 1)}
+  end
+
+  @impl true
+  def handle_event("load_more", _params, socket) do
+    %{page: page, query: query, filters: filters, results: existing, preview_map: existing_map} =
+      socket.assigns
+
+    new_results =
+      Search.search_published_images(query, filters,
+        limit: @per_page,
+        offset: page * @per_page
+      )
+
+    new_preview_map = build_preview_map(new_results)
+
+    {:noreply,
+     socket
+     |> assign(:results, existing ++ new_results)
+     |> assign(:preview_map, Map.merge(existing_map, new_preview_map))
+     |> assign(:page, page + 1)}
   end
 
   @impl true
@@ -397,6 +438,19 @@ defmodule AlchemIiifWeb.GalleryLive do
             </div>
           <% end %>
         </div>
+
+        <%!-- 「もっと見る」ボタン --%>
+        <%= if length(@results) < @match_count do %>
+          <div class="flex justify-center mt-8 mb-4">
+            <button
+              type="button"
+              class="btn-secondary btn-large"
+              phx-click="load_more"
+            >
+              もっと見る（残り {remaining_count(@match_count, @results)} 件）
+            </button>
+          </div>
+        <% end %>
       <% end %>
 
       <%!-- 画像拡大モーダル --%>
@@ -505,6 +559,9 @@ defmodule AlchemIiifWeb.GalleryLive do
   # 結果件数のテキスト
   defp result_text(0), do: "結果なし"
   defp result_text(count), do: "#{count} 件の図版が見つかりました"
+
+  # 残り件数の計算
+  defp remaining_count(total, loaded), do: total - length(loaded)
 
   # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
   # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持

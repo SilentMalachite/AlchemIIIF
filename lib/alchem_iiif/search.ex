@@ -47,13 +47,18 @@ defmodule AlchemIiif.Search do
   公開済み画像のみを検索（Gallery用）。
   status == 'published' のみ返します。
   """
-  def search_published_images(query_text \\ "", filters \\ %{}) do
+  def search_published_images(query_text \\ "", filters \\ %{}, opts \\ []) do
+    limit_val = Keyword.get(opts, :limit, 10)
+    offset_val = Keyword.get(opts, :offset, 0)
+
     ExtractedImage
     |> where([e], e.status == "published" and e.status != "deleted")
     |> where([e], not is_nil(e.ptif_path) and e.ptif_path != "")
     |> apply_text_search(query_text)
     |> apply_filters(filters)
     |> order_by([e], desc: e.inserted_at)
+    |> limit(^limit_val)
+    |> offset(^offset_val)
     |> preload(:iiif_manifest)
     |> Repo.all()
   end
