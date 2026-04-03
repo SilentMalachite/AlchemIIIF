@@ -67,11 +67,11 @@ defmodule AlchemIiif.Search do
   利用可能なフィルターオプションを取得します。
   各フィルターの DISTINCT 値をリストで返します。
   """
-  def list_filter_options do
+  def list_filter_options(opts \\ []) do
     %{
-      sites: list_distinct_values(:site),
-      periods: list_distinct_values(:period),
-      artifact_types: list_distinct_values(:artifact_type)
+      sites: list_distinct_values(:site, opts),
+      periods: list_distinct_values(:period, opts),
+      artifact_types: list_distinct_values(:artifact_type, opts)
     }
   end
 
@@ -149,8 +149,17 @@ defmodule AlchemIiif.Search do
   end
 
   # DISTINCT 値の取得
-  defp list_distinct_values(field) do
-    ExtractedImage
+  defp list_distinct_values(field, opts) do
+    base =
+      if Keyword.get(opts, :published_only, false) do
+        ExtractedImage
+        |> where([e], e.status == "published")
+        |> where([e], not is_nil(e.ptif_path) and e.ptif_path != "")
+      else
+        ExtractedImage
+      end
+
+    base
     |> where([e], not is_nil(field(e, ^field)))
     |> where([e], field(e, ^field) != "")
     |> select([e], field(e, ^field))

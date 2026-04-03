@@ -198,6 +198,78 @@ defmodule AlchemIiif.SearchTest do
     end
   end
 
+  describe "list_filter_options/1 published_only" do
+    test "published_only: true は公開済み画像の値のみ返す" do
+      create_test_images()
+
+      options = Search.list_filter_options(published_only: true)
+
+      # draft の img3 の遺跡「吉野ヶ里町遺跡」は img1(published) にもあるので含まれる
+      assert "吉野ヶ里町遺跡" in options.sites
+      assert "静岡市登呂遺跡" in options.sites
+
+      # draft のみに存在する artifact_type「石器」は除外される
+      refute "石器" in options.artifact_types
+      # published の artifact_type は含まれる
+      assert "土器" in options.artifact_types
+      assert "銅鉛" in options.artifact_types
+    end
+
+    test "ptif_path が nil の published 画像は除外される" do
+      pdf = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf.id,
+        page_number: 1,
+        caption: "PTIF未生成",
+        label: "fig-90-1",
+        site: "奈良市未生成遺跡",
+        period: "古墳時代",
+        artifact_type: "埴輪",
+        status: "published",
+        ptif_path: nil
+      })
+
+      options = Search.list_filter_options(published_only: true)
+
+      refute "奈良市未生成遺跡" in options.sites
+      refute "古墳時代" in options.periods
+      refute "埴輪" in options.artifact_types
+    end
+
+    test "ptif_path が空文字の published 画像は除外される" do
+      pdf = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf.id,
+        page_number: 1,
+        caption: "PTIF空文字",
+        label: "fig-91-1",
+        site: "京都市空文字遺跡",
+        period: "平安時代",
+        artifact_type: "瓦",
+        status: "published",
+        ptif_path: ""
+      })
+
+      options = Search.list_filter_options(published_only: true)
+
+      refute "京都市空文字遺跡" in options.sites
+      refute "平安時代" in options.periods
+      refute "瓦" in options.artifact_types
+    end
+
+    test "published_only なしの既存動作は変わらない" do
+      create_test_images()
+
+      options = Search.list_filter_options()
+
+      # draft の img3 の値も含まれる
+      assert "石器" in options.artifact_types
+      assert "吉野ヶ里町遺跡" in options.sites
+    end
+  end
+
   describe "count_results/2" do
     test "全結果件数を返す" do
       create_test_images()

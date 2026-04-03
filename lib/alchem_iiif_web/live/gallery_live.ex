@@ -20,7 +20,7 @@ defmodule AlchemIiifWeb.GalleryLive do
   @impl true
   def mount(_params, _session, socket) do
     # 利用可能なフィルターオプションを取得
-    filter_options = Search.list_filter_options()
+    filter_options = Search.list_filter_options(published_only: true)
 
     # 公開済み画像のみ表示（最初の10件）
     results = Search.search_published_images("", %{}, limit: @per_page, offset: 0)
