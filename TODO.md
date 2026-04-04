@@ -18,7 +18,7 @@
 
 ## 品質メモ
 
-- `mix test` は確認時点で **411 tests, 0 failures, 4 skipped**。
+- `mix test` は確認時点で **407 tests, 0 failures**（skip なし）。
 - `mix.exs` のアプリバージョンは **0.2.23**。
 - `CHANGELOG.md` の `[0.2.23] - 2026-04-04` セクションにリリース済み。`[Unreleased]` は空。
 
@@ -32,8 +32,8 @@
   `[Unreleased]` を `[0.2.23] - 2026-04-04` に変換し、フィルター候補変更・CLAUDE.md 新設も追記。`mix.exs` を `0.2.23` に更新。README との整合性も確認済み。
 - [済] ~~古くなったコメントやモジュールドキュメントを整理する。~~
   `crop.ex` の `@moduledoc` から「Phase 1 注記 / Phase 2 で対応予定」を削除し、vix 処理が承認時に動く現行の流れに更新。デバッグ用 `IO.inspect`（`[Phase1]` ラベル）2 箇所も削除。`browse.ex`・`ingestion.ex` への同種の残存は確認されなかった。
-- [低] 招待制移行後も skip のまま残っている登録テストの扱いを決める。
-  `UserRegistrationControllerTest` は現状のルーティングとずれているため、削除するか、招待制前提の別テストに置き換えるかを決めたい。
+- [済] ~~招待制移行後も skip のまま残っている登録テストの扱いを決める。~~
+  `UserRegistrationControllerTest`（4 件すべて skip）を削除。コントローラー本体・ルートともに削除済みであり、管理者によるユーザー作成は `AdminUserLive.IndexTest` でカバー済みのため、置き換えは不要と判断。407 tests, 0 failures で通過確認済み。
 
 ## メモ
 
