@@ -1,0 +1,179 @@
+AlchemIIIF
+Copyright 2026 AlchemIIIF Contributors
+
+This product is licensed under the Apache License, Version 2.0.
+You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+
+------------------------------------------------------------------------
+
+This product includes software developed by third parties,
+each of which is subject to its own license as listed below.
+
+========================================================================
+Apache License 2.0
+========================================================================
+
+The following components are licensed under the Apache License, Version 2.0
+(http://www.apache.org/licenses/LICENSE-2.0):
+
+  Ecto
+  Copyright (c) 2012 Plataformatec
+  Copyright (c) 2020 Dashbit
+  https://github.com/elixir-ecto/ecto
+
+  Ecto SQL
+  Copyright (c) 2012 Plataformatec
+  Copyright (c) 2020 Dashbit
+  https://github.com/elixir-ecto/ecto_sql
+
+  Postgrex
+  Copyright 2013 Eric Meadows-Jönsson
+  https://github.com/elixir-ecto/postgrex
+
+  Plug
+  Copyright (c) 2013 Plataformatec
+  https://github.com/elixir-plug/plug
+
+  Plug.Crypto
+  Copyright (c) 2018 Plataformatec
+  https://github.com/elixir-plug/plug_crypto
+
+  Req
+  Copyright (c) 2021 Wojtek Mach
+  https://github.com/wojtekmach/req
+
+  Gettext
+  Copyright 2015 Plataformatec
+  https://github.com/elixir-gettext/gettext
+
+  Jason
+  Copyright (c) 2017 Michał Muskała
+  https://github.com/michalmuskala/jason
+
+  Telemetry
+  Copyright (c) 2019 Erlang Ecosystem Foundation and Erlang Solutions
+  https://github.com/beam-telemetry/telemetry
+
+  Telemetry.Metrics
+  Copyright (c) 2019 Erlang Ecosystem Foundation and Erlang Solutions
+  https://github.com/beam-telemetry/telemetry_metrics
+
+  Telemetry.Poller
+  Copyright (c) 2019 Erlang Ecosystem Foundation and Erlang Solutions
+  https://github.com/beam-telemetry/telemetry_poller
+
+  DB Connection
+  Copyright 2015 James Fish
+  https://github.com/elixir-ecto/db_connection
+
+  MIME
+  Copyright (c) 2016 Plataformatec
+  https://github.com/elixir-plug/mime
+
+  NimbleOptions
+  Copyright 2020 Dashbit
+  https://github.com/dashbitco/nimble_options
+
+  Sobelow [dev/test only]
+  Copyright (c) Griffin Byatt, Holden Oullette
+  https://github.com/nccgroup/sobelow
+
+  Dialyxir [dev/test only]
+  Copyright (c) Jeremy Huffman
+  https://github.com/jeremyjh/dialyxir
+
+  ExDoc [dev only]
+  Copyright 2012 Plataformatec
+  Copyright 2021 The Elixir Team
+  https://github.com/elixir-lang/ex_doc
+
+========================================================================
+MIT License
+========================================================================
+
+The following components are licensed under the MIT License:
+
+  Phoenix Framework
+  Copyright (c) 2014 Chris McCord
+  https://github.com/phoenixframework/phoenix
+
+  Phoenix LiveView
+  Copyright (c) 2018 Chris McCord
+  https://github.com/phoenixframework/phoenix_live_view
+
+  Phoenix HTML
+  Copyright (c) 2014 Chris McCord
+  https://github.com/phoenixframework/phoenix_html
+
+  Phoenix Ecto
+  Copyright (c) 2014 Chris McCord
+  https://github.com/phoenixframework/phoenix_ecto
+
+  Phoenix LiveDashboard
+  Copyright (c) 2019 Chris McCord
+  https://github.com/phoenixframework/phoenix_live_dashboard
+
+  Bandit
+  Copyright (c) 2019 Mat Trudel
+  https://github.com/mtrudel/bandit
+
+  Thousand Island
+  Copyright (c) 2019 Mat Trudel
+  https://github.com/mtrudel/thousand_island
+
+  Vix
+  Copyright (c) 2021 Akash Hiremath
+  https://github.com/akash-akya/vix
+
+  Swoosh
+  Copyright (c) 2016 Swoosh contributors
+  https://github.com/swoosh/swoosh
+
+  Credo [dev/test only]
+  Copyright (c) 2015 René Föhring
+  https://github.com/rrrene/credo
+
+  CropperJS
+  Copyright (c) 2015-present Chen Fengyuan
+  https://github.com/fengyuanchen/cropperjs
+
+  DaisyUI
+  Copyright (c) 2020 Pouya Saadeghi
+  https://github.com/saadeghi/daisyui
+
+========================================================================
+BSD 3-Clause License
+========================================================================
+
+The following components are licensed under the BSD 3-Clause License:
+
+  Comeonin
+  Copyright (c) 2014 David Whitlock
+  https://github.com/riverrun/comeonin
+
+  OpenSeadragon
+  Copyright (c) 2009 CodePlex Foundation
+  Copyright (c) 2010-2024 OpenSeadragon contributors
+  https://github.com/openseadragon/openseadragon
+
+========================================================================
+BSD 4-Clause / ISC / BSD 2-Clause (bcrypt_elixir)
+========================================================================
+
+  bcrypt_elixir
+  https://github.com/riverrun/bcrypt_elixir
+
+  This library contains code derived from multiple sources:
+
+  - Blowfish block cipher (BSD 4-Clause):
+    Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
+    All advertising materials mentioning features or use of this software
+    must display the following acknowledgement:
+      "This product includes software developed by Niels Provos."
+
+  - bcrypt hashing (ISC-style):
+    Copyright (c) 2014 Ted Unangst <tedu@openbsd.org>
+    Copyright (c) 1997 Niels Provos <provos@umich.edu>
+
+  - Elixir wrapper (BSD 3-Clause):
+    Copyright (c) 2014-2021 David Whitlock <alovedalongthe@gmail.com>

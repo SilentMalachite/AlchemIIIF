@@ -6,6 +6,7 @@ defmodule AlchemIiif.MixProject do
       app: :alchem_iiif,
       version: "0.2.23",
       elixir: "~> 1.15",
+      licenses: ["Apache-2.0"],
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
