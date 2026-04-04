@@ -9,11 +9,9 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   ## データの扱い
   通常はアップロード時に準備された ExtractedImage レコードを読み込み、
   pdf_source_id と page_number を使って対象ページのクロップ情報を更新します。
+  ポリゴン保存後、管理者承認時に ImageProcessor / PtiffGenerator が
+  vix を使って PTIFF を生成します。
   既存レコードが見つからない場合の新規作成も後方互換としてサポートします。
-
-  ## Phase 1 注記
-  ポリゴン頂点配列（points）を受信・表示するが、
-  バックエンドの vix 処理は Phase 2 で対応予定。
   """
   use AlchemIiifWeb, :live_view
 
@@ -90,9 +88,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   @impl true
   def handle_event("preview_crop", %{"points" => points} = _params, socket)
       when is_list(points) do
-    # Phase 1: ポリゴン頂点を IO.inspect で確認
-    IO.inspect(points, label: "[Phase1] preview_crop polygon points")
-
     normalized_points = normalize_points(points)
 
     # 現在の値を Undo スタックに保存
@@ -128,8 +123,6 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   # ダブルクリック/ダブルタップによる明示的保存（ポリゴン）
   @impl true
   def handle_event("save_crop", %{"points" => points} = _params, socket) when is_list(points) do
-    IO.inspect(points, label: "[Phase1] save_crop polygon points")
-
     normalized_points = normalize_points(points)
     geometry = %{"points" => normalized_points}
 
