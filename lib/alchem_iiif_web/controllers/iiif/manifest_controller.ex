@@ -58,7 +58,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
       "label" => manifest.metadata["label"] || %{"none" => [identifier]},
       "summary" => manifest.metadata["summary"] || %{"none" => [""]},
       "metadata" => build_metadata(manifest.metadata),
-      "items" => [build_canvas(manifest, identifier, dimensions, base_url)]
+      "items" => [build_canvas(manifest, identifier, dimensions, base_url, image)]
     }
 
     merge_bibliographic(manifest_json, source)
@@ -75,8 +75,8 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
     end
   end
 
-  defp build_canvas(_manifest, identifier, dimensions, base_url) do
-    %{
+  defp build_canvas(_manifest, identifier, dimensions, base_url, image) do
+    canvas = %{
       "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1",
       "type" => "Canvas",
       "width" => dimensions.width,
@@ -111,6 +111,21 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
         }
       ]
     }
+
+    canvas_metadata = build_canvas_metadata(image)
+
+    if canvas_metadata == [] do
+      canvas
+    else
+      Map.put(canvas, "metadata", canvas_metadata)
+    end
+  end
+
+  defp build_canvas_metadata(image) do
+    [
+      MetadataHelper.label_value("素材", "Material", image.material)
+    ]
+    |> Enum.reject(&is_nil/1)
   end
 
   defp merge_bibliographic(manifest_json, nil), do: manifest_json
