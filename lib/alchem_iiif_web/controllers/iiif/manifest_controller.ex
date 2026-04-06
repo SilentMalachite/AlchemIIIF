@@ -10,7 +10,9 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
 
   alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor}
+  alias AlchemIiif.Ingestion.PdfSource
   alias AlchemIiif.Repo
+  alias AlchemIiifWeb.IIIF.MetadataHelper
 
   import Ecto.Query
 
@@ -26,6 +28,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
 
       manifest ->
         image = Repo.get!(ExtractedImage, manifest.extracted_image_id)
+        source = Repo.get(PdfSource, image.pdf_source_id)
 
         # published 以外の画像は非公開
         if image.status != "published" do
@@ -92,6 +95,21 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
               }
             ]
           }
+
+          # 書誌メタデータと recommended プロパティを追加
+          manifest_json =
+            if source do
+              recommended = MetadataHelper.build_recommended_properties(source)
+              bibliographic = MetadataHelper.build_bibliographic_metadata(source)
+
+              existing_metadata = manifest_json["metadata"] || []
+
+              manifest_json
+              |> Map.merge(recommended)
+              |> Map.put("metadata", existing_metadata ++ bibliographic)
+            else
+              manifest_json
+            end
 
           conn
           |> put_resp_content_type("application/ld+json")
