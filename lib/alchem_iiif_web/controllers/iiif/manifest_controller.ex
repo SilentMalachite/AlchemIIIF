@@ -28,101 +28,102 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
 
       manifest ->
         image = Repo.get!(ExtractedImage, manifest.extracted_image_id)
-        source = Repo.get(PdfSource, image.pdf_source_id)
 
-        # published 以外の画像は非公開
         if image.status != "published" do
           conn
           |> put_status(:forbidden)
           |> json(%{error: "この画像はまだ公開されていません"})
         else
-          # 画像の寸法を取得
-          dimensions =
-            if image.ptif_path && File.exists?(image.ptif_path) do
-              case ImageProcessor.get_image_dimensions(image.ptif_path) do
-                {:ok, dims} -> dims
-                _ -> %{width: 1000, height: 1000}
-              end
-            else
-              %{width: 1000, height: 1000}
-            end
-
-          base_url = AlchemIiifWeb.Endpoint.url()
-
-          manifest_json = %{
-            "@context" => "http://iiif.io/api/presentation/3/context.json",
-            "id" => "#{base_url}/iiif/manifest/#{identifier}",
-            "type" => "Manifest",
-            "label" => manifest.metadata["label"] || %{"none" => [identifier]},
-            "summary" => manifest.metadata["summary"] || %{"none" => [""]},
-            "metadata" => build_metadata(manifest.metadata),
-            "items" => [
-              %{
-                "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1",
-                "type" => "Canvas",
-                "width" => dimensions.width,
-                "height" => dimensions.height,
-                "label" => manifest.metadata["label"] || %{"none" => [identifier]},
-                "items" => [
-                  %{
-                    "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1",
-                    "type" => "AnnotationPage",
-                    "items" => [
-                      %{
-                        "id" =>
-                          "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1/annotation/1",
-                        "type" => "Annotation",
-                        "motivation" => "painting",
-                        "body" => %{
-                          "id" => "#{base_url}/iiif/image/#{identifier}/full/max/0/default.jpg",
-                          "type" => "Image",
-                          "format" => "image/jpeg",
-                          "width" => dimensions.width,
-                          "height" => dimensions.height,
-                          "service" => [
-                            %{
-                              "id" => "#{base_url}/iiif/image/#{identifier}",
-                              "type" => "ImageService3",
-                              "profile" => "level1"
-                            }
-                          ]
-                        },
-                        "target" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1"
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-
-          # 書誌メタデータと recommended プロパティを追加
-          manifest_json =
-            if source do
-              recommended = MetadataHelper.build_recommended_properties(source)
-              bibliographic = MetadataHelper.build_bibliographic_metadata(source)
-
-              existing_metadata = manifest_json["metadata"] || []
-
-              manifest_json
-              |> Map.merge(recommended)
-              |> Map.put("metadata", existing_metadata ++ bibliographic)
-            else
-              manifest_json
-            end
+          source = Repo.get(PdfSource, image.pdf_source_id)
+          manifest_json = build_manifest_json(manifest, image, identifier, source)
 
           conn
           |> put_resp_content_type("application/ld+json")
-          |> put_resp_header(
-            "access-control-allow-origin",
-            "*"
-          )
+          |> put_resp_header("access-control-allow-origin", "*")
           |> json(manifest_json)
         end
     end
   end
 
   # --- プライベート関数 ---
+
+  defp build_manifest_json(manifest, image, identifier, source) do
+    dimensions = get_dimensions(image)
+    base_url = AlchemIiifWeb.Endpoint.url()
+
+    manifest_json = %{
+      "@context" => "http://iiif.io/api/presentation/3/context.json",
+      "id" => "#{base_url}/iiif/manifest/#{identifier}",
+      "type" => "Manifest",
+      "label" => manifest.metadata["label"] || %{"none" => [identifier]},
+      "summary" => manifest.metadata["summary"] || %{"none" => [""]},
+      "metadata" => build_metadata(manifest.metadata),
+      "items" => [build_canvas(manifest, identifier, dimensions, base_url)]
+    }
+
+    merge_bibliographic(manifest_json, source)
+  end
+
+  defp get_dimensions(image) do
+    if image.ptif_path && File.exists?(image.ptif_path) do
+      case ImageProcessor.get_image_dimensions(image.ptif_path) do
+        {:ok, dims} -> dims
+        _ -> %{width: 1000, height: 1000}
+      end
+    else
+      %{width: 1000, height: 1000}
+    end
+  end
+
+  defp build_canvas(_manifest, identifier, dimensions, base_url) do
+    %{
+      "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1",
+      "type" => "Canvas",
+      "width" => dimensions.width,
+      "height" => dimensions.height,
+      "label" => %{"none" => [identifier]},
+      "items" => [
+        %{
+          "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1",
+          "type" => "AnnotationPage",
+          "items" => [
+            %{
+              "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1/annotation/1",
+              "type" => "Annotation",
+              "motivation" => "painting",
+              "body" => %{
+                "id" => "#{base_url}/iiif/image/#{identifier}/full/max/0/default.jpg",
+                "type" => "Image",
+                "format" => "image/jpeg",
+                "width" => dimensions.width,
+                "height" => dimensions.height,
+                "service" => [
+                  %{
+                    "id" => "#{base_url}/iiif/image/#{identifier}",
+                    "type" => "ImageService3",
+                    "profile" => "level1"
+                  }
+                ]
+              },
+              "target" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1"
+            }
+          ]
+        }
+      ]
+    }
+  end
+
+  defp merge_bibliographic(manifest_json, nil), do: manifest_json
+
+  defp merge_bibliographic(manifest_json, source) do
+    recommended = MetadataHelper.build_recommended_properties(source)
+    bibliographic = MetadataHelper.build_bibliographic_metadata(source)
+    existing_metadata = manifest_json["metadata"] || []
+
+    manifest_json
+    |> Map.merge(recommended)
+    |> Map.put("metadata", existing_metadata ++ bibliographic)
+  end
 
   # メタデータを IIIF 3.0 形式に変換
   defp build_metadata(metadata) when is_map(metadata) do
