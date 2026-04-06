@@ -33,6 +33,8 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
     field :site, :string
     field :period, :string
     field :artifact_type, :string
+    # 素材（土器、石器、金属、木製品、紙 など）
+    field :material, :string
     # ステータス (draft / pending_review / rejected / published)
     field :status, :string, default: "draft"
     # レビュアーによる差し戻し理由
@@ -64,6 +66,7 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
       :site,
       :period,
       :artifact_type,
+      :material,
       :status,
       :review_comment,
       :lock_version,
@@ -75,6 +78,7 @@ defmodule AlchemIiif.Ingestion.ExtractedImage do
     |> validate_length(:site, max: 30, message: "30文字以内で入力してください")
     |> validate_length(:period, max: 30, message: "30文字以内で入力してください")
     |> validate_length(:artifact_type, max: 30, message: "30文字以内で入力してください")
+    |> validate_length(:material, max: 100, message: "100文字以内で入力してください")
     |> validate_length(:caption, max: 1000, message: "1000文字以内で入力してください")
     |> validate_label_format()
     |> validate_municipality(:site)
