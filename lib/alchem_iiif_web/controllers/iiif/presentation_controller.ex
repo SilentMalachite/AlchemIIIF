@@ -10,6 +10,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
 
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Repo
+  alias AlchemIiifWeb.IIIF.MetadataHelper
 
   @doc """
   PdfSource 単位の IIIF 3.0 Manifest を JSON-LD で返します。
@@ -43,14 +44,24 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
   defp build_manifest(source, images, base_url) do
     manifest_id = "#{base_url}/iiif/presentation/#{source.id}/manifest"
 
-    %{
+    base = %{
       "@context" => "http://iiif.io/api/presentation/3/context.json",
       "id" => manifest_id,
       "type" => "Manifest",
       "label" => %{"none" => [source.filename]},
       "items" => Enum.map(images, &build_canvas(&1, base_url))
     }
+
+    recommended = MetadataHelper.build_recommended_properties(source)
+    bibliographic = MetadataHelper.build_bibliographic_metadata(source)
+
+    base
+    |> Map.merge(recommended)
+    |> maybe_put_metadata(bibliographic)
   end
+
+  defp maybe_put_metadata(manifest, []), do: manifest
+  defp maybe_put_metadata(manifest, metadata), do: Map.put(manifest, "metadata", metadata)
 
   # ExtractedImage → IIIF Canvas
   defp build_canvas(image, base_url) do
