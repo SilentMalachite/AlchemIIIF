@@ -36,5 +36,81 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       refute changeset.valid?
       assert %{status: _} = errors_on(changeset)
     end
+
+    test "書誌フィールドが cast される" do
+      attrs = %{
+        filename: "report.pdf",
+        investigating_org: "奈良文化財研究所",
+        survey_year: 2024,
+        report_title: "平城宮跡発掘調査報告書",
+        license_uri: "https://creativecommons.org/licenses/by/4.0/"
+      }
+
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+      assert Ecto.Changeset.get_change(changeset, :investigating_org) == "奈良文化財研究所"
+      assert Ecto.Changeset.get_change(changeset, :survey_year) == 2024
+      assert Ecto.Changeset.get_change(changeset, :report_title) == "平城宮跡発掘調査報告書"
+      assert Ecto.Changeset.get_change(changeset, :license_uri) == "https://creativecommons.org/licenses/by/4.0/"
+    end
+
+    test "書誌フィールドなしでも changeset は valid" do
+      attrs = %{filename: "report.pdf"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "survey_year が 1900 未満の場合は invalid" do
+      attrs = %{filename: "report.pdf", survey_year: 1899}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{survey_year: _} = errors_on(changeset)
+    end
+
+    test "survey_year が現在年を超える場合は invalid" do
+      attrs = %{filename: "report.pdf", survey_year: Date.utc_today().year + 1}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{survey_year: _} = errors_on(changeset)
+    end
+
+    test "survey_year が現在年の場合は valid" do
+      attrs = %{filename: "report.pdf", survey_year: Date.utc_today().year}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "license_uri が不正な形式の場合は invalid" do
+      attrs = %{filename: "report.pdf", license_uri: "not-a-uri"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{license_uri: _} = errors_on(changeset)
+    end
+
+    test "license_uri が http:// で始まる場合は valid" do
+      attrs = %{filename: "report.pdf", license_uri: "http://rightsstatements.org/vocab/InC/1.0/"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "license_uri が https:// で始まる場合は valid" do
+      attrs = %{filename: "report.pdf", license_uri: "https://creativecommons.org/licenses/by/4.0/"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "investigating_org が 200 文字を超える場合は invalid" do
+      attrs = %{filename: "report.pdf", investigating_org: String.duplicate("あ", 201)}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{investigating_org: _} = errors_on(changeset)
+    end
+
+    test "report_title が 500 文字を超える場合は invalid" do
+      attrs = %{filename: "report.pdf", report_title: String.duplicate("あ", 501)}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{report_title: _} = errors_on(changeset)
+    end
   end
 end
