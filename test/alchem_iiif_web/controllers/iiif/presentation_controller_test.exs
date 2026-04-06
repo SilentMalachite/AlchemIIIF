@@ -122,5 +122,64 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       assert canvas["width"] == 1000
       assert canvas["height"] == 1000
     end
+
+    test "書誌フィールドがある場合は recommended プロパティが出力される", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          investigating_org: "奈良文化財研究所",
+          survey_year: 2024,
+          report_title: "平城宮跡発掘調査報告書",
+          license_uri: "https://creativecommons.org/licenses/by/4.0/"
+        })
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      # requiredStatement
+      assert response["requiredStatement"]["label"]["ja"] == ["提供機関"]
+      assert response["requiredStatement"]["value"]["ja"] == ["奈良文化財研究所"]
+
+      # rights
+      assert response["rights"] == "https://creativecommons.org/licenses/by/4.0/"
+
+      # provider
+      assert is_list(response["provider"])
+      provider = hd(response["provider"])
+      assert provider["type"] == "Agent"
+      assert provider["label"]["ja"] == ["奈良文化財研究所"]
+
+      # metadata に書誌情報が含まれる
+      metadata = response["metadata"]
+      assert is_list(metadata)
+
+      labels = Enum.map(metadata, fn m -> hd(m["label"]["en"]) end)
+      assert "Investigating Organization" in labels
+      assert "Survey Year" in labels
+      assert "Report Title" in labels
+    end
+
+    test "書誌フィールドが nil の場合は recommended プロパティが省略される", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf"})
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      refute Map.has_key?(response, "requiredStatement")
+      refute Map.has_key?(response, "provider")
+      assert response["metadata"] == nil or response["metadata"] == []
+    end
   end
 end
