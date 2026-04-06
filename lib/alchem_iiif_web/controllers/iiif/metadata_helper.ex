@@ -41,7 +41,8 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
     [
       label_value("調査機関", "Investigating Organization", Map.get(source, :investigating_org)),
       label_value("調査年度", "Survey Year", Map.get(source, :survey_year)),
-      label_value("報告書名", "Report Title", Map.get(source, :report_title))
+      label_value("報告書名", "Report Title", Map.get(source, :report_title)),
+      label_value("遺跡コード", "Site Code", Map.get(source, :site_code))
     ]
     |> Enum.reject(&is_nil/1)
   end
@@ -60,11 +61,13 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
     |> Map.new()
   end
 
-  # --- プライベート関数 ---
+  @doc """
+  ラベル/値ペアを IIIF metadata エントリ形式で構築する。
+  value が nil の場合は nil を返す。
+  """
+  def label_value(_ja_label, _en_label, nil), do: nil
 
-  defp label_value(_ja_label, _en_label, nil), do: nil
-
-  defp label_value(ja_label, en_label, value) do
+  def label_value(ja_label, en_label, value) do
     %{
       "label" => %{"ja" => [ja_label], "en" => [en_label]},
       "value" => format_value(en_label, value)
