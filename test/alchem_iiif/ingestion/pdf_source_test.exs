@@ -119,4 +119,45 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       assert %{report_title: _} = errors_on(changeset)
     end
   end
+
+  describe "changeset/2 site_code validation" do
+    test "有効な site_code 形式を受け入れる（2桁-3桁-3桁）" do
+      attrs = %{filename: "report.pdf", site_code: "15-201-001"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "有効な site_code 形式を受け入れる（4桁含む）" do
+      attrs = %{filename: "report.pdf", site_code: "01-1234-5678"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "数字以外を含む site_code を拒否する" do
+      attrs = %{filename: "report.pdf", site_code: "abc-def-ghi"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{site_code: _} = errors_on(changeset)
+    end
+
+    test "桁数不足の site_code を拒否する" do
+      attrs = %{filename: "report.pdf", site_code: "1-2-3"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{site_code: _} = errors_on(changeset)
+    end
+
+    test "site_code が nil の場合は valid（任意項目）" do
+      attrs = %{filename: "report.pdf", site_code: nil}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "site_code が 31 文字を超える場合は invalid" do
+      attrs = %{filename: "report.pdf", site_code: String.duplicate("1", 31)}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+      refute changeset.valid?
+      assert %{site_code: _} = errors_on(changeset)
+    end
+  end
 end
