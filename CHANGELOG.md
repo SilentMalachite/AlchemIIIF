@@ -4,6 +4,43 @@
 
 ---
 
+## [0.2.24] - 2026-04-07
+
+### 📦 IIIF メタデータの拡充（書誌フィールド・遺跡コード・素材）
+
+- **`PdfSource` に書誌フィールド4種を追加 (`pdf_source.ex`, マイグレーション)**
+  - `investigating_org`（調査機関名、最大200文字）、`survey_year`（調査年度、1900〜現在年）、`report_title`（報告書名、最大500文字）、`license_uri`（ライセンスURI、http/https形式）を追加。
+  - すべて任意入力。バリデーション付き。
+- **`PdfSource` に遺跡コード `site_code` を追加 (`pdf_source.ex`, マイグレーション)**
+  - 都道府県コード-市区町村コード-連番（例: `15-201-001`）の正規表現バリデーション付き。
+  - 最大30文字、任意入力。
+- **`ExtractedImage` に素材 `material` を追加 (`extracted_image.ex`, マイグレーション)**
+  - 土器・石器・金属・木製品・紙などの素材情報。最大100文字、任意入力。
+- **`MetadataHelper` モジュールを新設 (`metadata_helper.ex`)**
+  - IIIF Presentation API v3.0 の recommended プロパティ（`requiredStatement` / `rights` / `provider`）を書誌フィールドから自動生成。
+  - 書誌メタデータ（調査機関・調査年度・報告書名・遺跡コード）を IIIF metadata エントリ形式で構築。
+  - `survey_year` は日本語で「2024年」、英語で「2024」と言語別フォーマット。
+- **`ManifestController` / `PresentationController` に recommended プロパティ出力追加**
+  - Manifest レベルに `requiredStatement` / `rights` / `provider` / 書誌 metadata を出力。
+  - Canvas レベルに `material`（素材）metadata を出力。nil の場合はキーごと省略。
+- **アップロード画面（Step 1）に報告書情報セクションを追加 (`upload.ex`)**
+  - `<details open>` で折りたたみ可能な「📚 報告書情報（任意）」セクション。
+  - 報告書名・調査機関名・調査年度・遺跡コード・ライセンスURIの5フィールド。
+  - PDFアップロード送信時に一括保存。
+- **ラベリング画面（Step 4）に素材入力欄を追加 (`label.ex`)**
+  - 既存の遺跡名・時代・遺物種別の下に「🧱 素材（任意）」フィールドを追加。
+  - `phx-blur` 自動保存・バリデーション・undo スタック対応。
+
+### 🔧 リファクタリング
+- **`ManifestController.show/2` の循環的複雑度を削減**
+
+### 📝 ドキュメント・その他
+- README を英語優先のシンプルな構成に書き直し
+- ライセンスを MIT から Apache 2.0 に変更
+- 招待制移行済みの `UserRegistrationControllerTest` を削除
+- `crop.ex` の Phase 注記と `IO.inspect` デバッグコードを削除
+
+
 ## [0.2.23] - 2026-04-04
 
 ### 🔍 ギャラリー検索の改善
