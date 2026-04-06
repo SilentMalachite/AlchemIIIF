@@ -176,5 +176,80 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
       refute Map.has_key?(response, "requiredStatement")
       refute Map.has_key?(response, "provider")
     end
+
+    test "site_code が設定されている場合、metadata に Site Code エントリが存在する", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          site_code: "15-201-001",
+          investigating_org: "テスト機関"
+        })
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: "/tmp/test.tif"
+        })
+
+      identifier = "site-code-test-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{
+          "label" => %{"en" => ["Test"]},
+          "summary" => %{"en" => ["Test"]}
+        }
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      response = json_response(conn, 200)
+
+      metadata = response["metadata"]
+      en_labels = Enum.map(metadata, fn m -> hd(m["label"]["en"]) end)
+      assert "Site Code" in en_labels
+
+      site_code_entry = Enum.find(metadata, fn m -> hd(m["label"]["en"]) == "Site Code" end)
+      assert hd(site_code_entry["value"]["ja"]) == "15-201-001"
+    end
+
+    test "material が設定されている場合、Canvas metadata に Material エントリが存在する", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: "/tmp/test.tif",
+          material: "土器"
+        })
+
+      identifier = "material-test-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{
+          "label" => %{"en" => ["Test"]},
+          "summary" => %{"en" => ["Test"]}
+        }
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      response = json_response(conn, 200)
+
+      canvas = hd(response["items"])
+      assert is_list(canvas["metadata"])
+      en_labels = Enum.map(canvas["metadata"], fn m -> hd(m["label"]["en"]) end)
+      assert "Material" in en_labels
+
+      material_entry = Enum.find(canvas["metadata"], fn m -> hd(m["label"]["en"]) == "Material" end)
+      assert hd(material_entry["value"]["ja"]) == "土器"
+    end
   end
 end
