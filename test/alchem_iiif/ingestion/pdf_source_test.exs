@@ -51,7 +51,9 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       assert Ecto.Changeset.get_change(changeset, :investigating_org) == "奈良文化財研究所"
       assert Ecto.Changeset.get_change(changeset, :survey_year) == 2024
       assert Ecto.Changeset.get_change(changeset, :report_title) == "平城宮跡発掘調査報告書"
-      assert Ecto.Changeset.get_change(changeset, :license_uri) == "https://creativecommons.org/licenses/by/4.0/"
+
+      assert Ecto.Changeset.get_change(changeset, :license_uri) ==
+               "https://creativecommons.org/licenses/by/4.0/"
     end
 
     test "書誌フィールドなしでも changeset は valid" do
@@ -94,7 +96,11 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
     end
 
     test "license_uri が https:// で始まる場合は valid" do
-      attrs = %{filename: "report.pdf", license_uri: "https://creativecommons.org/licenses/by/4.0/"}
+      attrs = %{
+        filename: "report.pdf",
+        license_uri: "https://creativecommons.org/licenses/by/4.0/"
+      }
+
       changeset = PdfSource.changeset(%PdfSource{}, attrs)
       assert changeset.valid?
     end
