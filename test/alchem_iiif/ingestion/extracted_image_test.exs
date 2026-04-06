@@ -200,4 +200,35 @@ defmodule AlchemIiif.Ingestion.ExtractedImageTest do
       assert changeset.valid?
     end
   end
+
+  describe "changeset/2 material validation" do
+    test "有効な material を受け入れる" do
+      pdf_source = insert_pdf_source()
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: "土器"}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "material が nil の場合は valid（任意項目）" do
+      pdf_source = insert_pdf_source()
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: nil}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      assert changeset.valid?
+    end
+
+    test "material が 101 文字を超える場合は invalid" do
+      pdf_source = insert_pdf_source()
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: String.duplicate("あ", 101)}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      refute changeset.valid?
+      assert %{material: _} = errors_on(changeset)
+    end
+
+    test "material が 100 文字以内の場合は valid" do
+      pdf_source = insert_pdf_source()
+      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: String.duplicate("あ", 100)}
+      changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
+      assert changeset.valid?
+    end
+  end
 end
