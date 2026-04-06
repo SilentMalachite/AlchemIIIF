@@ -68,7 +68,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
     {width, height} = extract_dimensions(image)
     canvas_id = "#{base_url}/iiif/presentation/#{image.pdf_source_id}/canvas/#{image.page_number}"
 
-    %{
+    canvas = %{
       "id" => canvas_id,
       "type" => "Canvas",
       "width" => width,
@@ -90,6 +90,18 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
         }
       ]
     }
+
+    canvas_metadata =
+      [
+        MetadataHelper.label_value("素材", "Material", image.material)
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    if canvas_metadata == [] do
+      canvas
+    else
+      Map.put(canvas, "metadata", canvas_metadata)
+    end
   end
 
   # 画像リソースの body を構築
