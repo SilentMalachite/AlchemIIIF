@@ -34,6 +34,12 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     # ソフトデリート用タイムスタンプ（nil = アクティブ、値あり = ゴミ箱内）
     field :deleted_at, :utc_datetime
 
+    # 書誌フィールド（IIIF recommended メタデータの源泉）
+    field :investigating_org, :string
+    field :survey_year, :integer
+    field :report_title, :string
+    field :license_uri, :string
+
     # プロジェクトオーナー（アクセス制御の基盤）
     belongs_to :user, AlchemIiif.Accounts.User
 
@@ -57,11 +63,22 @@ defmodule AlchemIiif.Ingestion.PdfSource do
       :deleted_at,
       :workflow_status,
       :return_message,
-      :user_id
+      :user_id,
+      :investigating_org,
+      :survey_year,
+      :report_title,
+      :license_uri
     ])
     |> validate_required([:filename])
     |> validate_inclusion(:status, ["uploading", "converting", "ready", "error"])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
+    |> validate_number(:survey_year,
+      greater_than_or_equal_to: 1900,
+      less_than_or_equal_to: Date.utc_today().year
+    )
+    |> validate_length(:investigating_org, max: 200)
+    |> validate_length(:report_title, max: 500)
+    |> validate_license_uri()
   end
 
   @doc "ワークフロー遷移専用 changeset"
@@ -70,5 +87,15 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> cast(attrs, [:workflow_status, :return_message])
     |> validate_required([:workflow_status])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
+  end
+
+  defp validate_license_uri(changeset) do
+    validate_change(changeset, :license_uri, fn :license_uri, uri ->
+      if String.starts_with?(uri, "http://") or String.starts_with?(uri, "https://") do
+        []
+      else
+        [license_uri: "は http:// または https:// で始まる必要があります"]
+      end
+    end)
   end
 end
