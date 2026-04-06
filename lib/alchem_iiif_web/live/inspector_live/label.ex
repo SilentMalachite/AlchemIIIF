@@ -60,6 +60,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
        |> assign(:site, extracted_image.site || "")
        |> assign(:period, extracted_image.period || "")
        |> assign(:artifact_type, extracted_image.artifact_type || "")
+       |> assign(:material, extracted_image.material || "")
        |> assign(:undo_stack, [])
        |> assign(:pre_edit_snapshot, nil)
        |> assign(:duplicate_record, check_duplicate_label(extracted_image))
@@ -264,9 +265,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   defp auto_save_field(socket, field, value) do
     # 保存前の文字数制限チェック（非同期保存を試みる前にブロック）
-    max_len = if field in ["caption"], do: 1000, else: 30
+    max_len =
+      case field do
+        "caption" -> 1000
+        "material" -> 100
+        _ -> 30
+      end
 
-    if field in ["site", "period", "artifact_type", "caption"] and
+    if field in ["site", "period", "artifact_type", "caption", "material"] and
          String.length(to_string(value)) > max_len do
       errors =
         Map.put(
@@ -498,6 +504,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       Map.put(errors, :caption, "1000文字以内で入力してください")
     else
       Map.delete(errors, :caption)
+    end
+  end
+
+  defp validate_field(errors, "material", value) do
+    if String.length(value) > 100 do
+      Map.put(errors, :material, "100文字以内で入力してください")
+    else
+      Map.delete(errors, :material)
     end
   end
 
@@ -766,6 +780,24 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
             <%!-- 遺物種別エラー --%>
             <%= if @validation_errors[:artifact_type] do %>
               <p class="field-error-text">⚠️ {@validation_errors[:artifact_type]}</p>
+            <% end %>
+          </div>
+
+          <div class="form-group">
+            <label for="material-input" class="form-label">🧱 素材（任意）</label>
+            <input
+              type="text"
+              id="material-input"
+              class={["form-input form-input-large", @validation_errors[:material] && "input-error"]}
+              value={@material}
+              phx-blur="blur_save_field"
+              phx-value-field="material"
+              placeholder="土師器、黒曜石、鉄製品 など"
+              name="material"
+              maxlength="100"
+            />
+            <%= if @validation_errors[:material] do %>
+              <p class="field-error-text">⚠️ {@validation_errors[:material]}</p>
             <% end %>
           </div>
         </form>
