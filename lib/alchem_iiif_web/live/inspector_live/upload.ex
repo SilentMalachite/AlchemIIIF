@@ -37,13 +37,32 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:current_page, 0)
      |> assign(:total_pages, 0)
      |> assign(:color_mode, "mono")
+     |> assign(:report_title, "")
+     |> assign(:investigating_org, "")
+     |> assign(:survey_year, nil)
+     |> assign(:site_code, "")
+     |> assign(:license_uri, "")
      |> allow_upload(:pdf, accept: ~w(.pdf), max_entries: 1, max_file_size: 500_000_000)}
   end
 
   @impl true
   def handle_event("validate", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
-    {:noreply, assign(socket, :color_mode, color_mode)}
+
+    {:noreply,
+     socket
+     |> assign(:color_mode, color_mode)
+     |> assign(:report_title, get_in(params, ["report_title"]) || socket.assigns.report_title)
+     |> assign(
+       :investigating_org,
+       get_in(params, ["investigating_org"]) || socket.assigns.investigating_org
+     )
+     |> assign(
+       :survey_year,
+       parse_survey_year(get_in(params, ["survey_year"])) || socket.assigns.survey_year
+     )
+     |> assign(:site_code, get_in(params, ["site_code"]) || socket.assigns.site_code)
+     |> assign(:license_uri, get_in(params, ["license_uri"]) || socket.assigns.license_uri)}
   end
 
   @impl true
@@ -81,7 +100,12 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
           Ingestion.create_pdf_source(%{
             filename: Path.basename(pdf_path),
             status: "converting",
-            user_id: socket.assigns.current_user.id
+            user_id: socket.assigns.current_user.id,
+            report_title: non_empty_or_nil(socket.assigns.report_title),
+            investigating_org: non_empty_or_nil(socket.assigns.investigating_org),
+            survey_year: socket.assigns.survey_year,
+            site_code: non_empty_or_nil(socket.assigns.site_code),
+            license_uri: non_empty_or_nil(socket.assigns.license_uri)
           })
 
         # パイプラインIDを生成
@@ -201,6 +225,81 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                 /> 🎨 カラーモード（標準）
               </label>
             </div>
+
+            <%!-- 報告書情報セクション --%>
+            <details open class="bibliographic-section">
+              <summary class="bibliographic-summary">📚 報告書情報（任意）</summary>
+              <div class="bibliographic-fields">
+                <div class="form-group">
+                  <label for="report-title-input" class="form-label">📖 報告書名</label>
+                  <input
+                    type="text"
+                    id="report-title-input"
+                    class="form-input form-input-large"
+                    value={@report_title}
+                    name="report_title"
+                    placeholder="令和○年度 ○○遺跡発掘調査報告書"
+                    aria-label="報告書名"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="investigating-org-input" class="form-label">🏛️ 調査機関名</label>
+                  <input
+                    type="text"
+                    id="investigating-org-input"
+                    class="form-input form-input-large"
+                    value={@investigating_org}
+                    name="investigating_org"
+                    placeholder="○○市教育委員会"
+                    aria-label="調査機関名"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="survey-year-input" class="form-label">📅 調査年度（西暦）</label>
+                  <input
+                    type="number"
+                    id="survey-year-input"
+                    class="form-input form-input-large"
+                    value={@survey_year}
+                    name="survey_year"
+                    min="1900"
+                    max={Date.utc_today().year}
+                    aria-label="調査年度"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="site-code-input" class="form-label">🗺️ 遺跡コード</label>
+                  <input
+                    type="text"
+                    id="site-code-input"
+                    class="form-input form-input-large"
+                    value={@site_code}
+                    name="site_code"
+                    placeholder="15-201-001"
+                    aria-label="遺跡コード"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label for="license-uri-input" class="form-label">⚖️ ライセンスURI</label>
+                  <input
+                    type="text"
+                    id="license-uri-input"
+                    class="form-input form-input-large"
+                    value={@license_uri}
+                    name="license_uri"
+                    placeholder="https://creativecommons.org/licenses/by/4.0/"
+                    aria-label="ライセンスURI"
+                  />
+                  <p class="form-help-text">
+                    空欄の場合、著作権保護（InC-1.0）がデフォルトで適用されます。
+                  </p>
+                </div>
+              </div>
+            </details>
 
             <div class="upload-dropzone" phx-drop-target={@uploads.pdf.ref}>
               <.live_file_input upload={@uploads.pdf} class="file-input" />
@@ -331,4 +430,21 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   defp translate_upload_error(:too_many_files), do: "アップロードできるファイルは1つだけです。"
   defp translate_upload_error(:not_accepted), do: "PDFファイルのみアップロード可能です。"
   defp translate_upload_error(err), do: "アップロードエラー: #{inspect(err)}"
+
+  # 空文字列を nil に変換するヘルパー
+  defp non_empty_or_nil(""), do: nil
+  defp non_empty_or_nil(value), do: value
+
+  # 調査年度文字列を整数に変換するヘルパー
+  defp parse_survey_year(nil), do: nil
+  defp parse_survey_year(""), do: nil
+
+  defp parse_survey_year(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {year, ""} -> year
+      _ -> nil
+    end
+  end
+
+  defp parse_survey_year(value), do: value
 end
