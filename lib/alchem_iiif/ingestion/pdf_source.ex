@@ -39,6 +39,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     field :survey_year, :integer
     field :report_title, :string
     field :license_uri, :string
+    # 遺跡コード（都道府県コード-市区町村コード-連番）
+    field :site_code, :string
 
     # プロジェクトオーナー（アクセス制御の基盤）
     belongs_to :user, AlchemIiif.Accounts.User
@@ -67,7 +69,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
       :investigating_org,
       :survey_year,
       :report_title,
-      :license_uri
+      :license_uri,
+      :site_code
     ])
     |> validate_required([:filename])
     |> validate_inclusion(:status, ["uploading", "converting", "ready", "error"])
@@ -79,6 +82,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_length(:investigating_org, max: 200)
     |> validate_length(:report_title, max: 500)
     |> validate_license_uri()
+    |> validate_length(:site_code, max: 30, message: "30文字以内で入力してください")
+    |> validate_site_code()
   end
 
   @doc "ワークフロー遷移専用 changeset"
@@ -87,6 +92,20 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> cast(attrs, [:workflow_status, :return_message])
     |> validate_required([:workflow_status])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
+  end
+
+  defp validate_site_code(changeset) do
+    case get_change(changeset, :site_code) do
+      nil ->
+        changeset
+
+      value ->
+        if Regex.match?(~r/^\d{2}-\d{3,4}-\d{3,4}$/, value) do
+          changeset
+        else
+          add_error(changeset, :site_code, "形式は 'XX-XXX-XXX'（都道府県-市区町村-連番）にしてください")
+        end
+    end
   end
 
   defp validate_license_uri(changeset) do
