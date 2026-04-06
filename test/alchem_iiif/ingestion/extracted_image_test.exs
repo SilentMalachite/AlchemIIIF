@@ -218,7 +218,13 @@ defmodule AlchemIiif.Ingestion.ExtractedImageTest do
 
     test "material が 101 文字を超える場合は invalid" do
       pdf_source = insert_pdf_source()
-      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: String.duplicate("あ", 101)}
+
+      attrs = %{
+        pdf_source_id: pdf_source.id,
+        page_number: 1,
+        material: String.duplicate("あ", 101)
+      }
+
       changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
       refute changeset.valid?
       assert %{material: _} = errors_on(changeset)
@@ -226,7 +232,13 @@ defmodule AlchemIiif.Ingestion.ExtractedImageTest do
 
     test "material が 100 文字以内の場合は valid" do
       pdf_source = insert_pdf_source()
-      attrs = %{pdf_source_id: pdf_source.id, page_number: 1, material: String.duplicate("あ", 100)}
+
+      attrs = %{
+        pdf_source_id: pdf_source.id,
+        page_number: 1,
+        material: String.duplicate("あ", 100)
+      }
+
       changeset = ExtractedImage.changeset(%ExtractedImage{}, attrs)
       assert changeset.valid?
     end

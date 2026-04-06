@@ -248,7 +248,9 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
       en_labels = Enum.map(canvas["metadata"], fn m -> hd(m["label"]["en"]) end)
       assert "Material" in en_labels
 
-      material_entry = Enum.find(canvas["metadata"], fn m -> hd(m["label"]["en"]) == "Material" end)
+      material_entry =
+        Enum.find(canvas["metadata"], fn m -> hd(m["label"]["en"]) == "Material" end)
+
       assert hd(material_entry["value"]["ja"]) == "土器"
     end
   end
