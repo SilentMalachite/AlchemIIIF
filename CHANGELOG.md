@@ -4,6 +4,32 @@
 
 ---
 
+## [0.2.25] - 2026-04-08
+
+### 📦 IIIF Manifest 推奨プロパティの完成（navDate / rendering / summary）
+
+- **`MetadataHelper` に `navDate` / `rendering` / `summary` の生成ロジックを追加 (`metadata_helper.ex`)**
+  - `format_nav_date/1`：`survey_year`（整数）を ISO 8601 形式（`"YYYY-01-01T00:00:00Z"`）に変換。nil の場合はキー除外。
+  - `build_summary/1`：`report_title` + `investigating_org` から日英バイリンガル summary を生成。`report_title` が nil の場合はキー除外。
+  - `build_rendering/1`：`filename` から元 PDF への参照リンクを生成（`/uploads/pdfs/{filename}`）。nil・空文字の場合はキー除外。
+  - `build_recommended_properties/1` を拡張し、上記3プロパティを統合。
+- **`ManifestController` から `summary` のハードコードを削除 (`manifest_controller.ex`)**
+  - `build_manifest_json/4` の `"summary" => manifest.metadata["summary"] || %{"none" => [""]}` を除去。
+  - summary は `MetadataHelper` 経由で一元管理されるよう統合。
+- **`IIIF_SPEC.md` を現状の実装に合わせて更新**
+  - §3 `pdf_sources` テーブルに `investigating_org` / `survey_year` / `report_title` / `license_uri` / `site_code` を追記。
+  - §3 `extracted_images` テーブルに `material` を追記。
+  - §3 に将来タスク注記を追加：「複数年度対応は `survey_year_end` カラム追加で実現予定」。
+  - §3.1 にバリデーションルールを追記：`survey_year` 範囲（1900〜現在年）、`license_uri` 形式（http/https）。
+  - §6 に Manifest プロパティ対応状況テーブルを追加（`label` / `summary` / `metadata` / `requiredStatement` / `rights` / `provider` / `navDate` / `rendering` = 実装済み、`homepage` / `thumbnail` = 未実装）。
+
+### ✅ テスト追加
+- `MetadataHelper` に9件のユニットテスト追加（`format_nav_date/1` / `build_summary/1` / `build_rendering/1` / `build_recommended_properties/1`）
+- `ManifestController` に5件の統合テスト追加（`navDate` / `rendering` / `summary` の出力・キー除外）
+- `PresentationController` に5件の統合テスト追加（同上）
+
+---
+
 ## [0.2.24] - 2026-04-07
 
 ### 📦 IIIF メタデータの拡充（書誌フィールド・遺跡コード・素材）
