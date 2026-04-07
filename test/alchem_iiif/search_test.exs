@@ -315,6 +315,80 @@ defmodule AlchemIiif.SearchTest do
     end
   end
 
+  defp create_site_code_test_images do
+    pdf_niigata = insert_pdf_source(%{site_code: "15206-27"})
+    pdf_tokyo = insert_pdf_source(%{site_code: "13101-05"})
+    pdf_no_code = insert_pdf_source()
+
+    img_niigata =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_niigata.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc1.tif"
+      })
+
+    img_tokyo =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_tokyo.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc2.tif"
+      })
+
+    img_no_code =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_no_code.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc3.tif"
+      })
+
+    %{img_niigata: img_niigata, img_tokyo: img_tokyo, img_no_code: img_no_code}
+  end
+
+  describe "search_images/2 site_code 前方一致フィルター" do
+    test "都道府県コード2桁で前方一致検索できる" do
+      %{img_niigata: img_niigata, img_tokyo: img_tokyo} = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "15"})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      refute img_tokyo.id in ids
+    end
+
+    test "市区町村コードまで指定して絞り込める" do
+      %{img_niigata: img_niigata} = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "15206"})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      assert length(ids) == 1
+    end
+
+    test "マッチしないコードでは空配列が返る" do
+      _images = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "99"})
+      assert results == []
+    end
+
+    test "空文字の場合は全件返る" do
+      %{img_niigata: img_niigata, img_tokyo: img_tokyo, img_no_code: img_no_code} =
+        create_site_code_test_images()
+
+      results = Search.search_images("", %{"site_code" => ""})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      assert img_tokyo.id in ids
+      assert img_no_code.id in ids
+    end
+
+    test "LIKE インジェクション文字がエスケープされる" do
+      _images = create_site_code_test_images()
+      # "15%" should be treated as literal "15%" not as "15<anything>"
+      results = Search.search_images("", %{"site_code" => "15%"})
+      assert results == []
+    end
+  end
+
   describe "count_results/2" do
     test "全結果件数を返す" do
       create_test_images()
