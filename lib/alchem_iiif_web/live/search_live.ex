@@ -126,9 +126,10 @@ defmodule AlchemIiifWeb.SearchLive do
 
       <%!-- 遺跡コード前方一致検索 --%>
       <div class="filter-group" style="margin-bottom: 1rem;">
-        <label for="site-code-filter" class="filter-group-label">🔢 遺跡コード（前方一致）</label>
+        <label for="site-code-input" class="filter-group-label">🔢 遺跡コード（前方一致）</label>
         <form id="site-code-filter" phx-change="filter_site_code">
           <input
+            id="site-code-input"
             type="text"
             name="site_code"
             value={@site_code_query}
