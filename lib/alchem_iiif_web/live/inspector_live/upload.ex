@@ -228,7 +228,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
             <%!-- 報告書情報セクション --%>
             <details open class="bibliographic-section">
-              <summary class="bibliographic-summary">📚 報告書情報（任意）</summary>
+              <summary class="bibliographic-summary">📋 報告書情報（任意）</summary>
               <div class="bibliographic-fields">
                 <div class="form-group">
                   <label for="report-title-input" class="form-label">📖 報告書名</label>
@@ -238,7 +238,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@report_title}
                     name="report_title"
-                    placeholder="令和○年度 ○○遺跡発掘調査報告書"
+                    placeholder="例：令和6年度 ○○遺跡発掘調査報告書"
                     aria-label="報告書名"
                   />
                 </div>
@@ -251,7 +251,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@investigating_org}
                     name="investigating_org"
-                    placeholder="○○市教育委員会"
+                    placeholder="例：○○市教育委員会"
                     aria-label="調査機関名"
                   />
                 </div>
@@ -278,9 +278,12 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@site_code}
                     name="site_code"
-                    placeholder="15-201-001"
+                    placeholder="例：15-201-001"
                     aria-label="遺跡コード"
                   />
+                  <p class="form-help-text">
+                    全国遺跡地図のコード（都道府県2桁-市区町村3〜4桁-連番3〜4桁）
+                  </p>
                 </div>
 
                 <div class="form-group">
@@ -295,7 +298,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     aria-label="ライセンスURI"
                   />
                   <p class="form-help-text">
-                    空欄の場合、著作権保護（InC-1.0）がデフォルトで適用されます。
+                    未入力の場合は「転載不可（InC-1.0）」が自動設定されます。
+                    CC BY 4.0 の場合は https://creativecommons.org/licenses/by/4.0/ を入力してください。
                   </p>
                 </div>
               </div>
