@@ -22,10 +22,12 @@ Ecto schemas will focus on the following core entities:
 
 | Table Name | Role | Key Fields | Ecto Data Type |
 | :--- | :--- | :--- | :--- |
-| `pdf_sources` | PDF Tracking | `filename`, `page_count`, `status` | `:string`, `:integer`, `:string` |
-| `extracted_images` | Figure Assets | `image_path`, `geometry`, `status`, `site`, `period`, `artifact_type`, `owner_id`, `worker_id` | `:string`, `:map`, `:string`... |
+| `pdf_sources` | PDF Tracking | `filename`, `page_count`, `status`, `investigating_org`, `survey_year`, `report_title`, `license_uri`, `site_code` | `:string`, `:integer`, `:string`, `:string`, `:integer`, `:string`, `:string`, `:string` |
+| `extracted_images` | Figure Assets | `image_path`, `geometry`, `status`, `site`, `period`, `artifact_type`, `owner_id`, `worker_id`, `material` | `:string`, `:map`, `:string`... |
 | `iiif_manifests` | Manifest Entities | `identifier`, `metadata` | `:string`, `:map` (JSONB) |
 | `users` | Authentication | `email`, `hashed_password`, `confirmed_at` | `:string`, `:string`, `:utc_datetime` |
+
+> **Future:** Multi-year survey support will be implemented by adding a `survey_year_end` column to `pdf_sources` (future task).
 
 ### 3.1 Strict Validation Rules
 
@@ -36,6 +38,8 @@ To ensure data integrity, the system enforces the following validations:
 - **Uniqueness:** A composite unique index on `[:site, :label]` prevents duplicate labels within the same site.
 - **File Versioning:** Uploaded files are renamed to `filename-{timestamp}.ext` to prevent browser caching issues and collisions.
 - **Ownership:** `owner_id` (uploader) and `worker_id` (current editor) foreign keys to `users` table.
+- **Survey Year Range:** `survey_year` must be an integer between 1900 and the current year (inclusive).
+- **License URI Format:** `license_uri` must begin with `http://` or `https://`.
 
 ## 3.2 Authentication & Authorization
 
@@ -92,6 +96,21 @@ To support academic research, specific archaeological metadata fields are indexe
 - **Canvas ordering:** Sorted by `page_number` ascending.
 - **Canvas dimensions:** Derived from `geometry.width` / `geometry.height` (fallback: 1000×1000).
 - **Image URL:** Absolute URL constructed from `image_path` via `AlchemIiifWeb.Endpoint.url()`.
+
+#### Manifest Properties (v3.0 Recommended Status)
+
+| Property | Status | Source |
+|---|---|---|
+| `label` | Implemented | `extracted_images.label` + caption / `pdf_sources.filename` |
+| `summary` | Implemented | `report_title` + `investigating_org` |
+| `metadata` | Implemented | Site, period, artifact type, material, org, year, title, site code |
+| `requiredStatement` | Implemented | `investigating_org` |
+| `rights` | Implemented | `license_uri` |
+| `provider` | Implemented | `investigating_org` |
+| `navDate` | Implemented | `survey_year` (ISO 8601 format) |
+| `rendering` | Implemented | `filename` (original PDF reference) |
+| `homepage` | Not implemented | — |
+| `thumbnail` | Not implemented | — |
 
 ## 7. "Manual Inspector" Workflow (Ingestion Pipeline)
 
