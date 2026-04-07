@@ -71,7 +71,8 @@ defmodule AlchemIiif.Search do
     %{
       sites: list_distinct_values(:site, opts),
       periods: list_distinct_values(:period, opts),
-      artifact_types: list_distinct_values(:artifact_type, opts)
+      artifact_types: list_distinct_values(:artifact_type, opts),
+      materials: list_distinct_values(:material, opts)
     }
   end
 
@@ -128,6 +129,7 @@ defmodule AlchemIiif.Search do
     |> maybe_filter(:site, filters["site"])
     |> maybe_filter(:period, filters["period"])
     |> maybe_filter(:artifact_type, filters["artifact_type"])
+    |> maybe_filter(:material, filters["material"])
   end
 
   defp apply_filters(query, _), do: query
@@ -146,6 +148,10 @@ defmodule AlchemIiif.Search do
 
   defp maybe_filter(query, :artifact_type, value) do
     where(query, [e], e.artifact_type == ^value)
+  end
+
+  defp maybe_filter(query, :material, value) do
+    where(query, [e], e.material == ^value)
   end
 
   # DISTINCT 値の取得
