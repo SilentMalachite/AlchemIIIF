@@ -11,8 +11,8 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
   import AlchemIiif.AccountsFixtures
   import Ecto.Query, only: [from: 2]
 
-  alias AlchemIiif.Repo
   alias AlchemIiif.Ingestion.PdfSource
+  alias AlchemIiif.Repo
 
   describe "security: uploads are isolated between users" do
     test "User A のアップロードファイルが User B に見えないこと" do
