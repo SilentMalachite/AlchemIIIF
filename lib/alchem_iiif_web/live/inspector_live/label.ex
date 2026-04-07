@@ -94,6 +94,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       |> assign(:site, Map.get(params, "site", socket.assigns.site))
       |> assign(:period, Map.get(params, "period", socket.assigns.period))
       |> assign(:artifact_type, Map.get(params, "artifact_type", socket.assigns.artifact_type))
+      |> assign(:material, Map.get(params, "material", socket.assigns.material))
 
     # 変更されたフィールドのバリデーション
     target = List.first(params["_target"] || [])
@@ -191,6 +192,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
          |> assign(:site, previous.site)
          |> assign(:period, previous.period)
          |> assign(:artifact_type, previous.artifact_type)
+         |> assign(:material, previous.material)
          |> assign(:undo_stack, rest)
          |> auto_save_all(previous)}
 
@@ -259,7 +261,8 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       label: socket.assigns.label,
       site: socket.assigns.site,
       period: socket.assigns.period,
-      artifact_type: socket.assigns.artifact_type
+      artifact_type: socket.assigns.artifact_type,
+      material: socket.assigns.material
     }
   end
 
@@ -342,7 +345,8 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       label: socket.assigns.label,
       site: socket.assigns.site,
       period: socket.assigns.period,
-      artifact_type: socket.assigns.artifact_type
+      artifact_type: socket.assigns.artifact_type,
+      material: socket.assigns.material
     }
 
     Ingestion.update_extracted_image(
