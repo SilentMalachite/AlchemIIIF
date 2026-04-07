@@ -173,6 +173,13 @@ defmodule AlchemIiif.SearchTest do
       results = Search.search_published_images("吉野ヶ里")
       assert Enum.all?(results, &(&1.status == "published"))
     end
+
+    test "site_code フィルターで前方一致検索できる" do
+      _images = create_site_code_test_images()
+      results = Search.search_published_images("", %{"site_code" => "15"})
+      ids = Enum.map(results, & &1.id)
+      assert length(ids) == 1
+    end
   end
 
   describe "list_filter_options/0" do
@@ -409,6 +416,11 @@ defmodule AlchemIiif.SearchTest do
 
       count = Search.count_results("", %{"period" => "弥生時代"})
       assert count == 1
+    end
+
+    test "site_code フィルターで正しい件数が返る" do
+      _images = create_site_code_test_images()
+      assert Search.count_results("", %{"site_code" => "15"}) == 1
     end
   end
 end

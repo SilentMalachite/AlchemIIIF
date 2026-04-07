@@ -157,6 +157,7 @@ defmodule AlchemIiif.Search do
     where(query, [e], e.material == ^value)
   end
 
+  # site_code は pdf_sources テーブルにあるため JOIN が必要
   defp maybe_filter(query, :site_code, value) do
     escaped =
       value
@@ -168,7 +169,8 @@ defmodule AlchemIiif.Search do
 
     from e in query,
       join: p in assoc(e, :pdf_source),
-      where: like(p.site_code, ^pattern)
+      where: like(p.site_code, ^pattern),
+      distinct: true
   end
 
   # DISTINCT 値の取得
