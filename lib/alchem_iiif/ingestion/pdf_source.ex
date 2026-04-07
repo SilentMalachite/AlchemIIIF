@@ -93,7 +93,6 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_inclusion(:workflow_status, @workflow_statuses)
   end
 
-
   defp validate_license_uri(changeset) do
     validate_change(changeset, :license_uri, fn :license_uri, uri ->
       if String.starts_with?(uri, "http://") or String.starts_with?(uri, "https://") do
