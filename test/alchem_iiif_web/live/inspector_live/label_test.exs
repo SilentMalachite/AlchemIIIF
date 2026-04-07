@@ -394,8 +394,8 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       # blur_save_field で自動保存を発火
       render_hook(view, "blur_save_field", %{"field" => "material"})
 
-      # 非同期保存の完了を待つ
-      Process.sleep(100)
+      # render(view) により LiveView が :auto_save_complete を処理するまで待機
+      render(view)
 
       updated = AlchemIiif.Ingestion.get_extracted_image!(image.id)
       assert updated.material == "土師器"
