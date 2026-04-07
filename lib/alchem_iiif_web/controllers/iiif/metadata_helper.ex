@@ -48,17 +48,56 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
   end
 
   @doc """
-  recommended プロパティ（requiredStatement, rights, provider）をマップで返す。
+  recommended プロパティ（requiredStatement, rights, provider, summary, navDate, rendering）をマップで返す。
   nil の値はキーごと省略する。
   """
   def build_recommended_properties(source) do
     %{
       "requiredStatement" => build_required_statement(source),
       "rights" => Map.get(source, :license_uri),
-      "provider" => build_provider(source)
+      "provider" => build_provider(source),
+      "summary" => build_summary(source),
+      "navDate" => format_nav_date(Map.get(source, :survey_year)),
+      "rendering" => build_rendering(source)
     }
     |> Enum.reject(fn {_k, v} -> is_nil(v) end)
     |> Map.new()
+  end
+
+  @doc "survey_year を ISO 8601 形式の navDate 文字列に変換する"
+  def format_nav_date(nil), do: nil
+  def format_nav_date(year) when is_integer(year), do: "#{year}-01-01T00:00:00Z"
+
+  @doc "report_title と investigating_org から IIIF summary を生成する"
+  def build_summary(source) do
+    case {Map.get(source, :report_title), Map.get(source, :investigating_org)} do
+      {nil, _} -> nil
+      {title, nil} -> %{"ja" => [title], "en" => [title]}
+      {title, org} -> %{"ja" => ["#{title}（#{org}）"], "en" => ["#{title} (#{org})"]}
+    end
+  end
+
+  @doc "元 PDF への参照リンク（IIIF rendering）を生成する"
+  def build_rendering(source) do
+    case Map.get(source, :filename) do
+      blank when blank in [nil, ""] ->
+        nil
+
+      filename ->
+        url =
+          "priv/static/uploads/pdfs/#{filename}"
+          |> String.replace_prefix("priv/static", "")
+          |> then(&(AlchemIiifWeb.Endpoint.url() <> &1))
+
+        [
+          %{
+            "id" => url,
+            "type" => "Text",
+            "label" => %{"ja" => ["原本PDF"], "en" => ["Original PDF"]},
+            "format" => "application/pdf"
+          }
+        ]
+    end
   end
 
   @doc """
