@@ -182,4 +182,99 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       assert response["metadata"] == nil or response["metadata"] == []
     end
   end
+
+  describe "navDate" do
+    test "survey_year が設定されている場合、navDate が出力される", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          survey_year: 2014
+        })
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      assert response["navDate"] == "2014-01-01T00:00:00Z"
+    end
+
+    test "survey_year が nil の場合、navDate キーが存在しない", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf", survey_year: nil})
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      refute Map.has_key?(response, "navDate")
+    end
+  end
+
+  describe "rendering" do
+    test "filename が設定されている場合、rendering 配列が出力される", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf"})
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      assert is_list(response["rendering"])
+      entry = hd(response["rendering"])
+      assert entry["type"] == "Text"
+      assert entry["format"] == "application/pdf"
+      assert entry["id"] =~ "/uploads/pdfs/report.pdf"
+    end
+  end
+
+  describe "summary" do
+    test "report_title と investigating_org が両方ある場合、summary が出力される", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          report_title: "平城宮跡発掘調査報告書",
+          investigating_org: "奈良文化財研究所"
+        })
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      assert response["summary"]["ja"] == ["平城宮跡発掘調査報告書（奈良文化財研究所）"]
+      assert response["summary"]["en"] == ["平城宮跡発掘調査報告書 (奈良文化財研究所)"]
+    end
+
+    test "report_title が nil の場合、summary キーが存在しない", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf", report_title: nil})
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      refute Map.has_key?(response, "summary")
+    end
+  end
 end
