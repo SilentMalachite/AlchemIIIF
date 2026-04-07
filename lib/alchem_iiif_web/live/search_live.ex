@@ -169,6 +169,27 @@ defmodule AlchemIiifWeb.SearchLive do
             </div>
           <% end %>
 
+          <%!-- 素材フィルター --%>
+          <%= if @filter_options.materials != [] do %>
+            <div class="filter-group">
+              <span class="filter-group-label">🧱 素材</span>
+              <div class="filter-chips">
+                <%= for material <- @filter_options.materials do %>
+                  <button
+                    type="button"
+                    class={"filter-chip #{if @filters["material"] == material, do: "active", else: ""}"}
+                    phx-click="toggle_filter"
+                    phx-value-type="material"
+                    phx-value-value={material}
+                    aria-pressed={@filters["material"] == material}
+                  >
+                    {material}
+                  </button>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+
           <%!-- フィルタークリア --%>
           <%= if @filters != %{} do %>
             <button
@@ -243,7 +264,8 @@ defmodule AlchemIiifWeb.SearchLive do
   defp has_any_filters?(filter_options) do
     filter_options.sites != [] ||
       filter_options.periods != [] ||
-      filter_options.artifact_types != []
+      filter_options.artifact_types != [] ||
+      filter_options.materials != []
   end
 
   # 結果件数のテキスト
