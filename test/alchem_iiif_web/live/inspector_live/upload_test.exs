@@ -1,11 +1,9 @@
 defmodule AlchemIiifWeb.InspectorLive.UploadTest do
   @moduledoc """
-  Upload LiveView のセキュリティテスト。
+  Upload LiveView のテスト。
 
   ウィザード Step 1（PDFアップロード画面）における
-  ユーザー間データ分離を検証します。
-  LiveView ソケットはプロセス単位で独立しているため、
-  User A のアップロードエントリが User B に漏洩しないことを保証します。
+  ユーザー間データ分離と報告書情報フォームの動作を検証します。
   """
   use AlchemIiifWeb.ConnCase, async: false
 
@@ -15,8 +13,6 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
   alias AlchemIiif.Repo
   alias AlchemIiif.Ingestion.PdfSource
-
-  setup :register_and_log_in_user
 
   describe "security: uploads are isolated between users" do
     test "User A のアップロードファイルが User B に見えないこと" do
@@ -64,6 +60,8 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
   end
 
   describe "報告書情報フォーム" do
+    setup :register_and_log_in_user
+
     test "報告書情報セクションが表示される", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/lab/upload")
 
@@ -102,7 +100,10 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "test_report.pdf")
 
-      # submit 送信（Pipeline が失敗しても PdfSource は作成される）
+      # submit 送信 — PdfSource 作成後に Pipeline（pdftoppm）が起動するが、
+      # テスト環境では外部コマンドが失敗する場合がある。
+      # PdfSource の DB 挿入は Pipeline 起動前に完了するため、
+      # Pipeline 由来の例外のみ許容する。
       try do
         render_submit(view, "upload_pdf", %{
           "color_mode" => "mono"
@@ -124,7 +125,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert pdf_source.license_uri == "https://creativecommons.org/licenses/by/4.0/"
     end
 
-    test "survey_year に範囲外の値を入力するとエラーが表示される", %{conn: _conn} do
+    test "survey_year に範囲外の値を入力するとエラーが表示される", _context do
       # changeset バリデーションを直接テスト（LiveView 経由だと HTML5 の min/max で弾かれる）
       changeset =
         PdfSource.changeset(%PdfSource{}, %{
@@ -136,7 +137,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert {:survey_year, _} = List.keyfind(changeset.errors, :survey_year, 0)
     end
 
-    test "site_code に不正な形式を入力するとエラーが表示される", %{conn: _conn} do
+    test "site_code に不正な形式を入力するとエラーが表示される", _context do
       changeset =
         PdfSource.changeset(%PdfSource{}, %{
           filename: "test.pdf",
