@@ -96,41 +96,51 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
     case uploaded_files do
       [pdf_path] ->
         # PDFソースレコードを作成
-        {:ok, pdf_source} =
-          Ingestion.create_pdf_source(%{
-            filename: Path.basename(pdf_path),
-            status: "converting",
-            user_id: socket.assigns.current_user.id,
-            report_title: non_empty_or_nil(socket.assigns.report_title),
-            investigating_org: non_empty_or_nil(socket.assigns.investigating_org),
-            survey_year: socket.assigns.survey_year,
-            site_code: non_empty_or_nil(socket.assigns.site_code),
-            license_uri: non_empty_or_nil(socket.assigns.license_uri)
-          })
+        case Ingestion.create_pdf_source(%{
+               filename: Path.basename(pdf_path),
+               status: "converting",
+               user_id: socket.assigns.current_user.id,
+               report_title: non_empty_or_nil(socket.assigns.report_title),
+               investigating_org: non_empty_or_nil(socket.assigns.investigating_org),
+               survey_year: socket.assigns.survey_year,
+               site_code: non_empty_or_nil(socket.assigns.site_code),
+               license_uri: non_empty_or_nil(socket.assigns.license_uri)
+             }) do
+          {:ok, pdf_source} ->
+            # パイプラインIDを生成
+            pipeline_id = Pipeline.generate_pipeline_id()
 
-        # パイプラインIDを生成
-        pipeline_id = Pipeline.generate_pipeline_id()
+            owner_id = socket.assigns.current_user.id
 
-        owner_id = socket.assigns.current_user.id
+            # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
+            AlchemIiif.Workers.UserWorker.process_pdf(
+              owner_id,
+              pdf_source,
+              pdf_path,
+              pipeline_id,
+              socket.assigns.color_mode
+            )
 
-        # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
-        AlchemIiif.Workers.UserWorker.process_pdf(
-          owner_id,
-          pdf_source,
-          pdf_path,
-          pipeline_id,
-          socket.assigns.color_mode
-        )
+            # 完了メッセージを購読する
+            Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
 
-        # 完了メッセージを購読する
-        Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
+            # 処理中のUI状態を維持
+            {:noreply,
+             socket
+             |> assign(:uploading, true)
+             |> assign(:processing_pdf_id, pdf_source.id)
+             |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
 
-        # 処理中のUI状態を維持
-        {:noreply,
-         socket
-         |> assign(:uploading, true)
-         |> assign(:processing_pdf_id, pdf_source.id)
-         |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
+          {:error, changeset} ->
+            errors =
+              Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+              |> Enum.map_join("、", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
+
+            {:noreply,
+             socket
+             |> assign(:uploading, false)
+             |> put_flash(:error, "入力エラー: #{errors}")}
+        end
 
       _ ->
         {:noreply,
@@ -228,7 +238,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
             <%!-- 報告書情報セクション --%>
             <details open class="bibliographic-section">
-              <summary class="bibliographic-summary">📚 報告書情報（任意）</summary>
+              <summary class="bibliographic-summary">📋 報告書情報（任意）</summary>
               <div class="bibliographic-fields">
                 <div class="form-group">
                   <label for="report-title-input" class="form-label">📖 報告書名</label>
@@ -238,7 +248,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@report_title}
                     name="report_title"
-                    placeholder="令和○年度 ○○遺跡発掘調査報告書"
+                    placeholder="例：令和6年度 ○○遺跡発掘調査報告書"
                     aria-label="報告書名"
                   />
                 </div>
@@ -251,7 +261,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@investigating_org}
                     name="investigating_org"
-                    placeholder="○○市教育委員会"
+                    placeholder="例：○○市教育委員会"
                     aria-label="調査機関名"
                   />
                 </div>
@@ -278,9 +288,12 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     class="form-input form-input-large"
                     value={@site_code}
                     name="site_code"
-                    placeholder="15-201-001"
+                    placeholder="例：15-201-001"
                     aria-label="遺跡コード"
                   />
+                  <p class="form-help-text">
+                    全国遺跡地図のコード（都道府県2桁-市区町村3〜4桁-連番3〜4桁）
+                  </p>
                 </div>
 
                 <div class="form-group">
@@ -295,7 +308,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                     aria-label="ライセンスURI"
                   />
                   <p class="form-help-text">
-                    空欄の場合、著作権保護（InC-1.0）がデフォルトで適用されます。
+                    未入力の場合は「転載不可（InC-1.0）」が自動設定されます。
+                    CC BY 4.0 の場合は https://creativecommons.org/licenses/by/4.0/ を入力してください。
                   </p>
                 </div>
               </div>

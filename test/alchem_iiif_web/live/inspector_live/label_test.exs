@@ -363,4 +363,67 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert path =~ "/lab/label/#{existing.id}"
     end
   end
+
+  describe "material 入力欄" do
+    test "material 入力欄が表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
+
+      {:ok, _view, html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      assert html =~ "素材"
+      assert html =~ "material-input"
+    end
+
+    test "material を入力すると ExtractedImage に保存される", %{conn: conn, user: user} do
+      image = create_user_image(user)
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      view
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["material"],
+        "material" => "土師器",
+        "caption" => "",
+        "label" => "",
+        "site" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
+
+      # blur_save_field で自動保存を発火
+      render_hook(view, "blur_save_field", %{"field" => "material"})
+
+      # render(view) により LiveView が :auto_save_complete を処理するまで待機
+      render(view)
+
+      updated = AlchemIiif.Ingestion.get_extracted_image!(image.id)
+      assert updated.material == "土師器"
+    end
+
+    test "material が 101 文字の場合はエラーが表示される", %{conn: conn, user: user} do
+      image = create_user_image(user)
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      long_material = String.duplicate("あ", 101)
+
+      view
+      |> element("form")
+      |> render_change(%{
+        "_target" => ["material"],
+        "material" => long_material,
+        "caption" => "",
+        "label" => "",
+        "site" => "",
+        "period" => "",
+        "artifact_type" => ""
+      })
+
+      html =
+        render_hook(view, "blur_save_field", %{"field" => "material"})
+
+      assert html =~ "100文字以内で入力してください"
+    end
+  end
 end

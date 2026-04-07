@@ -83,7 +83,6 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_length(:report_title, max: 500)
     |> validate_license_uri()
     |> validate_length(:site_code, max: 30, message: "30文字以内で入力してください")
-    |> validate_site_code()
   end
 
   @doc "ワークフロー遷移専用 changeset"
@@ -94,19 +93,6 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_inclusion(:workflow_status, @workflow_statuses)
   end
 
-  defp validate_site_code(changeset) do
-    case get_change(changeset, :site_code) do
-      nil ->
-        changeset
-
-      value ->
-        if Regex.match?(~r/^\d{2}-\d{3,4}-\d{3,4}$/, value) do
-          changeset
-        else
-          add_error(changeset, :site_code, "形式は 'XX-XXX-XXX'（都道府県-市区町村-連番）にしてください")
-        end
-    end
-  end
 
   defp validate_license_uri(changeset) do
     validate_change(changeset, :license_uri, fn :license_uri, uri ->
