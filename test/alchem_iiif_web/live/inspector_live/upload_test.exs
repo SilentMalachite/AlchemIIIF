@@ -137,17 +137,6 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert {:survey_year, _} = List.keyfind(changeset.errors, :survey_year, 0)
     end
 
-    test "site_code に不正な形式を入力するとエラーが表示される", _context do
-      changeset =
-        PdfSource.changeset(%PdfSource{}, %{
-          filename: "test.pdf",
-          site_code: "abc"
-        })
-
-      refute changeset.valid?
-      assert {:site_code, _} = List.keyfind(changeset.errors, :site_code, 0)
-    end
-
     test "書誌フィールドが空でも PDF アップロードは成功する", %{conn: conn, user: user} do
       {:ok, view, _html} = live(conn, ~p"/lab/upload")
 

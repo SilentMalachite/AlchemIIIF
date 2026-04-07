@@ -96,41 +96,51 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
     case uploaded_files do
       [pdf_path] ->
         # PDFソースレコードを作成
-        {:ok, pdf_source} =
-          Ingestion.create_pdf_source(%{
-            filename: Path.basename(pdf_path),
-            status: "converting",
-            user_id: socket.assigns.current_user.id,
-            report_title: non_empty_or_nil(socket.assigns.report_title),
-            investigating_org: non_empty_or_nil(socket.assigns.investigating_org),
-            survey_year: socket.assigns.survey_year,
-            site_code: non_empty_or_nil(socket.assigns.site_code),
-            license_uri: non_empty_or_nil(socket.assigns.license_uri)
-          })
+        case Ingestion.create_pdf_source(%{
+               filename: Path.basename(pdf_path),
+               status: "converting",
+               user_id: socket.assigns.current_user.id,
+               report_title: non_empty_or_nil(socket.assigns.report_title),
+               investigating_org: non_empty_or_nil(socket.assigns.investigating_org),
+               survey_year: socket.assigns.survey_year,
+               site_code: non_empty_or_nil(socket.assigns.site_code),
+               license_uri: non_empty_or_nil(socket.assigns.license_uri)
+             }) do
+          {:ok, pdf_source} ->
+            # パイプラインIDを生成
+            pipeline_id = Pipeline.generate_pipeline_id()
 
-        # パイプラインIDを生成
-        pipeline_id = Pipeline.generate_pipeline_id()
+            owner_id = socket.assigns.current_user.id
 
-        owner_id = socket.assigns.current_user.id
+            # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
+            AlchemIiif.Workers.UserWorker.process_pdf(
+              owner_id,
+              pdf_source,
+              pdf_path,
+              pipeline_id,
+              socket.assigns.color_mode
+            )
 
-        # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
-        AlchemIiif.Workers.UserWorker.process_pdf(
-          owner_id,
-          pdf_source,
-          pdf_path,
-          pipeline_id,
-          socket.assigns.color_mode
-        )
+            # 完了メッセージを購読する
+            Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
 
-        # 完了メッセージを購読する
-        Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
+            # 処理中のUI状態を維持
+            {:noreply,
+             socket
+             |> assign(:uploading, true)
+             |> assign(:processing_pdf_id, pdf_source.id)
+             |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
 
-        # 処理中のUI状態を維持
-        {:noreply,
-         socket
-         |> assign(:uploading, true)
-         |> assign(:processing_pdf_id, pdf_source.id)
-         |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
+          {:error, changeset} ->
+            errors =
+              Ecto.Changeset.traverse_errors(changeset, fn {msg, _opts} -> msg end)
+              |> Enum.map_join("、", fn {field, msgs} -> "#{field}: #{Enum.join(msgs, ", ")}" end)
+
+            {:noreply,
+             socket
+             |> assign(:uploading, false)
+             |> put_flash(:error, "入力エラー: #{errors}")}
+        end
 
       _ ->
         {:noreply,
