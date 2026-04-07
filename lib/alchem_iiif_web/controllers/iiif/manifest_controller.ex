@@ -56,7 +56,6 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
       "id" => "#{base_url}/iiif/manifest/#{identifier}",
       "type" => "Manifest",
       "label" => manifest.metadata["label"] || %{"none" => [identifier]},
-      "summary" => manifest.metadata["summary"] || %{"none" => [""]},
       "metadata" => build_metadata(manifest.metadata),
       "items" => [build_canvas(manifest, identifier, dimensions, base_url, image)]
     }
