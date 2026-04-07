@@ -115,6 +115,74 @@ defmodule AlchemIiifWeb.SearchLiveTest do
     end
   end
 
+  describe "site_code 検索" do
+    test "遺跡コード入力欄が表示される", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/lab/search")
+
+      assert html =~ "遺跡コード"
+      assert html =~ "site-code-filter"
+    end
+
+    test "都道府県コードを入力すると絞り込まれる", %{conn: conn} do
+      pdf_niigata = insert_pdf_source(%{site_code: "15206-27"})
+      pdf_tokyo = insert_pdf_source(%{site_code: "13101-05"})
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf_niigata.id,
+        label: "fig-301-1",
+        status: "published",
+        ptif_path: "/tmp/sc1.tif"
+      })
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf_tokyo.id,
+        label: "fig-302-1",
+        status: "published",
+        ptif_path: "/tmp/sc2.tif"
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/search")
+
+      html =
+        view
+        |> element("#site-code-filter")
+        |> render_change(%{"site_code" => "15"})
+
+      assert html =~ "fig-301-1"
+      refute html =~ "fig-302-1"
+    end
+
+    test "入力をクリアすると全件に戻る", %{conn: conn} do
+      pdf_niigata = insert_pdf_source(%{site_code: "15206-27"})
+      pdf_tokyo = insert_pdf_source(%{site_code: "13101-05"})
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf_niigata.id,
+        label: "fig-401-1",
+        status: "published",
+        ptif_path: "/tmp/sc1.tif"
+      })
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf_tokyo.id,
+        label: "fig-402-1",
+        status: "published",
+        ptif_path: "/tmp/sc2.tif"
+      })
+
+      {:ok, view, _html} = live(conn, ~p"/lab/search")
+
+      # 絞り込み
+      view |> element("#site-code-filter") |> render_change(%{"site_code" => "15"})
+
+      # クリア
+      html = view |> element("#site-code-filter") |> render_change(%{"site_code" => ""})
+
+      assert html =~ "fig-401-1"
+      assert html =~ "fig-402-1"
+    end
+  end
+
   describe "material ファセット" do
     test "素材チップが表示される", %{conn: conn} do
       insert_extracted_image(%{

@@ -27,6 +27,7 @@ defmodule AlchemIiifWeb.SearchLive do
      |> assign(:page_title, "画像を検索")
      |> assign(:query, "")
      |> assign(:filters, %{})
+     |> assign(:site_code_query, "")
      |> assign(:filter_options, filter_options)
      |> assign(:results, results)
      |> assign(:result_count, result_count)}
@@ -65,12 +66,32 @@ defmodule AlchemIiifWeb.SearchLive do
   end
 
   @impl true
+  def handle_event("filter_site_code", %{"site_code" => site_code}, socket) do
+    filters =
+      if site_code == "" do
+        Map.delete(socket.assigns.filters, "site_code")
+      else
+        Map.put(socket.assigns.filters, "site_code", site_code)
+      end
+
+    results = Search.search_images(socket.assigns.query, filters)
+
+    {:noreply,
+     socket
+     |> assign(:site_code_query, site_code)
+     |> assign(:filters, filters)
+     |> assign(:results, results)
+     |> assign(:result_count, length(results))}
+  end
+
+  @impl true
   def handle_event("clear_filters", _params, socket) do
     results = Search.search_images(socket.assigns.query, %{})
 
     {:noreply,
      socket
      |> assign(:filters, %{})
+     |> assign(:site_code_query, "")
      |> assign(:results, results)
      |> assign(:result_count, length(results))}
   end
@@ -101,6 +122,23 @@ defmodule AlchemIiifWeb.SearchLive do
           name="query"
           autocomplete="off"
         />
+      </div>
+
+      <%!-- 遺跡コード前方一致検索 --%>
+      <div class="filter-group" style="margin-bottom: 1rem;">
+        <label for="site-code-filter" class="filter-group-label">🔢 遺跡コード（前方一致）</label>
+        <form id="site-code-filter" phx-change="filter_site_code">
+          <input
+            type="text"
+            name="site_code"
+            value={@site_code_query}
+            placeholder="例：15（新潟県）、15206（新発田市）"
+            phx-debounce="300"
+            class="input input-bordered"
+            style="min-height: 60px; font-size: 1rem;"
+            aria-label="遺跡コード前方一致検索"
+          />
+        </form>
       </div>
 
       <%!-- フィルターチップス --%>
@@ -213,7 +251,7 @@ defmodule AlchemIiifWeb.SearchLive do
         <div class="no-results">
           <span class="no-results-icon">📭</span>
           <p class="section-description">
-            <%= if @query != "" || @filters != %{} do %>
+            <%= if @query != "" || @filters != %{} || @site_code_query != "" do %>
               条件に一致する図版が見つかりませんでした。<br /> 検索キーワードやフィルターを変更してみてください。
             <% else %>
               まだ図版が登録されていません。<br />
