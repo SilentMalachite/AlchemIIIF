@@ -183,6 +183,7 @@ defmodule AlchemIiif.SearchTest do
       assert is_list(options.sites)
       assert is_list(options.periods)
       assert is_list(options.artifact_types)
+      assert is_list(options.materials)
     end
 
     test "データがない場合は空リストを返す" do
@@ -190,6 +191,7 @@ defmodule AlchemIiif.SearchTest do
       assert options.sites == []
       assert options.periods == []
       assert options.artifact_types == []
+      assert options.materials == []
     end
 
     test "DISTINCT な値のみを返す" do

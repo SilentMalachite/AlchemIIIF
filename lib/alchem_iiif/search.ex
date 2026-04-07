@@ -29,6 +29,7 @@ defmodule AlchemIiif.Search do
       - "site" => 遺跡名
       - "period" => 時代
       - "artifact_type" => 遺物種別
+      - "material" => 素材
 
   ## 戻り値
     - 検索結果の ExtractedImage リスト（iiif_manifest をプリロード）
