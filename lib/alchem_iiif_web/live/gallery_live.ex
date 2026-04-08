@@ -411,6 +411,32 @@ defmodule AlchemIiifWeb.GalleryLive do
                       <span class="meta-tag">🏺 {image.artifact_type}</span>
                     <% end %>
                   </div>
+                  <%!-- 書誌情報（PdfSource から） --%>
+                  <%= if image.pdf_source do %>
+                    <div class="mt-1 space-y-0.5">
+                      <%= if image.pdf_source.report_title do %>
+                        <p
+                          class="text-xs text-gray-400 truncate"
+                          title={image.pdf_source.report_title}
+                        >
+                          報告書：{image.pdf_source.report_title}
+                        </p>
+                      <% end %>
+                      <%= if image.pdf_source.investigating_org do %>
+                        <p
+                          class="text-xs text-gray-400 truncate"
+                          title={image.pdf_source.investigating_org}
+                        >
+                          調査機関：{image.pdf_source.investigating_org}
+                        </p>
+                      <% end %>
+                      <%= if image.pdf_source.survey_year do %>
+                        <p class="text-xs text-gray-400">
+                          年度：{image.pdf_source.survey_year}年
+                        </p>
+                      <% end %>
+                    </div>
+                  <% end %>
                 </div>
               </div>
               <%!-- ダウンロードボタン --%>
