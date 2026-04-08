@@ -234,6 +234,54 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
     end
   end
 
+  describe "元 PDF ダウンロードリンク" do
+    test "filename が設定されている場合、ダウンロードリンクが表示される", %{conn: conn} do
+      pdf = insert_pdf_source(%{filename: "test_report_dl.pdf"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: pdf.id,
+          ptif_path: "/path/to/pdf-dl.tif",
+          status: "published",
+          label: "fig-70-1",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 0, "y" => 0, "width" => 100, "height" => 100}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      assert html =~ "原本 PDF をダウンロード"
+      assert html =~ "/uploads/pdfs/test_report_dl.pdf"
+    end
+
+    test "pdf_source が nil の場合、ダウンロードリンクが表示されない", %{conn: conn} do
+      # pdf_source なしの画像は insert_extracted_image のデフォルトで自動生成される
+      # filename はデフォルトで設定されるが、pdf_source 自体の存在は保証される
+      # このテストでは pdf_source.filename が空文字列の場合をテスト
+      pdf = insert_pdf_source(%{filename: "required_placeholder.pdf"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: pdf.id,
+          ptif_path: "/path/to/pdf-nodl.tif",
+          status: "published",
+          label: "fig-71-1",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 0, "y" => 0, "width" => 100, "height" => 100}
+        })
+
+      # filename を空にする（build_rendering と同じ nil/空文字チェック）
+      import Ecto.Changeset
+      pdf |> change(%{filename: ""}) |> AlchemIiif.Repo.update!(force: true)
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      refute html =~ "原本 PDF をダウンロード"
+    end
+  end
+
   describe "select_image / close_modal イベント" do
     test "カードクリックでモーダルが表示される", %{conn: conn} do
       image =
