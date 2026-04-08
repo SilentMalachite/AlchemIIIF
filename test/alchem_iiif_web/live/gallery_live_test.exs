@@ -109,6 +109,47 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
     end
   end
 
+  describe "ギャラリーカードの書誌情報表示" do
+    test "report_title が設定されている場合、カードに表示される", %{conn: conn} do
+      pdf =
+        insert_pdf_source(%{
+          report_title: "新潟県埋蔵文化財調査報告書",
+          investigating_org: "新潟県教育委員会",
+          survey_year: 2020
+        })
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf.id,
+        ptif_path: "/path/to/biblio.tif",
+        status: "published",
+        label: "fig-50-1"
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/gallery")
+
+      assert html =~ "新潟県埋蔵文化財調査報告書"
+      assert html =~ "新潟県教育委員会"
+      assert html =~ "2020年"
+    end
+
+    test "report_title が nil の場合、報告書名ラベルが表示されない", %{conn: conn} do
+      pdf = insert_pdf_source(%{report_title: nil, investigating_org: nil, survey_year: nil})
+
+      insert_extracted_image(%{
+        pdf_source_id: pdf.id,
+        ptif_path: "/path/to/nobiblio.tif",
+        status: "published",
+        label: "fig-51-1"
+      })
+
+      {:ok, _view, html} = live(conn, ~p"/gallery")
+
+      refute html =~ "報告書："
+      refute html =~ "調査機関："
+      refute html =~ "年度："
+    end
+  end
+
   describe "select_image / close_modal イベント" do
     test "カードクリックでモーダルが表示される", %{conn: conn} do
       image =
