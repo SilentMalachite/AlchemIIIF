@@ -29,6 +29,8 @@ defmodule AlchemIiif.Search do
       - "site" => 遺跡名
       - "period" => 時代
       - "artifact_type" => 遺物種別
+      - "material" => 素材
+      - "site_code" => 遺跡コード（前方一致）
 
   ## 戻り値
     - 検索結果の ExtractedImage リスト（iiif_manifest をプリロード）
@@ -71,7 +73,8 @@ defmodule AlchemIiif.Search do
     %{
       sites: list_distinct_values(:site, opts),
       periods: list_distinct_values(:period, opts),
-      artifact_types: list_distinct_values(:artifact_type, opts)
+      artifact_types: list_distinct_values(:artifact_type, opts),
+      materials: list_distinct_values(:material, opts)
     }
   end
 
@@ -128,6 +131,8 @@ defmodule AlchemIiif.Search do
     |> maybe_filter(:site, filters["site"])
     |> maybe_filter(:period, filters["period"])
     |> maybe_filter(:artifact_type, filters["artifact_type"])
+    |> maybe_filter(:material, filters["material"])
+    |> maybe_filter(:site_code, filters["site_code"])
   end
 
   defp apply_filters(query, _), do: query
@@ -146,6 +151,26 @@ defmodule AlchemIiif.Search do
 
   defp maybe_filter(query, :artifact_type, value) do
     where(query, [e], e.artifact_type == ^value)
+  end
+
+  defp maybe_filter(query, :material, value) do
+    where(query, [e], e.material == ^value)
+  end
+
+  # site_code は pdf_sources テーブルにあるため JOIN が必要
+  defp maybe_filter(query, :site_code, value) do
+    escaped =
+      value
+      |> String.replace("\\", "\\\\")
+      |> String.replace("%", "\\%")
+      |> String.replace("_", "\\_")
+
+    pattern = "#{escaped}%"
+
+    from e in query,
+      join: p in assoc(e, :pdf_source),
+      where: like(p.site_code, ^pattern),
+      distinct: true
   end
 
   # DISTINCT 値の取得

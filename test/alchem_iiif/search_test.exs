@@ -17,6 +17,7 @@ defmodule AlchemIiif.SearchTest do
         site: "吉野ヶ里町遺跡",
         period: "縄文時代",
         artifact_type: "土器",
+        material: "粘土",
         status: "published",
         ptif_path: "/path/to/test1.tif"
       })
@@ -30,6 +31,7 @@ defmodule AlchemIiif.SearchTest do
         site: "静岡市登呂遺跡",
         period: "弥生時代",
         artifact_type: "銅鉛",
+        material: "青銅",
         status: "published",
         ptif_path: "/path/to/test2.tif"
       })
@@ -43,6 +45,7 @@ defmodule AlchemIiif.SearchTest do
         site: "吉野ヶ里町遺跡",
         period: "縄文時代",
         artifact_type: "石器",
+        material: "黒曜石",
         status: "draft",
         ptif_path: "/path/to/test3.tif"
       })
@@ -170,6 +173,13 @@ defmodule AlchemIiif.SearchTest do
       results = Search.search_published_images("吉野ヶ里")
       assert Enum.all?(results, &(&1.status == "published"))
     end
+
+    test "site_code フィルターで前方一致検索できる" do
+      _images = create_site_code_test_images()
+      results = Search.search_published_images("", %{"site_code" => "15"})
+      ids = Enum.map(results, & &1.id)
+      assert length(ids) == 1
+    end
   end
 
   describe "list_filter_options/0" do
@@ -180,6 +190,7 @@ defmodule AlchemIiif.SearchTest do
       assert is_list(options.sites)
       assert is_list(options.periods)
       assert is_list(options.artifact_types)
+      assert is_list(options.materials)
     end
 
     test "データがない場合は空リストを返す" do
@@ -187,6 +198,7 @@ defmodule AlchemIiif.SearchTest do
       assert options.sites == []
       assert options.periods == []
       assert options.artifact_types == []
+      assert options.materials == []
     end
 
     test "DISTINCT な値のみを返す" do
@@ -195,6 +207,14 @@ defmodule AlchemIiif.SearchTest do
       options = Search.list_filter_options()
       # 吉野ヶ里町遺跡は2回登録されているが、1回のみ出力
       assert Enum.count(options.sites, &(&1 == "吉野ヶ里町遺跡")) == 1
+    end
+
+    test "materials が取得できる" do
+      _images = create_test_images()
+      options = Search.list_filter_options()
+      assert is_list(options.materials)
+      assert "粘土" in options.materials
+      assert "青銅" in options.materials
     end
   end
 
@@ -268,6 +288,112 @@ defmodule AlchemIiif.SearchTest do
       assert "石器" in options.artifact_types
       assert "吉野ヶ里町遺跡" in options.sites
     end
+
+    test "draft の material は published_only で除外される" do
+      _images = create_test_images()
+      options = Search.list_filter_options(published_only: true)
+      assert "粘土" in options.materials
+      assert "青銅" in options.materials
+      refute "黒曜石" in options.materials
+    end
+  end
+
+  describe "search_images/2 material フィルター" do
+    test "material を指定すると該当レコードのみ返る" do
+      %{img1: img1} = create_test_images()
+      results = Search.search_images("", %{"material" => "粘土"})
+      ids = Enum.map(results, & &1.id)
+      assert img1.id in ids
+      assert length(ids) == 1
+    end
+
+    test "material が nil の場合は全件返る" do
+      %{img1: img1, img2: img2} = create_test_images()
+      results = Search.search_images("", %{"material" => nil})
+      ids = Enum.map(results, & &1.id)
+      assert img1.id in ids
+      assert img2.id in ids
+    end
+
+    test "存在しない material を指定すると空配列が返る" do
+      _images = create_test_images()
+      results = Search.search_images("", %{"material" => "ダイヤモンド"})
+      assert results == []
+    end
+  end
+
+  defp create_site_code_test_images do
+    pdf_niigata = insert_pdf_source(%{site_code: "15206-27"})
+    pdf_tokyo = insert_pdf_source(%{site_code: "13101-05"})
+    pdf_no_code = insert_pdf_source()
+
+    img_niigata =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_niigata.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc1.tif"
+      })
+
+    img_tokyo =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_tokyo.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc2.tif"
+      })
+
+    img_no_code =
+      insert_extracted_image(%{
+        pdf_source_id: pdf_no_code.id,
+        page_number: 1,
+        status: "published",
+        ptif_path: "/tmp/sc3.tif"
+      })
+
+    %{img_niigata: img_niigata, img_tokyo: img_tokyo, img_no_code: img_no_code}
+  end
+
+  describe "search_images/2 site_code 前方一致フィルター" do
+    test "都道府県コード2桁で前方一致検索できる" do
+      %{img_niigata: img_niigata, img_tokyo: img_tokyo} = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "15"})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      refute img_tokyo.id in ids
+    end
+
+    test "市区町村コードまで指定して絞り込める" do
+      %{img_niigata: img_niigata} = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "15206"})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      assert length(ids) == 1
+    end
+
+    test "マッチしないコードでは空配列が返る" do
+      _images = create_site_code_test_images()
+      results = Search.search_images("", %{"site_code" => "99"})
+      assert results == []
+    end
+
+    test "空文字の場合は全件返る" do
+      %{img_niigata: img_niigata, img_tokyo: img_tokyo, img_no_code: img_no_code} =
+        create_site_code_test_images()
+
+      results = Search.search_images("", %{"site_code" => ""})
+      ids = Enum.map(results, & &1.id)
+      assert img_niigata.id in ids
+      assert img_tokyo.id in ids
+      assert img_no_code.id in ids
+    end
+
+    test "LIKE インジェクション文字がエスケープされる" do
+      _images = create_site_code_test_images()
+      # "15%" should be treated as literal "15%" not as "15<anything>"
+      results = Search.search_images("", %{"site_code" => "15%"})
+      assert results == []
+    end
   end
 
   describe "count_results/2" do
@@ -290,6 +416,11 @@ defmodule AlchemIiif.SearchTest do
 
       count = Search.count_results("", %{"period" => "弥生時代"})
       assert count == 1
+    end
+
+    test "site_code フィルターで正しい件数が返る" do
+      _images = create_site_code_test_images()
+      assert Search.count_results("", %{"site_code" => "15"}) == 1
     end
   end
 end
