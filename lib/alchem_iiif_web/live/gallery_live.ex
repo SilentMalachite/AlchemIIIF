@@ -558,10 +558,7 @@ defmodule AlchemIiifWeb.GalleryLive do
             <% end %>
 
             <%!-- メタデータパネル --%>
-            <div
-              class="w-full max-w-4xl mt-4 bg-[#1A2332] rounded-lg p-4 overflow-y-auto max-h-[30vh]"
-              phx-click-away=""
-            >
+            <div class="w-full max-w-4xl mt-4 bg-[#1A2332] rounded-lg p-4 overflow-y-auto max-h-[30vh]">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <%!-- 画像情報 --%>
                 <div>
@@ -666,6 +663,7 @@ defmodule AlchemIiifWeb.GalleryLive do
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2332] text-[#E6B422] hover:bg-[#243044] transition-colors text-sm"
+                  aria-label={"#{@selected_image.pdf_source.report_title || @selected_image.pdf_source.filename} の原本 PDF をダウンロード"}
                 >
                   <.icon name="hero-document-arrow-down" class="w-5 h-5" /> 原本 PDF をダウンロード
                 </a>

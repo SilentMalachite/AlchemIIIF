@@ -273,7 +273,7 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
 
       # filename を空にする（build_rendering と同じ nil/空文字チェック）
       import Ecto.Changeset
-      pdf |> change(%{filename: ""}) |> AlchemIiif.Repo.update!(force: true)
+      pdf |> change(%{filename: ""}) |> AlchemIiif.Repo.update!()
 
       {:ok, view, _html} = live(conn, ~p"/gallery")
       html = render_click(view, "select_image", %{"id" => image.id})
