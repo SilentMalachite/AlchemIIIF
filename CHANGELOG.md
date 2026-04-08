@@ -4,6 +4,34 @@
 
 ---
 
+## [0.2.26] - 2026-04-09
+
+### 📦 ギャラリー UI — メタデータ表示拡張
+
+- **ギャラリーカードに書誌情報を追加 (`gallery_live.ex`)**
+  - `report_title`（報告書名）、`investigating_org`（調査機関）、`survey_year`（調査年度）をカード下部に表示。
+  - nil フィールドは要素ごと非表示（空欄を残さない）。認知負荷を抑えるため3項目に制限。
+- **詳細モーダルにメタデータパネルを追加 (`gallery_live.ex`)**
+  - 「画像情報」セクション：遺跡名・時代・遺物種別・素材・図版番号・キャプション。
+  - 「報告書情報」セクション：報告書名・調査機関・調査年度・遺跡コード・ライセンス（リンク）。
+  - `<dl>/<dt>/<dd>` 定義リスト形式。インディゴ＆ハーベストゴールドテーマに統一。
+- **詳細モーダルに元 PDF ダウンロードリンクを追加 (`gallery_live.ex`)**
+  - `MetadataHelper.build_rendering/1` と同じ URL パス（`/uploads/pdfs/#{filename}`）を使用。
+  - `filename` が nil または空文字列の場合はリンク非表示。`aria-label` 付きでアクセシビリティ対応。
+- **検索・モーダル用クエリに `:pdf_source` preload を追加 (`search.ex`, `ingestion.ex`)**
+  - `search_published_images/3` と `get_published_extracted_image_with_manifest/1` の両方を更新。
+
+### ✅ テスト追加
+- ギャラリーカード書誌情報表示テスト 2 件（表示・nil 非表示）
+- モーダルメタデータパネルテスト 2 件（全フィールド表示・nil 非表示）
+- 元 PDF ダウンロードリンクテスト 2 件（表示・非表示）
+
+### 🔧 その他
+- `.dialyzer_ignore.exs` に Ecto.Multi opaque 型の既知誤検知を追加
+- テストファクトリに nil オーバーライド対応の `force_change` を追加 (`factory.ex`)
+
+---
+
 ## [0.2.25] - 2026-04-08
 
 ### 📦 IIIF Manifest 推奨プロパティの完成（navDate / rendering / summary）
