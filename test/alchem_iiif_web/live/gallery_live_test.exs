@@ -150,6 +150,90 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
     end
   end
 
+  describe "詳細モーダルのメタデータパネル" do
+    test "モーダルに画像メタデータと報告書情報が表示される", %{conn: conn} do
+      pdf =
+        insert_pdf_source(%{
+          report_title: "越後平野遺跡群報告",
+          investigating_org: "新潟県教育委員会",
+          survey_year: 2019,
+          site_code: "15-100-001",
+          license_uri: "https://creativecommons.org/licenses/by/4.0/"
+        })
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: pdf.id,
+          ptif_path: "/path/to/modal-meta.tif",
+          status: "published",
+          label: "fig-60-1",
+          caption: "縄文土器破片",
+          site: "越後市平野遺跡",
+          period: "縄文時代",
+          artifact_type: "土器",
+          material: "土",
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 0, "y" => 0, "width" => 100, "height" => 100}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      # 画像情報
+      assert html =~ "越後市平野遺跡"
+      assert html =~ "縄文時代"
+      assert html =~ "土器"
+      assert html =~ "土"
+      assert html =~ "fig-60-1"
+      assert html =~ "縄文土器破片"
+
+      # 報告書情報
+      assert html =~ "越後平野遺跡群報告"
+      assert html =~ "新潟県教育委員会"
+      assert html =~ "2019年"
+      assert html =~ "15-100-001"
+      assert html =~ "https://creativecommons.org/licenses/by/4.0/"
+    end
+
+    test "nil フィールドに対応するラベルが表示されない", %{conn: conn} do
+      pdf =
+        insert_pdf_source(%{
+          report_title: nil,
+          investigating_org: nil,
+          survey_year: nil,
+          site_code: nil,
+          license_uri: nil
+        })
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: pdf.id,
+          ptif_path: "/path/to/modal-nil.tif",
+          status: "published",
+          label: "fig-61-1",
+          site: nil,
+          period: nil,
+          artifact_type: nil,
+          material: nil,
+          image_path: "priv/static/uploads/test.png",
+          geometry: %{"x" => 0, "y" => 0, "width" => 100, "height" => 100}
+        })
+
+      {:ok, view, _html} = live(conn, ~p"/gallery")
+      html = render_click(view, "select_image", %{"id" => image.id})
+
+      refute html =~ "遺跡名"
+      refute html =~ "時代"
+      refute html =~ "遺物種別"
+      refute html =~ "素材"
+      refute html =~ "報告書名"
+      refute html =~ "調査機関"
+      refute html =~ "調査年度"
+      refute html =~ "遺跡コード"
+      refute html =~ "ライセンス"
+    end
+  end
+
   describe "select_image / close_modal イベント" do
     test "カードクリックでモーダルが表示される", %{conn: conn} do
       image =
