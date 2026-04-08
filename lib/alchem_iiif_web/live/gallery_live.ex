@@ -658,6 +658,20 @@ defmodule AlchemIiifWeb.GalleryLive do
               </div>
             </div>
 
+            <%!-- 元 PDF ダウンロードリンク --%>
+            <%= if @selected_image.pdf_source && @selected_image.pdf_source.filename not in [nil, ""] do %>
+              <div class="w-full max-w-4xl mt-2 text-center">
+                <a
+                  href={pdf_url(@selected_image.pdf_source.filename)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2332] text-[#E6B422] hover:bg-[#243044] transition-colors text-sm"
+                >
+                  <.icon name="hero-document-arrow-down" class="w-5 h-5" /> 原本 PDF をダウンロード
+                </a>
+              </div>
+            <% end %>
+
             <%!-- 閉じるボタン --%>
             <button
               type="button"
@@ -763,6 +777,11 @@ defmodule AlchemIiifWeb.GalleryLive do
   defp image_thumbnail_url(image) do
     image.image_path
     |> String.replace_leading("priv/static/", "/")
+  end
+
+  # 元 PDF の URL を構築（MetadataHelper.build_rendering/1 と同じパス構造）
+  defp pdf_url(filename) do
+    "/uploads/pdfs/#{filename}"
   end
 
   # IIIF Image API info.json URL の構築
