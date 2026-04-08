@@ -35,6 +35,13 @@ defmodule AlchemIiif.Factory do
         changeset
       end
 
+    # nil を明示的にオーバーライドされたフィールドは force_change で DB デフォルトを上書き
+    changeset =
+      Enum.reduce(overrides, changeset, fn
+        {key, nil}, cs when is_atom(key) -> Ecto.Changeset.force_change(cs, key, nil)
+        _, cs -> cs
+      end)
+
     Repo.insert!(changeset)
   end
 

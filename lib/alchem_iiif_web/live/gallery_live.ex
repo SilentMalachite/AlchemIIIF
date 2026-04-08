@@ -216,7 +216,7 @@ defmodule AlchemIiifWeb.GalleryLive do
           type="search"
           id="gallery-search-input"
           class="search-input"
-          placeholder="キャプション、ラベル、遺跡名で検索..."
+          placeholder="キャプション・ラベル・遺跡・図版で検索..."
           value={@query}
           phx-keyup="search"
           phx-value-query={@query}
@@ -556,6 +556,107 @@ defmodule AlchemIiifWeb.GalleryLive do
                 <% end %>
               </div>
             <% end %>
+
+            <%!-- メタデータパネル --%>
+            <div
+              class="w-full max-w-4xl mt-4 bg-[#1A2332] rounded-lg p-4 overflow-y-auto max-h-[30vh]"
+              phx-click-away=""
+            >
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <%!-- 画像情報 --%>
+                <div>
+                  <h4 class="text-sm font-semibold text-[#E6B422] mb-2">画像情報</h4>
+                  <dl class="space-y-1 text-sm">
+                    <%= if @selected_image.site do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">遺跡名</dt>
+                        <dd class="text-gray-200">{@selected_image.site}</dd>
+                      </div>
+                    <% end %>
+                    <%= if @selected_image.period do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">時代</dt>
+                        <dd class="text-gray-200">{@selected_image.period}</dd>
+                      </div>
+                    <% end %>
+                    <%= if @selected_image.artifact_type do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">遺物種別</dt>
+                        <dd class="text-gray-200">{@selected_image.artifact_type}</dd>
+                      </div>
+                    <% end %>
+                    <%= if @selected_image.material do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">素材</dt>
+                        <dd class="text-gray-200">{@selected_image.material}</dd>
+                      </div>
+                    <% end %>
+                    <%= if @selected_image.label do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">図版番号</dt>
+                        <dd class="text-gray-200">{@selected_image.label}</dd>
+                      </div>
+                    <% end %>
+                    <%= if @selected_image.caption do %>
+                      <div class="flex gap-2">
+                        <dt class="text-gray-400 shrink-0">キャプション</dt>
+                        <dd class="text-gray-200">{@selected_image.caption}</dd>
+                      </div>
+                    <% end %>
+                  </dl>
+                </div>
+
+                <%!-- 報告書情報 --%>
+                <%= if @selected_image.pdf_source do %>
+                  <div>
+                    <h4 class="text-sm font-semibold text-[#E6B422] mb-2">報告書情報</h4>
+                    <dl class="space-y-1 text-sm">
+                      <%= if @selected_image.pdf_source.report_title do %>
+                        <div class="flex gap-2">
+                          <dt class="text-gray-400 shrink-0">報告書名</dt>
+                          <dd class="text-gray-200">{@selected_image.pdf_source.report_title}</dd>
+                        </div>
+                      <% end %>
+                      <%= if @selected_image.pdf_source.investigating_org do %>
+                        <div class="flex gap-2">
+                          <dt class="text-gray-400 shrink-0">調査機関</dt>
+                          <dd class="text-gray-200">
+                            {@selected_image.pdf_source.investigating_org}
+                          </dd>
+                        </div>
+                      <% end %>
+                      <%= if @selected_image.pdf_source.survey_year do %>
+                        <div class="flex gap-2">
+                          <dt class="text-gray-400 shrink-0">調査年度</dt>
+                          <dd class="text-gray-200">{@selected_image.pdf_source.survey_year}年</dd>
+                        </div>
+                      <% end %>
+                      <%= if @selected_image.pdf_source.site_code do %>
+                        <div class="flex gap-2">
+                          <dt class="text-gray-400 shrink-0">遺跡コード</dt>
+                          <dd class="text-gray-200">{@selected_image.pdf_source.site_code}</dd>
+                        </div>
+                      <% end %>
+                      <%= if @selected_image.pdf_source.license_uri do %>
+                        <div class="flex gap-2">
+                          <dt class="text-gray-400 shrink-0">ライセンス</dt>
+                          <dd>
+                            <a
+                              href={@selected_image.pdf_source.license_uri}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="text-[#E6B422] hover:underline text-sm"
+                            >
+                              {@selected_image.pdf_source.license_uri}
+                            </a>
+                          </dd>
+                        </div>
+                      <% end %>
+                    </dl>
+                  </div>
+                <% end %>
+              </div>
+            </div>
 
             <%!-- 閉じるボタン --%>
             <button
