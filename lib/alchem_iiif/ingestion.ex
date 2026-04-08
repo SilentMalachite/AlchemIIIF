@@ -332,7 +332,7 @@ defmodule AlchemIiif.Ingestion do
     from(e in ExtractedImage,
       where: e.id == ^id,
       where: e.status == "published",
-      preload: [:iiif_manifest]
+      preload: [:iiif_manifest, :pdf_source]
     )
     |> Repo.one()
   end

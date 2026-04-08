@@ -61,7 +61,7 @@ defmodule AlchemIiif.Search do
     |> order_by([e], desc: e.inserted_at)
     |> limit(^limit_val)
     |> offset(^offset_val)
-    |> preload(:iiif_manifest)
+    |> preload([:iiif_manifest, :pdf_source])
     |> Repo.all()
   end
 
