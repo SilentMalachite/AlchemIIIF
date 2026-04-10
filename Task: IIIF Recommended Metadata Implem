@@ -1,0 +1,129 @@
+# Task: IIIF Recommended Metadata Implementation
+
+## 目的
+IIIF Presentation API v3.0 の文化遺産機関向け recommended プロパティ
+（`requiredStatement` / `rights` / `provider`）を実装する。
+
+合わせて、それらの値の源泉となる書誌フィールドを `pdf_sources` に追加する。
+
+---
+
+## 変更スコープ（このセッションで触るファイルのみ）
+
+| ファイル | 変更内容 |
+|---|---|
+| `priv/repo/migrations/YYYYMMDDHHMMSS_add_bibliographic_fields_to_pdf_sources.exs` | 新規マイグレーション作成 |
+| `lib/alchem_iiif/ingestion/pdf_source.ex` | フィールド追加・バリデーション |
+| `lib/alchem_iiif_web/controllers/iiif/manifest_controller.ex` | recommended プロパティ出力 |
+| `lib/alchem_iiif_web/controllers/iiif/presentation_controller.ex` | 同上 |
+| `test/alchem_iiif/ingestion/pdf_source_test.exs` | バリデーションテスト |
+| `test/alchem_iiif_web/controllers/iiif/manifest_controller_test.exs` | Manifest JSON テスト |
+| `test/alchem_iiif_web/controllers/iiif/presentation_controller_test.exs` | 同上 |
+
+**このセッションで触らないファイル：**
+- `inspector_live/` 配下の LiveView（UI拡張は別セッション）
+- `extracted_image.ex`（スキーマ変更なし）
+- `search.ex`（検索への反映は別セッション）
+
+---
+
+## Step 1：マイグレーション作成
+
+以下のフィールドを `pdf_sources` テーブルに追加するマイグレーションを生成する。
+```elixir
+add :investigating_org, :string   # 発掘調査機関名
+add :survey_year, :integer        # 調査年度（西暦4桁）
+add :report_title, :string        # 報告書名（filenameとは別の正式名称）
+add :license_uri, :string,
+    default: "http://rightsstatements.org/vocab/InC/1.0/"
+```
+
+`mix ecto.gen.migration add_bibliographic_fields_to_pdf_sources` で生成後、
+上記フィールドを記述する。`null: true` で既存レコードへの影響を最小化する。
+
+---
+
+## Step 2：PdfSource スキーマ更新
+
+`lib/alchem_iiif/ingestion/pdf_source.ex` に以下を追加する。
+
+### フィールド定義
+```elixir
+field :investigating_org, :string
+field :survey_year, :integer
+field :report_title, :string
+field :license_uri, :string
+```
+
+### changeset バリデーション
+
+`cast` の対象フィールドに4つを追加する。
+
+以下のバリデーションを追加する：
+- `survey_year`：1900以上・現在年以下の整数であること
+- `license_uri`：入力された場合は URI 形式であること（URI形式とは `http://` または `https://` で始まる文字列）
+- 文字数上限：`investigating_org` 200文字、`report_title` 500文字
+
+`required` には含めない（既存レコードとの後方互換性を保つため）。
+
+---
+
+## Step 3：Manifest 生成の更新
+
+### 対象ファイル
+- `manifest_controller.ex`（個別画像 Manifest）
+- `presentation_controller.ex`（PdfSource 単位 Manifest）
+
+### 追加すべき IIIF プロパティ
+
+両 controller の JSON 生成部分に以下を追加する。
+値が `nil` の場合はそのキーを出力しない（条件付き出力）。
+```elixir
+# requiredStatement（値がある場合のみ）
+"requiredStatement" => build_required_statement(source),
+
+# rights（値がある場合のみ）
+"rights" => source.license_uri,
+
+# provider（investigating_org がある場合のみ）
+"provider" => build_provider(source),
+```
+
+ヘルパー関数として同ファイル内（または共通モジュール）に定義する：
+```elixir
+defp build_required_statement(%{investigating_org: nil}), do: nil
+defp build_required_statement(%{investigating_org: org}) do
+  %{
+    "label" => %{"ja" => ["提供機関"], "en" => ["Attribution"]},
+    "value" => %{"ja" => [org], "en" => [org]}
+  }
+end
+
+defp build_provider(%{investigating_org: nil}), do: nil
+defp build_provider(%{investigating_org: org}) do
+  [%{
+    "id"   => AlchemIiifWeb.Endpoint.url(),
+    "type" => "Agent",
+    "label" => %{"ja" => [org], "en" => [org]}
+  }]
+end
+```
+
+### metadata プロパティへの追加
+
+既存の `metadata` 配列に以下を追記する（nil の場合はエントリを省く）：
+```elixir
+label_value("調査機関", "Investigating Organization", source.investigating_org),
+label_value("調査年度", "Survey Year", format_survey_year(source.survey_year)),
+label_value("報告書名", "Report Title", source.report_title),
+```
+
+`format_survey_year/1` は `nil` → `nil`、整数 → `"#{year}年"` に変換するヘルパー。
+
+---
+
+## Step 4：テスト（TDD）
+
+### 実装より先にテストを書く
+
+#### `pdf_source_test.exs` に追加するテストケース

@@ -43,3 +43,6 @@ npm-debug.log
 /priv/static/uploads/
 /priv/static/iiif_cache/
 /priv/static/iiif_images/
+
+# ローカル worktree
+/.worktrees/
