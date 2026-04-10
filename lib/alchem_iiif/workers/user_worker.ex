@@ -6,6 +6,7 @@ defmodule AlchemIiif.Workers.UserWorker do
   LiveView プロセスから分離して非同期実行します。
   """
   use GenServer
+  @behaviour AlchemIiif.PdfProcessingDispatcher
   require Logger
 
   @registry AlchemIiif.UserWorkerRegistry
@@ -23,6 +24,12 @@ defmodule AlchemIiif.Workers.UserWorker do
       via_tuple(user_id),
       {:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}
     )
+  end
+
+  @impl true
+  def dispatch_pdf_processing(user_id, pdf_source, pdf_path, pipeline_id, color_mode) do
+    process_pdf(user_id, pdf_source, pdf_path, pipeline_id, color_mode)
+    :ok
   end
 
   defp via_tuple(user_id), do: {:via, Registry, {@registry, user_id}}

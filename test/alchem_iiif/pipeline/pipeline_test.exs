@@ -8,6 +8,8 @@ defmodule AlchemIiif.PipelineTest do
   use AlchemIiif.DataCase, async: false
 
   alias AlchemIiif.Pipeline
+  alias AlchemIiif.Repo
+  import Ecto.Query, only: [from: 2]
   import AlchemIiif.Factory
 
   @pubsub AlchemIiif.PubSub
@@ -152,6 +154,66 @@ defmodule AlchemIiif.PipelineTest do
 
       # Task の完了を待ってから Sandbox がクリーンアップされるようにする
       Task.await(task, 10_000)
+    end
+
+    test "削除済み PdfSource を受け取っても error path で StaleEntryError を起こさない" do
+      pdf_source = insert_pdf_source(%{status: "uploading"})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      Repo.delete!(pdf_source)
+
+      assert {:error, _reason} =
+               Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
+    end
+
+    test "削除済み PdfSource を受け取った success path は画像登録せず安全に終了する" do
+      pdf_source = insert_pdf_source(%{status: "uploading"})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      pdf_content = """
+      %PDF-1.0
+      1 0 obj
+      << /Type /Catalog /Pages 2 0 R >>
+      endobj
+      2 0 obj
+      << /Type /Pages /Kids [3 0 R] /Count 1 >>
+      endobj
+      3 0 obj
+      << /Type /Page /Parent 2 0 R /MediaBox [0 0 72 72] >>
+      endobj
+      xref
+      0 4
+      0000000000 65535 f
+      0000000009 00000 n
+      0000000058 00000 n
+      0000000115 00000 n
+      trailer
+      << /Size 4 /Root 1 0 R >>
+      startxref
+      190
+      %%EOF
+      """
+
+      tmp_pdf =
+        Path.join(
+          System.tmp_dir!(),
+          "pipeline_deleted_source_#{System.unique_integer([:positive])}.pdf"
+        )
+
+      File.write!(tmp_pdf, pdf_content)
+
+      on_exit(fn -> File.rm(tmp_pdf) end)
+
+      Repo.delete!(pdf_source)
+
+      assert {:error, :pdf_source_not_found} =
+               Pipeline.run_pdf_extraction(pdf_source, tmp_pdf, pipeline_id)
+
+      assert [] ==
+               Repo.all(
+                 from e in AlchemIiif.Ingestion.ExtractedImage,
+                   where: e.pdf_source_id == ^pdf_source.id
+               )
     end
   end
 

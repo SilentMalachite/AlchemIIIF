@@ -20,7 +20,7 @@ defmodule AlchemIiif.Pipeline do
 
   alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion
-  alias AlchemIiif.Ingestion.{ImageProcessor, PdfProcessor}
+  alias AlchemIiif.Ingestion.{ImageProcessor, PdfProcessor, PdfSource}
   alias AlchemIiif.Pipeline.ResourceMonitor
   alias AlchemIiif.Repo
   alias Phoenix.PubSub
@@ -86,12 +86,27 @@ defmodule AlchemIiif.Pipeline do
               final_path
             end)
 
-          # PdfSource を更新
-          {:ok, _} =
-            Ingestion.update_pdf_source(pdf_source, %{
-              page_count: page_count,
-              status: "ready"
-            })
+          case update_pdf_source_if_present(pdf_source.id, %{
+                 page_count: page_count,
+                 status: "ready"
+               }) do
+            {:ok, _updated} ->
+              :ok
+
+            {:error, :not_found} ->
+              Logger.warning(
+                "[Pipeline] PdfSource #{pdf_source.id} disappeared before ready update"
+              )
+
+              throw({:pipeline_abort, :pdf_source_not_found})
+
+            {:error, update_error} ->
+              Logger.warning(
+                "[Pipeline] Failed to update PdfSource #{pdf_source.id}: #{inspect(update_error)}"
+              )
+
+              throw({:pipeline_abort, :pdf_source_update_failed})
+          end
 
           broadcast_progress(pipeline_id, %{
             event: :phase_complete,
@@ -149,7 +164,20 @@ defmodule AlchemIiif.Pipeline do
           {:ok, %{page_count: page_count, images: images}}
 
         {:error, reason} ->
-          Ingestion.update_pdf_source(pdf_source, %{status: "error"})
+          case update_pdf_source_if_present(pdf_source.id, %{status: "error"}) do
+            {:ok, _updated} ->
+              :ok
+
+            {:error, :not_found} ->
+              Logger.warning(
+                "[Pipeline] PdfSource #{pdf_source.id} disappeared before error update"
+              )
+
+            {:error, update_error} ->
+              Logger.warning(
+                "[Pipeline] Failed to mark PdfSource #{pdf_source.id} as error: #{inspect(update_error)}"
+              )
+          end
 
           broadcast_progress(pipeline_id, %{
             event: :pipeline_error,
@@ -159,6 +187,9 @@ defmodule AlchemIiif.Pipeline do
 
           {:error, reason}
       end
+    catch
+      {:pipeline_abort, reason} ->
+        {:error, reason}
     after
       # 一時ディレクトリを確実に削除（並行安全のクリーンアップ）
       File.rm_rf(tmp_dir)
@@ -439,4 +470,13 @@ defmodule AlchemIiif.Pipeline do
   end
 
   defp maybe_put_owner_id(attrs, _opts), do: attrs
+
+  defp fetch_pdf_source(id), do: Repo.get(PdfSource, id)
+
+  defp update_pdf_source_if_present(id, attrs) do
+    case fetch_pdf_source(id) do
+      nil -> {:error, :not_found}
+      pdf_source -> Ingestion.update_pdf_source(pdf_source, attrs)
+    end
+  end
 end

@@ -62,6 +62,21 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
   describe "報告書情報フォーム" do
     setup :register_and_log_in_user
 
+    setup do
+      previous = Application.get_env(:alchem_iiif, :pdf_processing_dispatch_test_pid)
+      Application.put_env(:alchem_iiif, :pdf_processing_dispatch_test_pid, self())
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:alchem_iiif, :pdf_processing_dispatch_test_pid, previous)
+        else
+          Application.delete_env(:alchem_iiif, :pdf_processing_dispatch_test_pid)
+        end
+      end)
+
+      :ok
+    end
+
     test "報告書情報セクションが表示される", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/lab/upload")
 
@@ -100,19 +115,13 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "test_report.pdf")
 
-      # submit 送信 — PdfSource 作成後に Pipeline（pdftoppm）が起動するが、
-      # テスト環境では外部コマンドが失敗する場合がある。
-      # PdfSource の DB 挿入は Pipeline 起動前に完了するため、
-      # Pipeline 由来の例外のみ許容する。
-      try do
-        render_submit(view, "upload_pdf", %{
-          "color_mode" => "mono"
-        })
-      rescue
-        _ -> :ok
-      catch
-        :exit, _ -> :ok
-      end
+      render_submit(view, "upload_pdf", %{"color_mode" => "mono"})
+
+      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert dispatched.user_id == user.id
+      assert dispatched.color_mode == "mono"
+      assert dispatched.pdf_source_id
+      assert String.ends_with?(dispatched.pdf_path, ".pdf")
 
       # PdfSource が書誌情報付きで作成されていることを確認
       [pdf_source] =
@@ -152,15 +161,12 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "empty_fields.pdf")
 
-      try do
-        render_submit(view, "upload_pdf", %{
-          "color_mode" => "mono"
-        })
-      rescue
-        _ -> :ok
-      catch
-        :exit, _ -> :ok
-      end
+      render_submit(view, "upload_pdf", %{"color_mode" => "mono"})
+
+      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert dispatched.user_id == user.id
+      assert dispatched.color_mode == "mono"
+      assert dispatched.pdf_source_id
 
       # PdfSource が作成されている（書誌フィールドは nil）
       [pdf_source] =

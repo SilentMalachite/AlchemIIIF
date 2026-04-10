@@ -41,3 +41,8 @@ config :phoenix_live_view,
 
 # PTIFF 生成をモックに差し替え（テスト時はファイル I/O を回避）
 config :alchem_iiif, :ptiff_generator, AlchemIiif.Iiif.PtiffGeneratorMock
+
+# Upload LiveView テストでは実 worker を起動せず dispatch のみ検証する
+config :alchem_iiif,
+       :pdf_processing_dispatcher,
+       AlchemIiif.PdfProcessingDispatcherFake

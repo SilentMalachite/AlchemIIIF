@@ -113,7 +113,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
             owner_id = socket.assigns.current_user.id
 
             # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
-            AlchemIiif.Workers.UserWorker.process_pdf(
+            AlchemIiif.PdfProcessingDispatcher.dispatch_pdf_processing(
               owner_id,
               pdf_source,
               pdf_path,
