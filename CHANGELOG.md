@@ -4,6 +4,44 @@
 
 ---
 
+## [0.2.27] - 2026-04-12
+
+### 🐛 IIIF Manifest label の言語タグ修正 + Canvas 実サイズ化
+
+- **`MetadataHelper` に label 生成ヘルパーを追加 (`metadata_helper.ex`)**
+  - `build_manifest_label/1`：`report_title` を優先し、なければ `strip_timestamp(filename)` を使用。両方が nil/空の場合は `(無題)` / `(Untitled)` にフォールバック。常に `%{"ja" => [...], "en" => [...]}` を返す。
+  - `build_canvas_label/1`：`label` + `caption` を組み合わせ、`ja` 側に結合値、`en` 側に `label` のみを返す。`label` が nil の場合は `Page <page_number>`（`page_number` も無ければ `Page ?`）にフォールバック。
+  - `strip_timestamp/1`：ファイル名の `-<digits>.pdf` 形式タイムスタンプを除去（桁数非依存）。
+- **`PresentationController` の label を言語タグ付きに修正 (`presentation_controller.ex`)**
+  - トップ Manifest `label` を `%{"none" => [filename]}` から `MetadataHelper.build_manifest_label/1` 経由に変更。
+  - Canvas `label` を `%{"none" => [...]}` から `MetadataHelper.build_canvas_label/1` 経由に変更。
+- **`ManifestController`（画像単位）の label を言語タグ付きに修正 (`manifest_controller.ex`)**
+  - トップ label に `build_top_label/3` プライベートヘルパーを導入。`source` がある場合は `MetadataHelper.build_manifest_label/1`、ない場合は `manifest.metadata["label"]` → identifier フォールバックの順で解決。
+  - Canvas `label` を `MetadataHelper.build_canvas_label/1` 経由に変更。
+
+### 🖼️ Canvas 実サイズフォールバック
+
+- **`PresentationController.extract_dimensions/1` に Vix 経由フォールバックを追加 (`presentation_controller.ex`)**
+  - `geometry` に `width`/`height` があればそれを使用（`> 0` ガード付き）。
+  - 無い場合は `image_path` から `ImageProcessor.get_image_dimensions/1`（libvips ラッパ）で実サイズを取得。
+  - リリース環境を想定して `Application.app_dir(:alchem_iiif, "priv/static")` 経由でパス解決（`File.cwd!` 非依存）。
+  - `priv/static/uploads` 配下に閉じ込めたパストラバーサル防御を実装。
+  - 失敗時は `Logger.warning/1` で記録し、`@default_canvas_dimensions {1000, 1000}` にフォールバック。
+
+### ✅ テスト追加
+
+- `MetadataHelper` 新ヘルパー 13 件（`strip_timestamp` / `build_manifest_label` / `build_canvas_label` の各エッジケース）
+- `PresentationController` 言語タグ付き label テスト 3 件 + Vix 実サイズフォールバックテスト 1 件
+- `ManifestController` 言語タグ付き label テスト 2 件 + `source` nil フォールバック分岐テスト 1 件
+- 既存テストの `"none"` キー期待を `"ja"`/`"en"` 期待に更新
+
+### 🔧 その他
+
+- `MetadataHelper` の `@moduledoc` を更新し、ラベル生成も担当する旨を明記。
+- `presentation_controller_test.exs` の既存 label 期待値を、ファクトリ既定 `caption` に依存しないよう `caption: nil` で明示化。
+
+---
+
 ## [0.2.26] - 2026-04-09
 
 ### 📦 ギャラリー UI — メタデータ表示拡張
