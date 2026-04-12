@@ -13,6 +13,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
         page_number: 2,
         status: "published",
         label: "fig-2-1",
+        caption: nil,
         geometry: %{"x" => 0, "y" => 0, "width" => 800, "height" => 600}
       })
 
@@ -21,6 +22,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
         page_number: 1,
         status: "published",
         label: "fig-1-1",
+        caption: nil,
         geometry: %{"x" => 0, "y" => 0, "width" => 400, "height" => 300}
       })
 
@@ -46,8 +48,8 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
 
       # page_number 昇順で並んでいる
       [canvas1, canvas2] = response["items"]
-      assert canvas1["label"] == %{"ja" => ["fig-1-1 第1図 テスト土器"], "en" => ["fig-1-1"]}
-      assert canvas2["label"] == %{"ja" => ["fig-2-1 第1図 テスト土器"], "en" => ["fig-2-1"]}
+      assert canvas1["label"] == %{"ja" => ["fig-1-1"], "en" => ["fig-1-1"]}
+      assert canvas2["label"] == %{"ja" => ["fig-2-1"], "en" => ["fig-2-1"]}
 
       # Canvas の寸法が geometry から取得されている
       assert canvas1["width"] == 400
