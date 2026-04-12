@@ -467,6 +467,54 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
     end
   end
 
+  describe "Canvas dimensions (per-image)" do
+    test "PTIF が無い場合、image_path の実ファイルから幅・高さを取得する", %{conn: conn} do
+      uploads_dir = Application.app_dir(:alchem_iiif, "priv/static/uploads/test_fixtures")
+      File.mkdir_p!(uploads_dir)
+
+      dest_path =
+        Path.join(
+          uploads_dir,
+          "manifest_fallback_#{System.unique_integer([:positive])}.png"
+        )
+
+      source_path = Application.app_dir(:alchem_iiif, "priv/static/images/lab_wizard.png")
+      assert File.exists?(source_path), "フィクスチャ画像が存在しません: #{source_path}"
+      File.cp!(source_path, dest_path)
+
+      on_exit(fn -> File.rm(dest_path) end)
+
+      relative_path = "priv/static/uploads/test_fixtures/#{Path.basename(dest_path)}"
+      source = insert_pdf_source(%{filename: "report.pdf"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: nil,
+          image_path: relative_path,
+          geometry: nil
+        })
+
+      identifier = "canvas-dims-fallback-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{"label" => %{"en" => ["Test"]}}
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      body = json_response(conn, 200)
+
+      canvas = hd(body["items"])
+      assert canvas["width"] == 1024
+      assert canvas["height"] == 574
+    end
+  end
+
   describe "summary" do
     test "report_title と investigating_org が両方ある場合、summary が出力される", %{conn: conn} do
       source =

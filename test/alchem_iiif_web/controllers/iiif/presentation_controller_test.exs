@@ -337,7 +337,10 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       # uploads 配下にコピーして path confinement を通過させる
       uploads_dir = Application.app_dir(:alchem_iiif, "priv/static/uploads/test_fixtures")
       File.mkdir_p!(uploads_dir)
-      dest_path = Path.join(uploads_dir, "lab_wizard_test_#{System.unique_integer([:positive])}.png")
+
+      dest_path =
+        Path.join(uploads_dir, "lab_wizard_test_#{System.unique_integer([:positive])}.png")
+
       source_path = Application.app_dir(:alchem_iiif, "priv/static/images/lab_wizard.png")
       assert File.exists?(source_path), "フィクスチャ画像が存在しません: #{source_path}"
       File.cp!(source_path, dest_path)

@@ -8,6 +8,8 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   """
   use AlchemIiifWeb, :controller
 
+  require Logger
+
   alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor}
   alias AlchemIiif.Ingestion.PdfSource
@@ -15,6 +17,8 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   alias AlchemIiifWeb.IIIF.MetadataHelper
 
   import Ecto.Query
+
+  @default_dimensions %{width: 1000, height: 1000}
 
   @doc """
   IIIF Presentation API v3.0 Manifest を JSON-LD で返します。
@@ -64,13 +68,60 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   end
 
   defp get_dimensions(image) do
-    if image.ptif_path && File.exists?(image.ptif_path) do
-      case ImageProcessor.get_image_dimensions(image.ptif_path) do
-        {:ok, dims} -> dims
-        _ -> %{width: 1000, height: 1000}
-      end
+    with path when is_binary(path) <- image.ptif_path,
+         true <- File.exists?(path),
+         {:ok, dims} <- ImageProcessor.get_image_dimensions(path) do
+      dims
     else
-      %{width: 1000, height: 1000}
+      _ -> get_dimensions_from_source_image(image)
+    end
+  end
+
+  defp get_dimensions_from_source_image(%{image_path: path}) when is_binary(path) do
+    case resolve_image_path(path) do
+      {:ok, full_path} ->
+        case ImageProcessor.get_image_dimensions(full_path) do
+          {:ok, dims} ->
+            dims
+
+          error ->
+            Logger.warning("Canvas 寸法の取得に失敗: path=#{full_path} error=#{inspect(error)}")
+            @default_dimensions
+        end
+
+      {:error, reason} ->
+        Logger.warning("Canvas 寸法の解決に失敗: path=#{path} reason=#{reason}")
+        @default_dimensions
+    end
+  end
+
+  defp get_dimensions_from_source_image(_), do: @default_dimensions
+
+  defp resolve_image_path(path) do
+    upload_root = Path.expand(Application.app_dir(:alchem_iiif, "priv/static/uploads"))
+
+    full_path =
+      cond do
+        Path.type(path) == :absolute ->
+          Path.expand(path)
+
+        String.starts_with?(path, "priv/static/") ->
+          rel = String.replace_prefix(path, "priv/static/", "")
+          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "priv/static"), rel))
+
+        true ->
+          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "."), path))
+      end
+
+    cond do
+      not String.starts_with?(full_path, upload_root) ->
+        {:error, "upload ディレクトリ外"}
+
+      not File.exists?(full_path) ->
+        {:error, "ファイルが存在しません"}
+
+      true ->
+        {:ok, full_path}
     end
   end
 
