@@ -120,13 +120,31 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
     }
   end
 
-  # geometry から幅・高さを抽出（フォールバック: 1000x1000）
+  # geometry から幅・高さを抽出。geometry がない場合は Vix で実ファイルを読む（最終フォールバック: 1000x1000）
   defp extract_dimensions(%{geometry: %{"width" => w, "height" => h}})
-       when is_number(w) and is_number(h) do
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
     {trunc(w), trunc(h)}
   end
 
-  defp extract_dimensions(_image), do: {1000, 1000}
+  defp extract_dimensions(%{image_path: path}) when is_binary(path) do
+    full_path =
+      if Path.type(path) == :absolute do
+        path
+      else
+        Path.join(File.cwd!(), path)
+      end
+
+    if File.exists?(full_path) do
+      case AlchemIiif.Ingestion.ImageProcessor.get_image_dimensions(full_path) do
+        {:ok, %{width: w, height: h}} -> {w, h}
+        _ -> {1000, 1000}
+      end
+    else
+      {1000, 1000}
+    end
+  end
+
+  defp extract_dimensions(_), do: {1000, 1000}
 
   # priv/static/uploads/... → 絶対 URL に変換
   defp build_image_url(image_path, base_url) when is_binary(image_path) do

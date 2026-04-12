@@ -331,5 +331,30 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       assert canvas["width"] == 2480
       assert canvas["height"] == 3508
     end
+
+    test "geometry が nil の場合、実ファイルから幅・高さを取得する", %{conn: conn} do
+      # priv/static/images/lab_wizard.png は 1024×574 の既存 PNG
+      fixture_path = Path.join(File.cwd!(), "priv/static/images/lab_wizard.png")
+      assert File.exists?(fixture_path), "フィクスチャ画像が存在しません: #{fixture_path}"
+
+      source = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published",
+        geometry: nil,
+        image_path: fixture_path
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      canvas = hd(response["items"])
+
+      # Vix でファイルの実寸法（1024×574）を取得し、デフォルト値 1000 を返さないこと
+      assert canvas["width"] == 1024
+      assert canvas["height"] == 574
+    end
   end
 end
