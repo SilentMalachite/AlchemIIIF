@@ -38,15 +38,16 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       # IIIF 3.0 準拠の構造を検証
       assert response["@context"] == "http://iiif.io/api/presentation/3/context.json"
       assert response["type"] == "Manifest"
-      assert response["label"] == %{"none" => ["report_2026.pdf"]}
+      assert response["label"] == %{"ja" => ["report_2026"], "en" => ["report_2026"]}
+      refute Map.has_key?(response["label"], "none")
 
       # published 画像のみ含まれる（draft は除外）
       assert length(response["items"]) == 2
 
       # page_number 昇順で並んでいる
       [canvas1, canvas2] = response["items"]
-      assert canvas1["label"] == %{"none" => ["fig-1-1"]}
-      assert canvas2["label"] == %{"none" => ["fig-2-1"]}
+      assert canvas1["label"] == %{"ja" => ["fig-1-1 第1図 テスト土器"], "en" => ["fig-1-1"]}
+      assert canvas2["label"] == %{"ja" => ["fig-2-1 第1図 テスト土器"], "en" => ["fig-2-1"]}
 
       # Canvas の寸法が geometry から取得されている
       assert canvas1["width"] == 400
@@ -275,6 +276,58 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       response = json_response(conn, 200)
 
       refute Map.has_key?(response, "summary")
+    end
+  end
+
+  describe "言語タグ付き label" do
+    test "report_title がある場合、Manifest label が ja/en の言語タグ付きマップで返される", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          report_title: "黒姫洞穴遺跡"
+        })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      assert response["label"] == %{"ja" => ["黒姫洞穴遺跡"], "en" => ["黒姫洞穴遺跡"]}
+      refute Map.has_key?(response["label"], "none")
+    end
+
+    test "Canvas label が label と caption から ja/en のマップで生成される", %{conn: conn} do
+      source = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published",
+        label: "fig-1-1",
+        caption: "縄文時代の深鉢形土器"
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      canvas = hd(response["items"])
+      assert canvas["label"] == %{"ja" => ["fig-1-1 縄文時代の深鉢形土器"], "en" => ["fig-1-1"]}
+    end
+
+    test "Canvas の width/height が geometry から取得される", %{conn: conn} do
+      source = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published",
+        geometry: %{"width" => 2480, "height" => 3508}
+      })
+
+      conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
+      response = json_response(conn, 200)
+
+      canvas = hd(response["items"])
+      assert canvas["width"] == 2480
+      assert canvas["height"] == 3508
     end
   end
 end

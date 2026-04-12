@@ -48,7 +48,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
       "@context" => "http://iiif.io/api/presentation/3/context.json",
       "id" => manifest_id,
       "type" => "Manifest",
-      "label" => %{"none" => [source.filename]},
+      "label" => MetadataHelper.build_manifest_label(source),
       "items" => Enum.map(images, &build_canvas(&1, base_url))
     }
 
@@ -73,7 +73,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
       "type" => "Canvas",
       "width" => width,
       "height" => height,
-      "label" => %{"none" => [image.label || "Page #{image.page_number}"]},
+      "label" => MetadataHelper.build_canvas_label(image),
       "items" => [
         %{
           "id" => "#{canvas_id}/page",
