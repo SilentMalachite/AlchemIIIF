@@ -220,6 +220,13 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
       source = %{report_title: "x", filename: "x.pdf"}
       refute Map.has_key?(MetadataHelper.build_manifest_label(source), "none")
     end
+
+    test "report_title と filename が両方 nil の場合は (無題)/(Untitled) フォールバック" do
+      source = %{report_title: nil, filename: nil}
+
+      assert MetadataHelper.build_manifest_label(source) ==
+               %{"ja" => ["(無題)"], "en" => ["(Untitled)"]}
+    end
   end
 
   describe "build_canvas_label/1" do
@@ -246,6 +253,11 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
     test "\"none\" キーは含まれない" do
       image = %{label: "fig-1-1", caption: nil}
       refute Map.has_key?(MetadataHelper.build_canvas_label(image), "none")
+    end
+
+    test "page_number キーが無い場合は \"Page ?\" にフォールバック" do
+      assert MetadataHelper.build_canvas_label(%{label: nil, caption: nil}) ==
+               %{"ja" => ["Page ?"], "en" => ["Page ?"]}
     end
   end
 end

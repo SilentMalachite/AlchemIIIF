@@ -1,7 +1,7 @@
 defmodule AlchemIiifWeb.IIIF.MetadataHelper do
   @moduledoc """
-  IIIF Presentation API v3.0 の recommended プロパティ生成ヘルパー。
-  requiredStatement / rights / provider および書誌メタデータを構築する。
+  IIIF Presentation API v3.0 の recommended プロパティおよびラベル生成ヘルパー。
+  requiredStatement / rights / provider / 書誌メタデータに加え、Manifest および Canvas の言語タグ付き label を構築する。
   """
 
   @doc """
@@ -112,16 +112,19 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
         t -> t
       end
 
-    %{"ja" => [title], "en" => [title]}
+    case title do
+      "" -> %{"ja" => ["(無題)"], "en" => ["(Untitled)"]}
+      t -> %{"ja" => [t], "en" => [t]}
+    end
   end
 
   @doc """
   Canvas の label を生成する。
   caption がある場合は ja 側に "label caption" を結合し、en 側は label のみ。
-  label が nil の場合は "Page <page_number>" を使う。
+  label が nil の場合は "Page <page_number>" を使う（page_number が無ければ "Page ?"）。
   """
   def build_canvas_label(image) do
-    fallback = "Page #{Map.get(image, :page_number)}"
+    fallback = "Page #{Map.get(image, :page_number, "?")}"
     label = Map.get(image, :label) || fallback
     caption = Map.get(image, :caption)
 
