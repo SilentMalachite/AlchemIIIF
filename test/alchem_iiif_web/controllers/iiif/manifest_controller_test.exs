@@ -350,6 +350,74 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
     end
   end
 
+  describe "言語タグ付き label (per-image)" do
+    test "PdfSource に report_title がある場合、Manifest トップ label が言語タグ付きで返る", %{conn: conn} do
+      source =
+        insert_pdf_source(%{
+          filename: "report.pdf",
+          report_title: "黒姫洞穴遺跡"
+        })
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: "/tmp/test.tif",
+          label: "fig-2-1",
+          caption: "土器"
+        })
+
+      identifier = "label-test-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{"label" => %{"en" => ["Old Label"]}}
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      body = json_response(conn, 200)
+
+      # report_title が言語タグ付きで返る
+      assert body["label"] == %{"ja" => ["黒姫洞穴遺跡"], "en" => ["黒姫洞穴遺跡"]}
+      # "none" キーが存在しない
+      refute Map.has_key?(body["label"], "none")
+    end
+
+    test "Canvas label が label と caption の組み合わせで返る", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "report.pdf", report_title: "黒姫洞穴遺跡"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: "/tmp/test.tif",
+          label: "fig-2-1",
+          caption: "土器"
+        })
+
+      identifier = "canvas-label-test-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{"label" => %{"en" => ["Test"]}}
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      body = json_response(conn, 200)
+
+      canvas = hd(body["items"])
+      # ja は "label caption"、en は label のみ
+      assert canvas["label"] == %{"ja" => ["fig-2-1 土器"], "en" => ["fig-2-1"]}
+      refute Map.has_key?(canvas["label"], "none")
+    end
+  end
+
   describe "summary" do
     test "report_title と investigating_org が両方ある場合、summary が出力される", %{conn: conn} do
       source =
