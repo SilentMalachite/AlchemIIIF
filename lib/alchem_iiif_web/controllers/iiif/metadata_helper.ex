@@ -101,6 +101,50 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
   end
 
   @doc """
+  IIIF Manifest トップレベル label を生成する。
+  report_title を優先し、なければ filename からタイムスタンプ除去文字列を使う。
+  """
+  def build_manifest_label(source) do
+    title =
+      case Map.get(source, :report_title) do
+        nil -> strip_timestamp(Map.get(source, :filename))
+        "" -> strip_timestamp(Map.get(source, :filename))
+        t -> t
+      end
+
+    %{"ja" => [title], "en" => [title]}
+  end
+
+  @doc """
+  Canvas の label を生成する。
+  caption がある場合は ja 側に "label caption" を結合し、en 側は label のみ。
+  label が nil の場合は "Page <page_number>" を使う。
+  """
+  def build_canvas_label(image) do
+    fallback = "Page #{Map.get(image, :page_number)}"
+    label = Map.get(image, :label) || fallback
+    caption = Map.get(image, :caption)
+
+    ja_value =
+      case caption do
+        nil -> label
+        "" -> label
+        c -> "#{label} #{c}"
+      end
+
+    %{"ja" => [ja_value], "en" => [label]}
+  end
+
+  @doc "ファイル名から `-<digits>.pdf` 形式のタイムスタンプ拡張子を取り除く"
+  def strip_timestamp(nil), do: ""
+
+  def strip_timestamp(filename) when is_binary(filename) do
+    filename
+    |> String.replace(~r/-\d+\.pdf$/, "")
+    |> String.replace(~r/\.pdf$/, "")
+  end
+
+  @doc """
   ラベル/値ペアを IIIF metadata エントリ形式で構築する。
   value が nil の場合は nil を返す。
   """
