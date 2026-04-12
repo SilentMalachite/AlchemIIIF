@@ -55,7 +55,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
       "@context" => "http://iiif.io/api/presentation/3/context.json",
       "id" => "#{base_url}/iiif/manifest/#{identifier}",
       "type" => "Manifest",
-      "label" => manifest.metadata["label"] || %{"none" => [identifier]},
+      "label" => build_top_label(manifest, source, identifier),
       "metadata" => build_metadata(manifest.metadata),
       "items" => [build_canvas(manifest, identifier, dimensions, base_url, image)]
     }
@@ -80,7 +80,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
       "type" => "Canvas",
       "width" => dimensions.width,
       "height" => dimensions.height,
-      "label" => %{"none" => [identifier]},
+      "label" => MetadataHelper.build_canvas_label(image),
       "items" => [
         %{
           "id" => "#{base_url}/iiif/manifest/#{identifier}/canvas/1/page/1",
@@ -152,6 +152,19 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   end
 
   defp build_metadata(_), do: []
+
+  # トップ label を生成する。source があればそれを優先し、なければ
+  # manifest.metadata["label"] → identifier フォールバック の順で使う。
+  defp build_top_label(_manifest, source, _identifier) when not is_nil(source) do
+    MetadataHelper.build_manifest_label(source)
+  end
+
+  defp build_top_label(manifest, nil, identifier) do
+    case manifest.metadata && manifest.metadata["label"] do
+      %{} = label when map_size(label) > 0 -> label
+      _ -> %{"ja" => [identifier], "en" => [identifier]}
+    end
+  end
 
   defp format_metadata_value(value) when is_map(value), do: value
   defp format_metadata_value(value) when is_list(value), do: %{"none" => value}

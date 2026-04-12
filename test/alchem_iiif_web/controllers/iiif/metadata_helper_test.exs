@@ -181,4 +181,83 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
       assert MetadataHelper.build_rendering(source) == nil
     end
   end
+
+  describe "strip_timestamp/1" do
+    test "末尾の -<digits>.pdf を除去する" do
+      assert MetadataHelper.strip_timestamp("黒姫洞穴遺跡-1775979589.pdf") == "黒姫洞穴遺跡"
+    end
+
+    test "桁数に依らず除去する" do
+      assert MetadataHelper.strip_timestamp("foo-1.pdf") == "foo"
+      assert MetadataHelper.strip_timestamp("foo-1234567890123.pdf") == "foo"
+    end
+
+    test "タイムスタンプが無ければ .pdf のみ除去" do
+      assert MetadataHelper.strip_timestamp("report.pdf") == "report"
+    end
+
+    test "nil を空文字にフォールバック" do
+      assert MetadataHelper.strip_timestamp(nil) == ""
+    end
+  end
+
+  describe "build_manifest_label/1" do
+    test "report_title があればそれを使う" do
+      source = %{report_title: "黒姫洞穴遺跡", filename: "黒姫洞穴遺跡-1775979589.pdf"}
+
+      assert MetadataHelper.build_manifest_label(source) ==
+               %{"ja" => ["黒姫洞穴遺跡"], "en" => ["黒姫洞穴遺跡"]}
+    end
+
+    test "report_title が nil なら filename からタイムスタンプを除去" do
+      source = %{report_title: nil, filename: "test-1234567890.pdf"}
+
+      assert MetadataHelper.build_manifest_label(source) ==
+               %{"ja" => ["test"], "en" => ["test"]}
+    end
+
+    test "\"none\" キーは含まれない" do
+      source = %{report_title: "x", filename: "x.pdf"}
+      refute Map.has_key?(MetadataHelper.build_manifest_label(source), "none")
+    end
+
+    test "report_title と filename が両方 nil の場合は (無題)/(Untitled) フォールバック" do
+      source = %{report_title: nil, filename: nil}
+
+      assert MetadataHelper.build_manifest_label(source) ==
+               %{"ja" => ["(無題)"], "en" => ["(Untitled)"]}
+    end
+  end
+
+  describe "build_canvas_label/1" do
+    test "caption があれば ja に label と caption を結合した値を返す" do
+      image = %{label: "fig-2-1", caption: "縄文時代の深鉢形土器"}
+      result = MetadataHelper.build_canvas_label(image)
+      assert result["ja"] == ["fig-2-1 縄文時代の深鉢形土器"]
+      assert result["en"] == ["fig-2-1"]
+    end
+
+    test "caption が nil/空なら label のみ" do
+      assert MetadataHelper.build_canvas_label(%{label: "fig-2-1", caption: nil}) ==
+               %{"ja" => ["fig-2-1"], "en" => ["fig-2-1"]}
+
+      assert MetadataHelper.build_canvas_label(%{label: "fig-2-1", caption: ""}) ==
+               %{"ja" => ["fig-2-1"], "en" => ["fig-2-1"]}
+    end
+
+    test "label が nil の場合はフォールバック文字列を使う" do
+      result = MetadataHelper.build_canvas_label(%{label: nil, caption: nil, page_number: 3})
+      assert result == %{"ja" => ["Page 3"], "en" => ["Page 3"]}
+    end
+
+    test "\"none\" キーは含まれない" do
+      image = %{label: "fig-1-1", caption: nil}
+      refute Map.has_key?(MetadataHelper.build_canvas_label(image), "none")
+    end
+
+    test "page_number キーが無い場合は \"Page ?\" にフォールバック" do
+      assert MetadataHelper.build_canvas_label(%{label: nil, caption: nil}) ==
+               %{"ja" => ["Page ?"], "en" => ["Page ?"]}
+    end
+  end
 end
