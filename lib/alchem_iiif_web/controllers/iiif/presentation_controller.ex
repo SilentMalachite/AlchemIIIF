@@ -8,9 +8,13 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
   """
   use AlchemIiifWeb, :controller
 
+  require Logger
+
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Repo
   alias AlchemIiifWeb.IIIF.MetadataHelper
+
+  @default_canvas_dimensions {1000, 1000}
 
   @doc """
   PdfSource 単位の IIIF 3.0 Manifest を JSON-LD で返します。
@@ -120,31 +124,62 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
     }
   end
 
-  # geometry から幅・高さを抽出。geometry がない場合は Vix で実ファイルを読む（最終フォールバック: 1000x1000）
+  # geometry から幅・高さを抽出。geometry がない場合は Vix で実ファイルを読む（最終フォールバック: @default_canvas_dimensions）
   defp extract_dimensions(%{geometry: %{"width" => w, "height" => h}})
        when is_number(w) and is_number(h) and w > 0 and h > 0 do
     {trunc(w), trunc(h)}
   end
 
   defp extract_dimensions(%{image_path: path}) when is_binary(path) do
-    full_path =
-      if Path.type(path) == :absolute do
-        path
-      else
-        Path.join(File.cwd!(), path)
-      end
+    case resolve_image_path(path) do
+      {:ok, full_path} ->
+        case AlchemIiif.Ingestion.ImageProcessor.get_image_dimensions(full_path) do
+          {:ok, %{width: w, height: h}} ->
+            {w, h}
 
-    if File.exists?(full_path) do
-      case AlchemIiif.Ingestion.ImageProcessor.get_image_dimensions(full_path) do
-        {:ok, %{width: w, height: h}} -> {w, h}
-        _ -> {1000, 1000}
-      end
-    else
-      {1000, 1000}
+          err ->
+            Logger.warning("Canvas 寸法の取得に失敗: path=#{full_path} error=#{inspect(err)}")
+
+            @default_canvas_dimensions
+        end
+
+      {:error, reason} ->
+        Logger.warning("Canvas 寸法の解決に失敗: path=#{path} reason=#{reason}")
+        @default_canvas_dimensions
     end
   end
 
-  defp extract_dimensions(_), do: {1000, 1000}
+  defp extract_dimensions(_), do: @default_canvas_dimensions
+
+  # image_path（DB に保存された相対 or 絶対パス）を、リリース環境でも安全な
+  # 絶対パスに解決する。priv/static/uploads 配下に閉じ込めて Path Traversal を防ぐ。
+  defp resolve_image_path(path) do
+    upload_root = Path.expand(Application.app_dir(:alchem_iiif, "priv/static/uploads"))
+
+    full_path =
+      cond do
+        Path.type(path) == :absolute ->
+          Path.expand(path)
+
+        String.starts_with?(path, "priv/static/") ->
+          rel = String.replace_prefix(path, "priv/static/", "")
+          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "priv/static"), rel))
+
+        true ->
+          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "."), path))
+      end
+
+    cond do
+      not String.starts_with?(full_path, upload_root) ->
+        {:error, "upload ディレクトリ外"}
+
+      not File.exists?(full_path) ->
+        {:error, "ファイルが存在しません"}
+
+      true ->
+        {:ok, full_path}
+    end
+  end
 
   # priv/static/uploads/... → 絶対 URL に変換
   defp build_image_url(image_path, base_url) when is_binary(image_path) do

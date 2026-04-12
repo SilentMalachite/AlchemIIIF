@@ -334,8 +334,19 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
 
     test "geometry が nil の場合、実ファイルから幅・高さを取得する", %{conn: conn} do
       # priv/static/images/lab_wizard.png は 1024×574 の既存 PNG
-      fixture_path = Path.join(File.cwd!(), "priv/static/images/lab_wizard.png")
-      assert File.exists?(fixture_path), "フィクスチャ画像が存在しません: #{fixture_path}"
+      # uploads 配下にコピーして path confinement を通過させる
+      uploads_dir = Application.app_dir(:alchem_iiif, "priv/static/uploads/test_fixtures")
+      File.mkdir_p!(uploads_dir)
+      dest_path = Path.join(uploads_dir, "lab_wizard_test_#{System.unique_integer([:positive])}.png")
+      source_path = Application.app_dir(:alchem_iiif, "priv/static/images/lab_wizard.png")
+      assert File.exists?(source_path), "フィクスチャ画像が存在しません: #{source_path}"
+      File.cp!(source_path, dest_path)
+
+      on_exit(fn -> File.rm(dest_path) end)
+
+      # DB に保存する image_path は priv/static/ からの相対パス（本番慣習）
+      filename = Path.basename(dest_path)
+      relative_path = "priv/static/uploads/test_fixtures/#{filename}"
 
       source = insert_pdf_source()
 
@@ -344,7 +355,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
         page_number: 1,
         status: "published",
         geometry: nil,
-        image_path: fixture_path
+        image_path: relative_path
       })
 
       conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
