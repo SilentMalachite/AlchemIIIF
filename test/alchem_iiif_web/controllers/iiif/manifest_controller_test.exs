@@ -386,6 +386,55 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
       refute Map.has_key?(body["label"], "none")
     end
 
+    test "PdfSource が存在しない場合、manifest.metadata[\"label\"] にフォールバックする", %{conn: conn} do
+      source = insert_pdf_source(%{filename: "fallback.pdf"})
+
+      image =
+        insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published",
+          ptif_path: "/tmp/test.tif"
+        })
+
+      identifier = "source-nil-fallback-#{System.unique_integer([:positive])}"
+
+      %AlchemIiif.Iiif.Manifest{}
+      |> AlchemIiif.Iiif.Manifest.changeset(%{
+        extracted_image_id: image.id,
+        identifier: identifier,
+        metadata: %{"label" => %{"ja" => ["フォールバックラベル"], "en" => ["Fallback Label"]}}
+      })
+      |> AlchemIiif.Repo.insert!()
+
+      # pdf_source_id を存在しない ID に書き換えて source=nil を再現する
+      # session_replication_role = replica で FK チェックを一時的に無効化する
+      ghost_id = -999_999
+
+      Ecto.Adapters.SQL.query!(
+        AlchemIiif.Repo,
+        "SET session_replication_role = replica"
+      )
+
+      Ecto.Adapters.SQL.query!(
+        AlchemIiif.Repo,
+        "UPDATE extracted_images SET pdf_source_id = $1 WHERE id = $2",
+        [ghost_id, image.id]
+      )
+
+      Ecto.Adapters.SQL.query!(
+        AlchemIiif.Repo,
+        "SET session_replication_role = DEFAULT"
+      )
+
+      conn = get(conn, "/iiif/manifest/#{identifier}")
+      body = json_response(conn, 200)
+
+      # manifest.metadata["label"] がそのまま返る
+      assert body["label"] == %{"ja" => ["フォールバックラベル"], "en" => ["Fallback Label"]}
+      # "none" キーが存在しない
+      refute Map.has_key?(body["label"], "none")
+    end
+
     test "Canvas label が label と caption の組み合わせで返る", %{conn: conn} do
       source = insert_pdf_source(%{filename: "report.pdf", report_title: "黒姫洞穴遺跡"})
 
