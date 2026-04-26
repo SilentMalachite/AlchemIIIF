@@ -4,6 +4,56 @@
 
 ---
 
+## [0.2.28] - 2026-04-27
+
+### 🔒 セキュリティ強化 — 公開境界・アップロード配信・PDF処理制限
+
+- **IIIF Image API の公開ステータス判定を追加 (`image_controller.ex`)**
+  - Manifest identifier から PTIF を解決する際に `ExtractedImage.status == "published"` を必須化。
+  - draft / pending_review / rejected の画像は、PTIF ファイルが存在していても `/iiif/image/:identifier/...` から 404 を返すよう変更。
+  - 未公開画像の `info.json` とタイル配信を防ぐ regression test を追加。
+
+- **アップロード成果物の静的公開を停止 (`alchem_iiif_web.ex`, `upload_store.ex`, `media_controller.ex`)**
+  - `Plug.Static` の公開対象から `uploads` を削除。
+  - 新規 PDF / ページ画像の保存先を `priv/static/uploads` から `priv/uploads` に移動。
+  - 既存データ互換のため、旧 `priv/static/uploads` は認可付き Controller 経由の読み取り対象としてのみ扱う。
+  - `UploadStore` を新設し、保存先生成、既存ファイル解決、パストラバーサル防止、旧パス互換を一元化。
+  - `/media/images/:id/source` は公開済み画像のみ配信、`/lab/media/images/:id/source` と `/lab/media/pages/:pdf_source_id/:filename` は認証済み所有者または Admin のみ配信。
+
+- **元 PDF の公開配信を認可付きルートへ変更 (`download_controller.ex`, `metadata_helper.ex`, `gallery_live.ex`)**
+  - `/download/pdf/:id` を追加し、公開済み画像を含む `PdfSource` の PDF のみ配信。
+  - IIIF `rendering` とギャラリーの元 PDF リンクを `/uploads/pdfs/...` から `/download/pdf/:id` に変更。
+  - `send_download({:file, ...})` ではなく、安全に解決済みのパスを `send_file/3` で返す実装にし、Sobelow の traversal 警告も解消。
+
+- **PdfSource 単位の IIIF Manifest のメタデータ露出を防止 (`presentation_controller.ex`)**
+  - `/iiif/presentation/:source_id/manifest` は公開済み画像が 1 件以上ある場合のみ返すよう変更。
+  - 公開画像がない `PdfSource` は、書誌メタデータや rendering URL を返さず 404 にする。
+
+- **PDF 変換処理の DoS 耐性を改善 (`pdf_processor.ex`, `user_worker.ex`, `upload.ex`)**
+  - PDF ページ数上限を追加（既定: 200ページ、`:pdf_max_pages` で調整可能）。
+  - `pdfinfo` / `pdftoppm` に timeout を追加（`:pdf_command_timeout_ms`, `:pdf_chunk_timeout_ms` で調整可能）。
+  - `Task.async_stream` の `timeout: :infinity` を廃止し、timeout 時は task を kill するよう変更。
+  - 同一ユーザーの PDF 処理を `UserWorker` 内でキューイングし、並列起動ではなく直列処理に変更。
+  - PDF アップロードサイズ上限を既定 100MB に下げ、`:max_pdf_upload_bytes` で調整可能に変更。
+
+- **CSP と LiveView イベント入力の防御を追加 (`router.ex`, `upload.ex`, `label.ex`)**
+  - browser pipeline に `Content-Security-Policy` を明示設定。
+  - `default-src 'self'`, `object-src 'none'`, `frame-ancestors 'self'`, LiveView 用 `connect-src 'self' ws: wss:` などを追加。
+  - `.sobelow-conf` から `Config.CSP` ignore を削除。
+  - LiveView event の `tab` / `field` 値を allowlist 変換に変更し、不正値で `String.to_existing_atom/1` がクラッシュしないよう修正。
+
+### 🐳 デプロイ・ランタイムデータ
+
+- Docker / Deployment の永続ボリューム例を `/app/priv/static/uploads` から `/app/priv/uploads` に変更。
+- `.gitignore` に `/priv/uploads/` を追加。
+
+### ✅ テスト・検証
+
+- `ImageController`, `MediaController`, `DownloadController`, `PresentationController`, `PdfProcessor`, `UserWorker`, `UploadLive`, `LabelLive`, `PageController` にセキュリティ regression test を追加。
+- `mix test` / `mix precommit` / `mix sobelow --config` で通過確認。
+
+---
+
 ## [0.2.27] - 2026-04-12
 
 ### 🐛 IIIF Manifest label の言語タグ修正 + Canvas 実サイズ化
