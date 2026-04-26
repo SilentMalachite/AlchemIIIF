@@ -11,6 +11,15 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Ingestion.ImageProcessor
 
+  @editable_fields %{
+    "caption" => :caption,
+    "label" => :label,
+    "site" => :site,
+    "period" => :period,
+    "artifact_type" => :artifact_type,
+    "material" => :material
+  }
+
   @impl true
   def mount(%{"image_id" => image_id}, _session, socket) do
     current_user = socket.assigns.current_user
@@ -31,9 +40,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       pdf_source = Ingestion.get_pdf_source!(extracted_image.pdf_source_id, current_user)
 
       # 画像のURLを生成（プレビュー用）
-      image_url =
-        extracted_image.image_path
-        |> String.replace_leading("priv/static/", "/")
+      image_url = ~p"/lab/media/images/#{extracted_image.id}/source"
 
       # 元画像の寸法を取得（Vix はヘッダーのみ遅延読み込み）
       {orig_w, orig_h} = read_source_dimensions(extracted_image.image_path)
@@ -125,60 +132,48 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   # phx-blur: フィールド離脱時に自動保存（Undo スナップショット確定）
   @impl true
   def handle_event("blur_save_field", %{"field" => field}, socket) do
-    # 編集前スナップショットを Undo スタックに追加
-    {socket, undo_stack} =
-      case socket.assigns.pre_edit_snapshot do
-        nil ->
-          {socket, socket.assigns.undo_stack}
-
-        snapshot ->
-          stack = [snapshot | socket.assigns.undo_stack] |> Enum.take(20)
-          {assign(socket, :pre_edit_snapshot, nil), stack}
-      end
-
-    value = Map.get(socket.assigns, String.to_existing_atom(field))
-
-    socket =
-      socket
-      |> assign(:undo_stack, undo_stack)
-      |> auto_save_field(field, value)
-
-    {:noreply, socket}
+    with {:ok, field_atom} <- field_atom(field) do
+      blur_save_field(socket, field, field_atom)
+    else
+      :error -> {:noreply, socket}
+    end
   end
 
   # レガシー互換: テストから呼ばれる update_field イベント
   @impl true
   def handle_event("update_field", %{"field" => field, "value" => value}, socket) do
-    current_snapshot = take_snapshot(socket)
-    undo_stack = [current_snapshot | socket.assigns.undo_stack] |> Enum.take(20)
+    with {:ok, field_atom} <- field_atom(field) do
+      current_snapshot = take_snapshot(socket)
+      undo_stack = [current_snapshot | socket.assigns.undo_stack] |> Enum.take(20)
 
-    field_atom = String.to_existing_atom(field)
-
-    socket =
-      socket
-      |> assign(field_atom, value)
-      |> assign(:undo_stack, undo_stack)
-      |> auto_save_field(field, value)
-
-    # インラインバリデーション
-    socket = run_inline_validation(socket, field, value)
-
-    # label/site 変更時は重複チェック
-    socket =
-      if field in ["label", "site"] do
-        duplicate =
-          Ingestion.find_duplicate_label(
-            socket.assigns.site,
-            socket.assigns.label,
-            socket.assigns.extracted_image.id
-          )
-
-        assign(socket, :duplicate_record, duplicate)
-      else
+      socket =
         socket
-      end
+        |> assign(field_atom, value)
+        |> assign(:undo_stack, undo_stack)
+        |> auto_save_field(field, value)
 
-    {:noreply, socket}
+      # インラインバリデーション
+      socket = run_inline_validation(socket, field, value)
+
+      # label/site 変更時は重複チェック
+      socket =
+        if field in ["label", "site"] do
+          duplicate =
+            Ingestion.find_duplicate_label(
+              socket.assigns.site,
+              socket.assigns.label,
+              socket.assigns.extracted_image.id
+            )
+
+          assign(socket, :duplicate_record, duplicate)
+        else
+          socket
+        end
+
+      {:noreply, socket}
+    else
+      :error -> {:noreply, socket}
+    end
   end
 
   @impl true
@@ -255,6 +250,28 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   # --- プライベート関数 ---
 
+  defp blur_save_field(socket, field, field_atom) do
+    # 編集前スナップショットを Undo スタックに追加
+    {socket, undo_stack} =
+      case socket.assigns.pre_edit_snapshot do
+        nil ->
+          {socket, socket.assigns.undo_stack}
+
+        snapshot ->
+          stack = [snapshot | socket.assigns.undo_stack] |> Enum.take(20)
+          {assign(socket, :pre_edit_snapshot, nil), stack}
+      end
+
+    value = Map.get(socket.assigns, field_atom)
+
+    socket =
+      socket
+      |> assign(:undo_stack, undo_stack)
+      |> auto_save_field(field, value)
+
+    {:noreply, socket}
+  end
+
   defp take_snapshot(socket) do
     %{
       caption: socket.assigns.caption,
@@ -267,6 +284,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
   end
 
   defp auto_save_field(socket, field, value) do
+    with {:ok, field_atom} <- field_atom(field) do
+      do_auto_save_field(socket, field, field_atom, value)
+    else
+      :error -> socket
+    end
+  end
+
+  defp do_auto_save_field(socket, field, field_atom, value) do
     # 保存前の文字数制限チェック（非同期保存を試みる前にブロック）
     max_len =
       case field do
@@ -280,7 +305,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       errors =
         Map.put(
           socket.assigns.validation_errors,
-          String.to_existing_atom(field),
+          field_atom,
           "#{max_len}文字以内で入力してください"
         )
 
@@ -292,7 +317,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
       Task.start(fn ->
         case Ingestion.update_extracted_image(extracted_image, %{
-               String.to_existing_atom(field) => value
+               field_atom => value
              }) do
           {:ok, updated} ->
             send(lv_pid, {:auto_save_complete, updated})
@@ -310,6 +335,13 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       end)
 
       socket
+    end
+  end
+
+  defp field_atom(field) do
+    case Map.fetch(@editable_fields, field) do
+      {:ok, field_atom} -> {:ok, field_atom}
+      :error -> :error
     end
   end
 

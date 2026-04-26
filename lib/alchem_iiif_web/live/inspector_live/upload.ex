@@ -10,6 +10,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Pipeline
+  alias AlchemIiif.UploadStore
 
   @impl true
   def mount(_params, _session, socket) do
@@ -42,7 +43,11 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:survey_year, nil)
      |> assign(:site_code, "")
      |> assign(:license_uri, "")
-     |> allow_upload(:pdf, accept: ~w(.pdf), max_entries: 1, max_file_size: 500_000_000)}
+     |> allow_upload(:pdf,
+       accept: ~w(.pdf),
+       max_entries: 1,
+       max_file_size: max_pdf_upload_bytes()
+     )}
   end
 
   @impl true
@@ -67,11 +72,15 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
   @impl true
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
-    {:noreply, assign(socket, :active_tab, String.to_existing_atom(tab))}
+    case tab do
+      "upload" -> {:noreply, assign(socket, :active_tab, :upload)}
+      "rejected" -> {:noreply, assign(socket, :active_tab, :rejected)}
+      _ -> {:noreply, socket}
+    end
   end
 
   @impl true
-  # セキュリティ注記: upload_dir は固定パス（priv/static/uploads/pdfs）、
+  # セキュリティ注記: upload_dir は固定パス（priv/uploads/pdfs）、
   # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
   def handle_event("upload_pdf", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
@@ -80,7 +89,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
     uploaded_files =
       consume_uploaded_entries(socket, :pdf, fn %{path: path}, entry ->
         # アップロードディレクトリの作成
-        upload_dir = Path.join(["priv", "static", "uploads", "pdfs"])
+        upload_dir = UploadStore.pdfs_dir()
         File.mkdir_p!(upload_dir)
 
         # ファイル名にタイムスタンプを付与して衝突を防止
@@ -440,10 +449,14 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   # アップロードエラーを日本語に変換するヘルパー
-  defp translate_upload_error(:too_large), do: "ファイルサイズが上限（500MB）を超えています。"
+  defp translate_upload_error(:too_large), do: "ファイルサイズが上限を超えています。"
   defp translate_upload_error(:too_many_files), do: "アップロードできるファイルは1つだけです。"
   defp translate_upload_error(:not_accepted), do: "PDFファイルのみアップロード可能です。"
   defp translate_upload_error(err), do: "アップロードエラー: #{inspect(err)}"
+
+  defp max_pdf_upload_bytes do
+    Application.get_env(:alchem_iiif, :max_pdf_upload_bytes, 100_000_000)
+  end
 
   # 空文字列を nil に変換するヘルパー
   defp non_empty_or_nil(""), do: nil

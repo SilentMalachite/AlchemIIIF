@@ -9,6 +9,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
   import AlchemIiifWeb.WizardComponents
 
   alias AlchemIiif.Ingestion
+  alias AlchemIiif.UploadStore
 
   @impl true
   def mount(%{"pdf_source_id" => pdf_source_id}, _session, socket) do
@@ -25,11 +26,9 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
        |> put_flash(:error, "指定されたPDFソースが見つかりません（ID: #{pdf_source_id}）")
        |> push_navigate(to: ~p"/lab")}
     else
-      pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
-
       # ページ画像のリストを取得
       page_images =
-        if File.dir?(pages_dir) do
+        with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source.id) do
           pages_dir
           |> File.ls!()
           |> Enum.filter(&String.ends_with?(&1, ".png"))
@@ -39,12 +38,11 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
             %{
               filename: filename,
               page_number: index,
-              # 静的ファイルとして配信するパス
-              url: "/uploads/pages/#{pdf_source.id}/#{filename}"
+              url: ~p"/lab/media/pages/#{pdf_source.id}/#{filename}"
             }
           end)
         else
-          []
+          _ -> []
         end
 
       {:ok,

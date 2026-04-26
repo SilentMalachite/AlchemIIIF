@@ -35,6 +35,33 @@ defmodule AlchemIiifWeb.DownloadControllerTest do
     end
   end
 
+  describe "GET /download/pdf/:id" do
+    test "公開済み画像を含む PDF だけを配信する", %{conn: conn} do
+      filename = "published-source-#{System.unique_integer([:positive])}.pdf"
+      write_pdf_fixture(filename, "%PDF-1.7 published")
+
+      source = insert_pdf_source(%{filename: filename})
+      insert_extracted_image(%{pdf_source_id: source.id, status: "published"})
+
+      conn = get(conn, "/download/pdf/#{source.id}")
+
+      assert response(conn, 200) == "%PDF-1.7 published"
+      assert ["application/pdf" <> _] = get_resp_header(conn, "content-type")
+    end
+
+    test "公開済み画像がない PDF は配信しない", %{conn: conn} do
+      filename = "draft-source-#{System.unique_integer([:positive])}.pdf"
+      write_pdf_fixture(filename, "%PDF-1.7 draft")
+
+      source = insert_pdf_source(%{filename: filename})
+      insert_extracted_image(%{pdf_source_id: source.id, status: "draft"})
+
+      conn = get(conn, "/download/pdf/#{source.id}")
+
+      assert response(conn, 404)
+    end
+  end
+
   describe "build_filename (間接テスト)" do
     test "公開済み画像のダウンロードはセマンティックファイル名を含む", %{conn: conn} do
       # 実際のダウンロードには画像ファイルが必要なので、
@@ -56,5 +83,17 @@ defmodule AlchemIiifWeb.DownloadControllerTest do
       assert conn.status == 500
       assert response(conn, 500) =~ "画像の処理に失敗しました"
     end
+  end
+
+  defp write_pdf_fixture(filename, contents) do
+    dir = Path.join(["priv", "uploads", "pdfs"])
+    path = Path.join(dir, filename)
+
+    File.mkdir_p!(dir)
+    File.write!(path, contents)
+
+    on_exit(fn -> File.rm(path) end)
+
+    path
   end
 end

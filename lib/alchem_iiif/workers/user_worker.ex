@@ -45,29 +45,59 @@ defmodule AlchemIiif.Workers.UserWorker do
   @impl true
   def init(state) do
     Logger.info("✅ UserWorker started safely for user_id: #{state.user_id}")
-    {:ok, state}
+    {:ok, Map.merge(state, %{current_job: nil, queue: :queue.new()})}
   end
 
   @impl true
-  def handle_cast({:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}, state) do
+  def handle_cast({:process_pdf, _pdf_source, _pdf_path, _pipeline_id, _color_mode} = job, state) do
+    if state.current_job do
+      {:noreply, %{state | queue: :queue.in(job, state.queue)}}
+    else
+      {:noreply, start_job(job, state)}
+    end
+  end
+
+  @impl true
+  def handle_cast({:pdf_processing_finished, ref}, %{current_job: ref} = state) do
+    case :queue.out(state.queue) do
+      {{:value, next_job}, queue} ->
+        {:noreply, start_job(next_job, %{state | current_job: nil, queue: queue})}
+
+      {:empty, queue} ->
+        {:noreply, %{state | current_job: nil, queue: queue}}
+    end
+  end
+
+  def handle_cast({:pdf_processing_finished, _stale_ref}, state), do: {:noreply, state}
+
+  defp start_job({:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}, state) do
     Logger.info("⚙️ ユーザー(#{state.user_id})のPDF(ID:#{pdf_source.id})の裏側処理を開始します...")
 
-    # Run the heavy processing in a separate Task
-    Task.start(fn ->
-      # Use the correct extraction function（カラーモードを opts に含める）
-      AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{
-        owner_id: state.user_id,
-        color_mode: color_mode
-      })
+    ref = make_ref()
+    user_id = state.user_id
 
-      # Notify the UI that processing is complete
-      Phoenix.PubSub.broadcast(
-        AlchemIiif.PubSub,
-        "pdf_source_#{pdf_source.id}",
-        {:pdf_processed, pdf_source.id}
-      )
+    Task.start(fn ->
+      try do
+        runner().run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{
+          owner_id: user_id,
+          color_mode: color_mode
+        })
+
+        # Notify the UI that processing is complete
+        Phoenix.PubSub.broadcast(
+          AlchemIiif.PubSub,
+          "pdf_source_#{pdf_source.id}",
+          {:pdf_processed, pdf_source.id}
+        )
+      after
+        GenServer.cast(via_tuple(user_id), {:pdf_processing_finished, ref})
+      end
     end)
 
-    {:noreply, state}
+    %{state | current_job: ref}
+  end
+
+  defp runner do
+    Application.get_env(:alchem_iiif, :pdf_processing_runner, AlchemIiif.Pipeline)
   end
 end

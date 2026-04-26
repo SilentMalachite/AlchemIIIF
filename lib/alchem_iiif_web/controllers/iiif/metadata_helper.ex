@@ -79,24 +79,18 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
 
   @doc "元 PDF への参照リンク（IIIF rendering）を生成する"
   def build_rendering(source) do
-    case Map.get(source, :filename) do
-      blank when blank in [nil, ""] ->
-        nil
-
-      filename ->
-        url =
-          "priv/static/uploads/pdfs/#{filename}"
-          |> String.replace_prefix("priv/static", "")
-          |> then(&(AlchemIiifWeb.Endpoint.url() <> &1))
-
-        [
-          %{
-            "id" => url,
-            "type" => "Text",
-            "label" => %{"ja" => ["原本PDF"], "en" => ["Original PDF"]},
-            "format" => "application/pdf"
-          }
-        ]
+    with id when not is_nil(id) <- Map.get(source, :id),
+         filename when filename not in [nil, ""] <- Map.get(source, :filename) do
+      [
+        %{
+          "id" => "#{AlchemIiifWeb.Endpoint.url()}/download/pdf/#{id}",
+          "type" => "Text",
+          "label" => %{"ja" => ["原本PDF"], "en" => ["Original PDF"]},
+          "format" => "application/pdf"
+        }
+      ]
+    else
+      _ -> nil
     end
   end
 

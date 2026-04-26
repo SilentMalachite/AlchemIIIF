@@ -76,7 +76,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       assert json_response(conn, 404)["error"] =~ "見つかりません"
     end
 
-    test "公開済み画像がない場合は空の items を返す", %{conn: conn} do
+    test "公開済み画像がない場合は書誌メタデータを返さず 404 にする", %{conn: conn} do
       source = insert_pdf_source()
 
       # draft のみ作成
@@ -87,14 +87,18 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       })
 
       conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
-      response = json_response(conn, 200)
 
-      assert response["type"] == "Manifest"
-      assert response["items"] == []
+      assert json_response(conn, 404)["error"] =~ "見つかりません"
     end
 
     test "CORS ヘッダーが設定される", %{conn: conn} do
       source = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
 
       conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
       assert get_resp_header(conn, "access-control-allow-origin") == ["*"]
@@ -102,6 +106,12 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
 
     test "Content-Type が application/ld+json", %{conn: conn} do
       source = insert_pdf_source()
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
 
       conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
       [content_type] = get_resp_header(conn, "content-type")
@@ -239,7 +249,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
       entry = hd(response["rendering"])
       assert entry["type"] == "Text"
       assert entry["format"] == "application/pdf"
-      assert entry["id"] =~ "/uploads/pdfs/report.pdf"
+      assert entry["id"] =~ "/download/pdf/#{source.id}"
     end
   end
 
@@ -288,6 +298,12 @@ defmodule AlchemIiifWeb.IIIF.PresentationControllerTest do
           filename: "report.pdf",
           report_title: "黒姫洞穴遺跡"
         })
+
+      insert_extracted_image(%{
+        pdf_source_id: source.id,
+        page_number: 1,
+        status: "published"
+      })
 
       conn = get(conn, "/iiif/presentation/#{source.id}/manifest")
       response = json_response(conn, 200)

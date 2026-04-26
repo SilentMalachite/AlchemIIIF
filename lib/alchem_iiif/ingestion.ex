@@ -18,6 +18,7 @@ defmodule AlchemIiif.Ingestion do
   alias AlchemIiif.Iiif.Manifest
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor, PdfSource}
   alias AlchemIiif.Repo
+  alias AlchemIiif.UploadStore
   alias Ecto.Multi
 
   # === PdfSource ===
@@ -132,21 +133,21 @@ defmodule AlchemIiif.Ingestion do
     - {:error, :file_not_found} — PDF ファイルが存在しない
   """
   def reprocess_pdf_source(%PdfSource{} = pdf_source, opts \\ %{}) do
-    pdf_path = Path.join(["priv", "static", "uploads", "pdfs", pdf_source.filename])
+    case UploadStore.existing_pdf_path(pdf_source.filename) do
+      {:ok, pdf_path} ->
+        # ステータスを converting に戻す
+        {:ok, _} = update_pdf_source(pdf_source, %{status: "converting"})
 
-    if File.exists?(pdf_path) do
-      # ステータスを converting に戻す
-      {:ok, _} = update_pdf_source(pdf_source, %{status: "converting"})
+        pipeline_id = AlchemIiif.Pipeline.generate_pipeline_id()
 
-      pipeline_id = AlchemIiif.Pipeline.generate_pipeline_id()
+        Task.start(fn ->
+          AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, opts)
+        end)
 
-      Task.start(fn ->
-        AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, opts)
-      end)
+        {:ok, pipeline_id}
 
-      {:ok, pipeline_id}
-    else
-      {:error, :file_not_found}
+      {:error, _reason} ->
+        {:error, :file_not_found}
     end
   end
 
@@ -225,12 +226,12 @@ defmodule AlchemIiif.Ingestion do
       end)
 
       # 2. ページ画像ディレクトリを削除
-      pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
-      File.rm_rf(pages_dir)
+      Enum.each(UploadStore.pages_dirs(pdf_source.id), &File.rm_rf/1)
 
       # 3. PDF 物理ファイルを削除
-      pdf_path = Path.join(["priv", "static", "uploads", "pdfs", pdf_source.filename])
-      delete_file(pdf_path)
+      pdf_source.filename
+      |> UploadStore.pdf_paths()
+      |> Enum.each(&delete_file/1)
 
       # 4. 関連 ExtractedImage DB レコードを一括削除
       Repo.delete_all(from(e in ExtractedImage, where: e.pdf_source_id == ^pdf_source.id))

@@ -14,6 +14,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   alias AlchemIiif.Ingestion.{ExtractedImage, ImageProcessor}
   alias AlchemIiif.Ingestion.PdfSource
   alias AlchemIiif.Repo
+  alias AlchemIiif.UploadStore
   alias AlchemIiifWeb.IIIF.MetadataHelper
 
   import Ecto.Query
@@ -98,31 +99,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestController do
   defp get_dimensions_from_source_image(_), do: @default_dimensions
 
   defp resolve_image_path(path) do
-    upload_root = Path.expand(Application.app_dir(:alchem_iiif, "priv/static/uploads"))
-
-    full_path =
-      cond do
-        Path.type(path) == :absolute ->
-          Path.expand(path)
-
-        String.starts_with?(path, "priv/static/") ->
-          rel = String.replace_prefix(path, "priv/static/", "")
-          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "priv/static"), rel))
-
-        true ->
-          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "."), path))
-      end
-
-    cond do
-      not String.starts_with?(full_path, upload_root) ->
-        {:error, "upload ディレクトリ外"}
-
-      not File.exists?(full_path) ->
-        {:error, "ファイルが存在しません"}
-
-      true ->
-        {:ok, full_path}
-    end
+    UploadStore.resolve_path(path)
   end
 
   defp build_canvas(_manifest, identifier, dimensions, base_url, image) do

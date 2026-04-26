@@ -346,7 +346,7 @@ defmodule AlchemIiifWeb.IIIF.ManifestControllerTest do
       entry = hd(response["rendering"])
       assert entry["type"] == "Text"
       assert entry["format"] == "application/pdf"
-      assert entry["id"] =~ "/uploads/pdfs/report.pdf"
+      assert entry["id"] =~ "/download/pdf/#{source.id}"
     end
   end
 

@@ -94,7 +94,7 @@ defmodule AlchemIiifWeb.LabLive.Show do
                 <%= if image.image_path do %>
                   <div class="image-card-thumbnail">
                     <img
-                      src={String.replace_leading(image.image_path, "priv/static/", "/")}
+                      src={~p"/lab/media/images/#{image.id}/source"}
                       alt={image.label || "画像 #{image.page_number}"}
                       loading="lazy"
                     />

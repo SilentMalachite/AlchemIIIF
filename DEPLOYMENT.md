@@ -56,7 +56,7 @@ docker run -d \
   -e DATABASE_URL="ecto://user:pass@host/alchem_iiif_prod" \
   -e SECRET_KEY_BASE="your_secret_key_base_here" \
   -e PHX_HOST="your-domain.com" \
-  -v alchem_iiif_uploads:/app/priv/static/uploads \
+  -v alchem_iiif_uploads:/app/priv/uploads \
   -v alchem_iiif_cache:/app/priv/static/iiif_cache \
   -v alchem_iiif_images:/app/priv/static/iiif_images \
   alchem_iiif
@@ -90,7 +90,7 @@ services:
       SECRET_KEY_BASE: ${SECRET_KEY_BASE}
       PHX_HOST: ${PHX_HOST:-localhost}
     volumes:
-      - uploads:/app/priv/static/uploads
+      - uploads:/app/priv/uploads
       - cache:/app/priv/static/iiif_cache
       - images:/app/priv/static/iiif_images
     depends_on:

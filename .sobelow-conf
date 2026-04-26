@@ -7,7 +7,6 @@
   format: "txt",
   ignore: [
     "Config.HTTPS",
-    "Config.CSP",
     # IIIF Image API のキャッシュファイル配信（内部パス生成のため安全）
     "Traversal.SendFile",
     # File.mkdir_p! / File.cp! / File.rm / File.write! は内部生成パスのみ使用

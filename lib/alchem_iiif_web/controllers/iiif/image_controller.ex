@@ -17,6 +17,7 @@ defmodule AlchemIiifWeb.IIIF.ImageController do
   use AlchemIiifWeb, :controller
 
   alias AlchemIiif.Iiif.Manifest
+  alias AlchemIiif.Ingestion.ExtractedImage
   alias AlchemIiif.Ingestion.ImageProcessor
   alias AlchemIiif.Repo
 
@@ -120,18 +121,20 @@ defmodule AlchemIiifWeb.IIIF.ImageController do
   # --- プライベート関数 ---
 
   defp get_ptif_path(identifier) do
-    case Repo.one(from m in Manifest, where: m.identifier == ^identifier) do
-      nil ->
+    query =
+      from m in Manifest,
+        join: e in ExtractedImage,
+        on: e.id == m.extracted_image_id,
+        where: m.identifier == ^identifier,
+        where: e.status == "published",
+        select: e.ptif_path
+
+    case Repo.one(query) do
+      ptif_path when is_binary(ptif_path) ->
+        if File.exists?(ptif_path), do: {:ok, ptif_path}, else: {:error, :not_found}
+
+      _ ->
         {:error, :not_found}
-
-      manifest ->
-        image = Repo.get!(AlchemIiif.Ingestion.ExtractedImage, manifest.extracted_image_id)
-
-        if image.ptif_path && File.exists?(image.ptif_path) do
-          {:ok, image.ptif_path}
-        else
-          {:error, :not_found}
-        end
     end
   end
 

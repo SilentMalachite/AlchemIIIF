@@ -80,7 +80,8 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
         license_uri: "https://creativecommons.org/licenses/by/4.0/",
         report_title: "発掘調査報告書",
         survey_year: 2024,
-        filename: "report.pdf"
+        filename: "report.pdf",
+        id: 123
       }
 
       result = MetadataHelper.build_recommended_properties(source)
@@ -157,7 +158,7 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
 
   describe "build_rendering/1" do
     test "filename がある場合は PDF rendering 配列を返す" do
-      source = %{filename: "report.pdf"}
+      source = %{id: 123, filename: "report.pdf"}
       result = MetadataHelper.build_rendering(source)
 
       assert is_list(result)
@@ -166,7 +167,7 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
       entry = hd(result)
       assert entry["type"] == "Text"
       assert entry["format"] == "application/pdf"
-      assert entry["id"] =~ "/uploads/pdfs/report.pdf"
+      assert entry["id"] =~ "/download/pdf/123"
       assert entry["label"]["ja"] == ["原本PDF"]
       assert entry["label"]["en"] == ["Original PDF"]
     end

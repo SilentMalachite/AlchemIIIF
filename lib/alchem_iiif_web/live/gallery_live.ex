@@ -659,7 +659,7 @@ defmodule AlchemIiifWeb.GalleryLive do
             <%= if @selected_image.pdf_source && @selected_image.pdf_source.filename not in [nil, ""] do %>
               <div class="w-full max-w-4xl mt-2 text-center">
                 <a
-                  href={pdf_url(@selected_image.pdf_source.filename)}
+                  href={pdf_url(@selected_image.pdf_source)}
                   target="_blank"
                   rel="noopener noreferrer"
                   class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#1A2332] text-[#E6B422] hover:bg-[#243044] transition-colors text-sm"
@@ -773,13 +773,12 @@ defmodule AlchemIiifWeb.GalleryLive do
   # IIIF 経由のリサイズ済み画像では座標が合わなくなる。
   # IIIF Image API は OpenSeadragon Deep Zoom（モーダル）でのみ使用する。
   defp image_thumbnail_url(image) do
-    image.image_path
-    |> String.replace_leading("priv/static/", "/")
+    ~p"/media/images/#{image.id}/source"
   end
 
-  # 元 PDF の URL を構築（MetadataHelper.build_rendering/1 と同じパス構造）
-  defp pdf_url(filename) do
-    "/uploads/pdfs/#{filename}"
+  # 元 PDF の URL を構築（公開済み PDF のみ DownloadController で配信）
+  defp pdf_url(%{id: id}) do
+    ~p"/download/pdf/#{id}"
   end
 
   # IIIF Image API info.json URL の構築

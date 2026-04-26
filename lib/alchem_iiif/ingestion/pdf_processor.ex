@@ -19,6 +19,9 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
 
   # OOM 防止のためのチャンクサイズ（2GB RAM VPS 向け）
   @chunk_size 10
+  @default_max_pages 200
+  @default_command_timeout_ms 120_000
+  @default_chunk_timeout_ms 125_000
 
   @doc """
   PDFファイルの全ページを PNG に変換します。
@@ -37,17 +40,19 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     - {:error, reason}
   """
   def convert_to_images(pdf_path, output_dir, opts \\ %{}) do
-    # セキュリティ注記: output_dir は内部生成パス（priv/static/uploads/pages/{id}）、
+    # セキュリティ注記: output_dir は内部生成パス（priv/uploads/pages/{id}）、
     # cmd は固定文字列 "pdftoppm" — 外部入力由来ではないため安全。
     File.mkdir_p!(output_dir)
 
     abs_pdf_path = Path.expand(pdf_path)
     abs_output_prefix = Path.expand(Path.join(output_dir, "page"))
 
-    # まずページ数を取得してチャンクリストを生成
-    case get_page_count(abs_pdf_path) do
+    # まずページ数を取得し、上限を超える PDF は変換前に止める。
+    case get_page_count(abs_pdf_path, opts) do
       {:ok, total_pages} ->
-        run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages, opts)
+        with :ok <- validate_page_count(total_pages, opts) do
+          run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages, opts)
+        end
 
       {:error, reason} ->
         Logger.error("[PdfProcessor] Command failed with exit code (pdfinfo): #{reason}")
@@ -59,20 +64,42 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
   @doc """
   PDFのページ数を取得します。
   """
-  def get_page_count(pdf_path) do
-    case System.cmd("pdfinfo", [pdf_path], stderr_to_stdout: true) do
-      {output, 0} ->
+  def get_page_count(pdf_path, opts \\ %{}) do
+    case run_command(
+           "pdfinfo",
+           [pdf_path],
+           option(opts, :command_timeout_ms, @default_command_timeout_ms)
+         ) do
+      {:ok, {output, 0}} ->
         case Regex.run(~r/Pages:\s+(\d+)/, output) do
           [_, count] -> {:ok, String.to_integer(count)}
           _ -> {:error, "ページ数を取得できませんでした"}
         end
 
-      {_error, _} ->
+      {:ok, {_error, _}} ->
         {:error, "PDF情報の取得に失敗しました"}
+
+      {:error, :timeout} ->
+        Logger.error("[PdfProcessor] pdfinfo timed out")
+        {:error, "PDF情報の取得がタイムアウトしました"}
     end
   end
 
   # --- Private Functions ---
+
+  defp validate_page_count(total_pages, opts) do
+    max_pages = option(opts, :max_pages, @default_max_pages)
+
+    if total_pages <= max_pages do
+      :ok
+    else
+      Logger.warning(
+        "[PdfProcessor] PDF page count #{total_pages} exceeds page limit #{max_pages}"
+      )
+
+      {:error, "PDFページ数の上限（#{max_pages}ページ）を超えています"}
+    end
+  end
 
   # チャンク逐次処理の実行
   defp run_chunked_conversion(abs_pdf_path, abs_output_prefix, output_dir, total_pages, opts) do
@@ -98,7 +125,8 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
             result
           end,
           max_concurrency: 1,
-          timeout: :infinity,
+          timeout: option(opts, :chunk_timeout_ms, @default_chunk_timeout_ms),
+          on_timeout: :kill_task,
           ordered: true
         )
         |> Enum.to_list()
@@ -129,7 +157,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
   # 1チャンク分の pdftoppm 実行
   defp run_pdftoppm_chunk(abs_pdf_path, abs_output_prefix, first_page, last_page, opts) do
     cmd = "pdftoppm"
-    color_mode = Map.get(opts, :color_mode, "mono")
+    color_mode = option(opts, :color_mode, "mono")
 
     # カラーモードに応じてフラグを構築
     # "mono" → -gray（グレースケール変換で高速化）
@@ -152,17 +180,21 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
 
     Logger.info("[PdfProcessor] Chunk: pages #{first_page}-#{last_page}")
 
-    case System.cmd(cmd, args, stderr_to_stdout: true) do
-      {_output, 0} ->
+    case run_command(cmd, args, option(opts, :command_timeout_ms, @default_command_timeout_ms)) do
+      {:ok, {_output, 0}} ->
         :ok
 
-      {error_output, exit_code} ->
+      {:ok, {error_output, exit_code}} ->
         Logger.error(
           "[PdfProcessor] Chunk failed (pages #{first_page}-#{last_page}), " <>
             "exit code #{exit_code}: #{error_output}"
         )
 
         {:error, "PDF変換に失敗しました (exit code #{exit_code}): #{error_output}"}
+
+      {:error, :timeout} ->
+        Logger.error("[PdfProcessor] Chunk timed out (pages #{first_page}-#{last_page})")
+        {:error, "PDF変換がタイムアウトしました"}
     end
   end
 
@@ -171,6 +203,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
     Enum.find_value(results, fn
       {:ok, :ok} -> nil
       {:ok, {:error, _} = error} -> error
+      {:exit, :timeout} -> {:error, "PDF変換がタイムアウトしました"}
       {:exit, reason} -> {:error, "チャンク処理が異常終了しました: #{inspect(reason)}"}
     end)
   end
@@ -224,4 +257,45 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
       {:error, "システムエラーが発生しました: #{inspect(e)}"}
     end
   end
+
+  defp run_command(cmd, args, timeout_ms) do
+    task = Task.async(fn -> System.cmd(cmd, args, stderr_to_stdout: true) end)
+
+    case Task.yield(task, timeout_ms) do
+      {:ok, result} ->
+        {:ok, result}
+
+      {:exit, {%ErlangError{} = error, _stacktrace}} ->
+        raise error
+
+      {:exit, reason} ->
+        {:error, reason}
+
+      nil ->
+        Task.shutdown(task, :brutal_kill)
+        {:error, :timeout}
+    end
+  end
+
+  defp option(opts, key, default) do
+    value =
+      cond do
+        is_map(opts) -> Map.get(opts, key)
+        Keyword.keyword?(opts) -> Keyword.get(opts, key)
+        true -> nil
+      end
+
+    if is_nil(value), do: config_default(key, default), else: value
+  end
+
+  defp config_default(:max_pages, default),
+    do: Application.get_env(:alchem_iiif, :pdf_max_pages, default)
+
+  defp config_default(:command_timeout_ms, default),
+    do: Application.get_env(:alchem_iiif, :pdf_command_timeout_ms, default)
+
+  defp config_default(:chunk_timeout_ms, default),
+    do: Application.get_env(:alchem_iiif, :pdf_chunk_timeout_ms, default)
+
+  defp config_default(_key, default), do: default
 end

@@ -40,6 +40,7 @@ npm-debug.log
 /assets/node_modules/
 
 # ランタイムデータ (アップロード、キャッシュ、PTIF画像)
+/priv/uploads/
 /priv/static/uploads/
 /priv/static/iiif_cache/
 /priv/static/iiif_images/

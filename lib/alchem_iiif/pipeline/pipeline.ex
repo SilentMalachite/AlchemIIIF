@@ -23,6 +23,7 @@ defmodule AlchemIiif.Pipeline do
   alias AlchemIiif.Ingestion.{ImageProcessor, PdfProcessor, PdfSource}
   alias AlchemIiif.Pipeline.ResourceMonitor
   alias AlchemIiif.Repo
+  alias AlchemIiif.UploadStore
   alias Phoenix.PubSub
 
   @pubsub AlchemIiif.PubSub
@@ -64,7 +65,7 @@ defmodule AlchemIiif.Pipeline do
     job_id = Ecto.UUID.generate()
     tmp_dir = Path.join(System.tmp_dir!(), "alchemiiif_job_#{job_id}")
     # 最終出力先
-    output_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+    output_dir = UploadStore.pages_dir(pdf_source.id)
     File.mkdir_p!(output_dir)
 
     Logger.info(

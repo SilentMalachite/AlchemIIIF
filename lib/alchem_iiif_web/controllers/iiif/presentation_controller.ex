@@ -12,6 +12,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
 
   alias AlchemIiif.Ingestion
   alias AlchemIiif.Repo
+  alias AlchemIiif.UploadStore
   alias AlchemIiifWeb.IIIF.MetadataHelper
 
   @default_canvas_dimensions {1000, 1000}
@@ -31,14 +32,21 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
 
       source ->
         images = Ingestion.list_published_images_by_source(source.id)
-        base_url = AlchemIiifWeb.Endpoint.url()
 
-        manifest_json = build_manifest(source, images, base_url)
+        if images == [] do
+          conn
+          |> put_status(:not_found)
+          |> json(%{error: "指定された Source が見つかりません"})
+        else
+          base_url = AlchemIiifWeb.Endpoint.url()
 
-        conn
-        |> put_resp_content_type("application/ld+json")
-        |> put_resp_header("access-control-allow-origin", "*")
-        |> json(manifest_json)
+          manifest_json = build_manifest(source, images, base_url)
+
+          conn
+          |> put_resp_content_type("application/ld+json")
+          |> put_resp_header("access-control-allow-origin", "*")
+          |> json(manifest_json)
+        end
     end
   end
 
@@ -110,9 +118,7 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
 
   # 画像リソースの body を構築
   defp build_image_body(image, base_url, width, height) do
-    # image_path は "priv/static/uploads/..." 形式
-    # 静的ファイルとしての URL は "/uploads/..." 部分
-    image_url = build_image_url(image.image_path, base_url)
+    image_url = build_image_url(image, base_url)
     format = detect_format(image.image_path)
 
     %{
@@ -151,44 +157,12 @@ defmodule AlchemIiifWeb.IIIF.PresentationController do
 
   defp extract_dimensions(_), do: @default_canvas_dimensions
 
-  # image_path（DB に保存された相対 or 絶対パス）を、リリース環境でも安全な
-  # 絶対パスに解決する。priv/static/uploads 配下に閉じ込めて Path Traversal を防ぐ。
   defp resolve_image_path(path) do
-    upload_root = Path.expand(Application.app_dir(:alchem_iiif, "priv/static/uploads"))
-
-    full_path =
-      cond do
-        Path.type(path) == :absolute ->
-          Path.expand(path)
-
-        String.starts_with?(path, "priv/static/") ->
-          rel = String.replace_prefix(path, "priv/static/", "")
-          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "priv/static"), rel))
-
-        true ->
-          Path.expand(Path.join(Application.app_dir(:alchem_iiif, "."), path))
-      end
-
-    cond do
-      not String.starts_with?(full_path, upload_root) ->
-        {:error, "upload ディレクトリ外"}
-
-      not File.exists?(full_path) ->
-        {:error, "ファイルが存在しません"}
-
-      true ->
-        {:ok, full_path}
-    end
+    UploadStore.resolve_path(path)
   end
 
-  # priv/static/uploads/... → 絶対 URL に変換
-  defp build_image_url(image_path, base_url) when is_binary(image_path) do
-    # "priv/static/uploads/pages/..." → "/uploads/pages/..."
-    relative =
-      image_path
-      |> String.replace_prefix("priv/static", "")
-
-    base_url <> relative
+  defp build_image_url(%{id: id}, base_url) do
+    "#{base_url}/media/images/#{id}/source"
   end
 
   defp build_image_url(_, base_url), do: base_url <> "/placeholder.png"

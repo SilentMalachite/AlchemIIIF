@@ -93,7 +93,7 @@ WORKDIR /app
 RUN groupadd --system app && useradd --system --gid app app
 
 # アップロード・キャッシュ用ディレクトリ
-RUN mkdir -p /app/priv/static/uploads && \
+RUN mkdir -p /app/priv/uploads && \
     mkdir -p /app/priv/static/iiif_cache && \
     mkdir -p /app/priv/static/iiif_images && \
     chown -R app:app /app

@@ -650,8 +650,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   defp image_thumbnail_url(image) do
     case image.iiif_manifest do
       nil ->
-        (image.image_path || "")
-        |> String.replace_leading("priv/static/", "/")
+        ~p"/lab/media/images/#{image.id}/source"
 
       manifest ->
         "/iiif/image/#{manifest.identifier}/full/400,/0/default.jpg"
@@ -662,8 +661,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   defp image_full_url(image) do
     case image.iiif_manifest do
       nil ->
-        (image.image_path || "")
-        |> String.replace_leading("priv/static/", "/")
+        ~p"/lab/media/images/#{image.id}/source"
 
       manifest ->
         "/iiif/image/#{manifest.identifier}/full/max/0/default.jpg"

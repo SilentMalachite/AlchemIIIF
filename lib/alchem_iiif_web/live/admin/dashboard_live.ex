@@ -278,9 +278,9 @@ defmodule AlchemIiifWeb.Admin.DashboardLive do
 
                 <%!-- サムネイル --%>
                 <td class="px-4 py-3 whitespace-nowrap">
-                  <%= if thumbnail_url(image.image_path) do %>
+                  <%= if thumbnail_url(image) do %>
                     <img
-                      src={thumbnail_url(image.image_path)}
+                      src={thumbnail_url(image)}
                       alt={"Image #{image.id}"}
                       class="h-10 w-10 rounded object-cover border border-gray-600"
                       loading="lazy"
@@ -377,11 +377,9 @@ defmodule AlchemIiifWeb.Admin.DashboardLive do
 
   # --- プライベート関数 ---
 
-  # サムネイル URL の生成（priv/static/ プレフィックスを除去）
-  defp thumbnail_url(nil), do: nil
-  defp thumbnail_url(""), do: nil
-
-  defp thumbnail_url(image_path) do
-    String.replace_leading(image_path, "priv/static/", "/")
+  defp thumbnail_url(%{id: id, image_path: path}) when is_binary(path) and path != "" do
+    ~p"/lab/media/images/#{id}/source"
   end
+
+  defp thumbnail_url(_), do: nil
 end

@@ -426,4 +426,26 @@ defmodule AlchemIiifWeb.InspectorLive.LabelTest do
       assert html =~ "100文字以内で入力してください"
     end
   end
+
+  describe "不正イベント値の防御" do
+    test "不正な blur_save_field field ではクラッシュせず画面を維持する", %{conn: conn, user: user} do
+      image = create_user_image(user)
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      html = render_hook(view, "blur_save_field", %{"field" => "not_a_field"})
+
+      assert html =~ "図版の情報を入力してください"
+    end
+
+    test "不正な update_field field ではクラッシュせず画面を維持する", %{conn: conn, user: user} do
+      image = create_user_image(user)
+
+      {:ok, view, _html} = live(conn, ~p"/lab/label/#{image.id}")
+
+      html = render_hook(view, "update_field", %{"field" => "not_a_field", "value" => "x"})
+
+      assert html =~ "図版の情報を入力してください"
+    end
+  end
 end

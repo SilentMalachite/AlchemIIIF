@@ -3,13 +3,30 @@ defmodule AlchemIiifWeb.Router do
 
   import AlchemIiifWeb.UserAuth
 
+  @content_security_policy Enum.join(
+                             [
+                               "default-src 'self'",
+                               "script-src 'self'",
+                               "style-src 'self' 'unsafe-inline'",
+                               "img-src 'self' data: blob:",
+                               "font-src 'self' data:",
+                               "connect-src 'self' ws: wss:",
+                               "media-src 'self'",
+                               "object-src 'none'",
+                               "base-uri 'self'",
+                               "form-action 'self'",
+                               "frame-ancestors 'self'"
+                             ],
+                             "; "
+                           )
+
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
     plug :put_root_layout, html: {AlchemIiifWeb.Layouts, :root}
     plug :protect_from_forgery
-    plug :put_secure_browser_headers
+    plug :put_secure_browser_headers, %{"content-security-policy" => @content_security_policy}
     plug :fetch_current_scope_for_user
   end
 
@@ -28,6 +45,8 @@ defmodule AlchemIiifWeb.Router do
       live "/gallery", GalleryLive, :index
     end
 
+    get "/media/images/:id/source", MediaController, :published_image
+    get "/download/pdf/:id", DownloadController, :pdf
     get "/download/:id", DownloadController, :show
   end
 
@@ -49,6 +68,9 @@ defmodule AlchemIiifWeb.Router do
       live "/search", SearchLive, :index
       live "/pipeline/:pipeline_id", PipelineLive, :show
     end
+
+    get "/media/images/:id/source", MediaController, :lab_image
+    get "/media/pages/:pdf_source_id/:filename", MediaController, :lab_page
   end
 
   # /admin → /admin/review へリダイレクト

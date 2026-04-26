@@ -252,7 +252,7 @@ defmodule AlchemIiifWeb.GalleryLiveTest do
       html = render_click(view, "select_image", %{"id" => image.id})
 
       assert html =~ "原本 PDF をダウンロード"
-      assert html =~ "/uploads/pdfs/test_report_dl.pdf"
+      assert html =~ "/download/pdf/#{pdf.id}"
     end
 
     test "pdf_source が nil の場合、ダウンロードリンクが表示されない", %{conn: conn} do

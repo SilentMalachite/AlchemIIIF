@@ -324,8 +324,7 @@ defmodule AlchemIiifWeb.SearchLive do
     case image.iiif_manifest do
       nil ->
         # PTIF なし：元画像を使用
-        image.image_path
-        |> String.replace_leading("priv/static/", "/")
+        ~p"/media/images/#{image.id}/source"
 
       manifest ->
         # IIIF Image API でサムネイルを取得

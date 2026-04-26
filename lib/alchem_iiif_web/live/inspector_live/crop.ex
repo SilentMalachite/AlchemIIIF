@@ -18,6 +18,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
   import AlchemIiifWeb.WizardComponents
 
   alias AlchemIiif.Ingestion
+  alias AlchemIiif.UploadStore
 
   @nudge_amount 10
 
@@ -34,21 +35,24 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
     existing_image = Ingestion.find_extracted_image_by_page(pdf_source.id, page_number)
 
     # ページ画像のパスとURLを構築
-    pages_dir = Path.join(["priv", "static", "uploads", "pages", "#{pdf_source.id}"])
+    {pages_dir, page_filename} =
+      with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source.id) do
+        page_filename =
+          pages_dir
+          |> File.ls!()
+          |> Enum.filter(&String.ends_with?(&1, ".png"))
+          |> Enum.sort()
+          |> Enum.at(page_number - 1)
 
-    page_filename =
-      if File.dir?(pages_dir) do
-        pages_dir
-        |> File.ls!()
-        |> Enum.filter(&String.ends_with?(&1, ".png"))
-        |> Enum.sort()
-        |> Enum.at(page_number - 1)
+        {pages_dir, page_filename}
+      else
+        _ -> {nil, nil}
       end
 
     image_path = if page_filename, do: Path.join(pages_dir, page_filename), else: nil
 
     image_url =
-      if page_filename, do: "/uploads/pages/#{pdf_source.id}/#{page_filename}", else: nil
+      if page_filename, do: ~p"/lab/media/pages/#{pdf_source.id}/#{page_filename}", else: nil
 
     # 既存レコードがある場合はそのクロップデータをロード
     # 矩形データとポリゴンデータの両方に対応

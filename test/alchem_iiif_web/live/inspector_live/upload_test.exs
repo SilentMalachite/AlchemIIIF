@@ -88,6 +88,40 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert html =~ "ライセンスURI"
     end
 
+    test "不正なタブ値ではクラッシュせず現在のタブを維持する", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+      html = render_hook(view, "switch_tab", %{"tab" => "not-a-tab"})
+
+      assert html =~ "PDFファイルをアップロード"
+    end
+
+    test "設定された PDF アップロードサイズ上限を超えるファイルは拒否される", %{conn: conn} do
+      previous = Application.get_env(:alchem_iiif, :max_pdf_upload_bytes)
+      Application.put_env(:alchem_iiif, :max_pdf_upload_bytes, 10)
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:alchem_iiif, :max_pdf_upload_bytes, previous)
+        else
+          Application.delete_env(:alchem_iiif, :max_pdf_upload_bytes)
+        end
+      end)
+
+      {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+      pdf_input =
+        file_input(view, "#upload-form", :pdf, [
+          %{
+            name: "too_large.pdf",
+            content: String.duplicate("x", 11),
+            type: "application/pdf"
+          }
+        ])
+
+      assert {:error, [[_ref, :too_large]]} = render_upload(pdf_input, "too_large.pdf")
+    end
+
     test "report_title を入力して送信すると pdf_source に保存される", %{conn: conn, user: user} do
       {:ok, view, _html} = live(conn, ~p"/lab/upload")
 
