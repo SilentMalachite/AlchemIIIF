@@ -19,16 +19,16 @@ defmodule AlchemIiif.Workers.UserWorker do
     DynamicSupervisor.start_child(@supervisor, {__MODULE__, [user_id: user_id, name: name]})
   end
 
-  def process_pdf(user_id, pdf_source, pdf_path, pipeline_id, color_mode \\ "mono") do
+  def process_pdf(user_id, pdf_source, pdf_path, pipeline_id, processing_opts \\ "mono") do
     GenServer.cast(
       via_tuple(user_id),
-      {:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}
+      {:process_pdf, pdf_source, pdf_path, pipeline_id, processing_opts}
     )
   end
 
   @impl true
-  def dispatch_pdf_processing(user_id, pdf_source, pdf_path, pipeline_id, color_mode) do
-    process_pdf(user_id, pdf_source, pdf_path, pipeline_id, color_mode)
+  def dispatch_pdf_processing(user_id, pdf_source, pdf_path, pipeline_id, processing_opts) do
+    process_pdf(user_id, pdf_source, pdf_path, pipeline_id, processing_opts)
     :ok
   end
 
@@ -49,7 +49,10 @@ defmodule AlchemIiif.Workers.UserWorker do
   end
 
   @impl true
-  def handle_cast({:process_pdf, _pdf_source, _pdf_path, _pipeline_id, _color_mode} = job, state) do
+  def handle_cast(
+        {:process_pdf, _pdf_source, _pdf_path, _pipeline_id, _processing_opts} = job,
+        state
+      ) do
     if state.current_job do
       {:noreply, %{state | queue: :queue.in(job, state.queue)}}
     else
@@ -70,7 +73,7 @@ defmodule AlchemIiif.Workers.UserWorker do
 
   def handle_cast({:pdf_processing_finished, _stale_ref}, state), do: {:noreply, state}
 
-  defp start_job({:process_pdf, pdf_source, pdf_path, pipeline_id, color_mode}, state) do
+  defp start_job({:process_pdf, pdf_source, pdf_path, pipeline_id, processing_opts}, state) do
     Logger.info("⚙️ ユーザー(#{state.user_id})のPDF(ID:#{pdf_source.id})の裏側処理を開始します...")
 
     ref = make_ref()
@@ -78,10 +81,12 @@ defmodule AlchemIiif.Workers.UserWorker do
 
     Task.start(fn ->
       try do
-        runner().run_pdf_extraction(pdf_source, pdf_path, pipeline_id, %{
-          owner_id: user_id,
-          color_mode: color_mode
-        })
+        runner().run_pdf_extraction(
+          pdf_source,
+          pdf_path,
+          pipeline_id,
+          pipeline_opts(processing_opts, user_id)
+        )
 
         # Notify the UI that processing is complete
         Phoenix.PubSub.broadcast(
@@ -95,6 +100,26 @@ defmodule AlchemIiif.Workers.UserWorker do
     end)
 
     %{state | current_job: ref}
+  end
+
+  defp pipeline_opts(%{} = processing_opts, user_id) do
+    opts = %{
+      owner_id: user_id,
+      color_mode: Map.get(processing_opts, :color_mode) || "mono"
+    }
+
+    case Map.get(processing_opts, :max_pages) do
+      max_pages when is_integer(max_pages) -> Map.put(opts, :max_pages, max_pages)
+      _ -> opts
+    end
+  end
+
+  defp pipeline_opts(color_mode, user_id) when is_binary(color_mode) do
+    %{owner_id: user_id, color_mode: color_mode}
+  end
+
+  defp pipeline_opts(_processing_opts, user_id) do
+    %{owner_id: user_id, color_mode: "mono"}
   end
 
   defp runner do

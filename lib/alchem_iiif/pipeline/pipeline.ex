@@ -73,8 +73,12 @@ defmodule AlchemIiif.Pipeline do
     )
 
     try do
-      # カラーモードを PdfProcessor に伝搬（デフォルト: "mono"）
-      processor_opts = %{user_id: opts[:owner_id], color_mode: opts[:color_mode] || "mono"}
+      # カラーモードとページ数上限を PdfProcessor に伝搬（デフォルト: "mono"）
+      processor_opts = %{
+        user_id: opts[:owner_id],
+        color_mode: opts[:color_mode] || "mono",
+        max_pages: opts[:max_pages]
+      }
 
       case PdfProcessor.convert_to_images(pdf_path, tmp_dir, processor_opts) do
         {:ok, %{page_count: page_count, image_paths: tmp_image_paths}} ->

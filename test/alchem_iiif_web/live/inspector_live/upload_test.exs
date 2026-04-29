@@ -168,6 +168,42 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert pdf_source.license_uri == "https://creativecommons.org/licenses/by/4.0/"
     end
 
+    test "PDF読み込みページ数の目安を入力して送信すると処理オプションに渡される", %{
+      conn: conn,
+      user: user
+    } do
+      {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+      assert has_element?(view, "#pdf-page-limit-input")
+
+      view
+      |> element("#upload-form")
+      |> render_change(%{
+        "color_mode" => "mono",
+        "max_pages" => "75"
+      })
+
+      pdf_input =
+        file_input(view, "#upload-form", :pdf, [
+          %{
+            name: "page_limit.pdf",
+            content: <<0, 1, 2, 3, 4>>,
+            type: "application/pdf"
+          }
+        ])
+
+      render_upload(pdf_input, "page_limit.pdf")
+
+      render_submit(view, "upload_pdf", %{
+        "color_mode" => "mono",
+        "max_pages" => "75"
+      })
+
+      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert dispatched.user_id == user.id
+      assert dispatched.color_mode == %{color_mode: "mono", max_pages: 75}
+    end
+
     test "survey_year に範囲外の値を入力するとエラーが表示される", _context do
       # changeset バリデーションを直接テスト（LiveView 経由だと HTML5 の min/max で弾かれる）
       changeset =

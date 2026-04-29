@@ -38,6 +38,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:current_page, 0)
      |> assign(:total_pages, 0)
      |> assign(:color_mode, "mono")
+     |> assign(:max_pages, max_pdf_pages())
      |> assign(:report_title, "")
      |> assign(:investigating_org, "")
      |> assign(:survey_year, nil)
@@ -53,10 +54,12 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   @impl true
   def handle_event("validate", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
+    max_pages = parse_max_pages(get_in(params, ["max_pages"]), socket.assigns.max_pages)
 
     {:noreply,
      socket
      |> assign(:color_mode, color_mode)
+     |> assign(:max_pages, max_pages)
      |> assign(:report_title, get_in(params, ["report_title"]) || socket.assigns.report_title)
      |> assign(
        :investigating_org,
@@ -84,7 +87,11 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
   def handle_event("upload_pdf", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
-    socket = assign(socket, uploading: true, color_mode: color_mode)
+    max_pages_param = get_in(params, ["max_pages"])
+    max_pages = parse_max_pages(max_pages_param, socket.assigns.max_pages)
+
+    processing_opts = processing_options(color_mode, max_pages, max_pages_param)
+    socket = assign(socket, uploading: true, color_mode: color_mode, max_pages: max_pages)
 
     uploaded_files =
       consume_uploaded_entries(socket, :pdf, fn %{path: path}, entry ->
@@ -127,7 +134,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
               pdf_source,
               pdf_path,
               pipeline_id,
-              socket.assigns.color_mode
+              processing_opts
             )
 
             # 完了メッセージを購読する
@@ -243,6 +250,27 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                   checked={@color_mode == "color"}
                 /> 🎨 カラーモード（標準）
               </label>
+            </div>
+
+            <div class="color-mode-selector">
+              <label for="pdf-page-limit-input" class="color-mode-label">
+                読み込みページ数の目安:
+              </label>
+              <input
+                type="number"
+                id="pdf-page-limit-input"
+                name="max_pages"
+                value={@max_pages}
+                min="1"
+                max={max_pdf_pages()}
+                step="1"
+                inputmode="numeric"
+                class="input input-bordered input-sm w-28"
+                aria-label="PDFを読み込むページ数の目安"
+              />
+              <span class="text-sm text-base-content/70">
+                ページまで（上限 {max_pdf_pages()} ページ）
+              </span>
             </div>
 
             <%!-- 報告書情報セクション --%>
@@ -456,6 +484,39 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
   defp max_pdf_upload_bytes do
     Application.get_env(:alchem_iiif, :max_pdf_upload_bytes, 100_000_000)
+  end
+
+  defp max_pdf_pages do
+    Application.get_env(:alchem_iiif, :pdf_max_pages, 200)
+    |> max(1)
+  end
+
+  defp parse_max_pages(nil, current), do: current || max_pdf_pages()
+  defp parse_max_pages("", current), do: current || max_pdf_pages()
+
+  defp parse_max_pages(value, _current) when is_integer(value) do
+    clamp_max_pages(value)
+  end
+
+  defp parse_max_pages(value, current) when is_binary(value) do
+    case Integer.parse(value) do
+      {pages, ""} -> clamp_max_pages(pages)
+      _ -> current || max_pdf_pages()
+    end
+  end
+
+  defp parse_max_pages(_value, current), do: current || max_pdf_pages()
+
+  defp clamp_max_pages(pages) do
+    pages
+    |> max(1)
+    |> min(max_pdf_pages())
+  end
+
+  defp processing_options(color_mode, _max_pages, nil), do: color_mode
+
+  defp processing_options(color_mode, max_pages, _max_pages_param) do
+    %{color_mode: color_mode, max_pages: max_pages}
   end
 
   # 空文字列を nil に変換するヘルパー
