@@ -148,7 +148,7 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       assert %PdfSource{}.source_type == "pdf"
     end
 
-    test "\"pdf\" と \"zip\" を受け入れる" do
+    test ~s(pdf と zip を受け入れる) do
       for type <- ["pdf", "zip"] do
         cs = PdfSource.changeset(%PdfSource{}, %{filename: "x.pdf", source_type: type})
         assert cs.valid?, "source_type=#{type} は valid であるべき"
