@@ -140,4 +140,49 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       assert %{site_code: _} = errors_on(changeset)
     end
   end
+
+  describe "source_type" do
+    alias AlchemIiif.Ingestion.PdfSource
+
+    test "デフォルト値は \"pdf\"" do
+      assert %PdfSource{}.source_type == "pdf"
+    end
+
+    test "\"pdf\" と \"zip\" を受け入れる" do
+      for type <- ["pdf", "zip"] do
+        cs = PdfSource.changeset(%PdfSource{}, %{filename: "x.pdf", source_type: type})
+        assert cs.valid?, "source_type=#{type} は valid であるべき"
+      end
+    end
+
+    test "未知の source_type を拒否する" do
+      cs = PdfSource.changeset(%PdfSource{}, %{filename: "x.pdf", source_type: "tar"})
+      refute cs.valid?
+      assert %{source_type: _} = errors_on(cs)
+    end
+
+    test "source_type を空にすると invalid" do
+      cs = PdfSource.changeset(%PdfSource{}, %{filename: "x.pdf", source_type: nil})
+      refute cs.valid?
+      assert %{source_type: _} = errors_on(cs)
+    end
+
+    test "pdf?/1 は struct と map と nil を区別する" do
+      assert PdfSource.pdf?(%PdfSource{source_type: "pdf"})
+      assert PdfSource.pdf?(%{source_type: "pdf"})
+      refute PdfSource.pdf?(%PdfSource{source_type: "zip"})
+      refute PdfSource.pdf?(%{source_type: "zip"})
+      refute PdfSource.pdf?(nil)
+      refute PdfSource.pdf?(%{})
+    end
+
+    test "zip?/1 は struct と map と nil を区別する" do
+      assert PdfSource.zip?(%PdfSource{source_type: "zip"})
+      assert PdfSource.zip?(%{source_type: "zip"})
+      refute PdfSource.zip?(%PdfSource{source_type: "pdf"})
+      refute PdfSource.zip?(%{source_type: "pdf"})
+      refute PdfSource.zip?(nil)
+      refute PdfSource.zip?(%{})
+    end
+  end
 end
