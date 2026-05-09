@@ -30,7 +30,9 @@ defmodule AlchemIiif.MixProject do
       ],
       # Dialyzer 設定
       dialyzer: [
-        ignore_warnings: ".dialyzer_ignore.exs"
+        ignore_warnings: ".dialyzer_ignore.exs",
+        plt_local_path: "priv/plts",
+        plt_core_path: "priv/plts"
       ]
     ]
   end

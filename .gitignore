@@ -45,5 +45,8 @@ npm-debug.log
 /priv/static/iiif_cache/
 /priv/static/iiif_images/
 
+# Dialyzer PLT files
+/priv/plts/
+
 # ローカル worktree
 /.worktrees/

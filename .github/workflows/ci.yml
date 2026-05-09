@@ -79,3 +79,33 @@ jobs:
       # ── ExUnit テスト ──
       - name: Run tests
         run: mix test
+
+      # ── Credo（静的解析） ──
+      # `mix review` パイプライン相当の品質ゲート（review.check_db_version と
+      # review.summary は CI では不要なため省略）
+      - name: Credo (strict)
+        run: mix credo --strict
+
+      # ── Sobelow（セキュリティ静的解析） ──
+      - name: Sobelow
+        run: mix sobelow --config
+
+      # ── Dialyzer PLT キャッシュ ──
+      # OTP / Elixir / mix.lock のいずれかが変わった場合に PLT を再生成
+      - name: Cache Dialyzer PLT
+        uses: actions/cache@v4
+        with:
+          path: priv/plts
+          key: plt-${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            plt-${{ runner.os }}-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-
+
+      # ── PLT が存在しない場合のみビルド（キャッシュヒット時はスキップされる） ──
+      - name: Build PLT (if missing)
+        run: |
+          mkdir -p priv/plts
+          mix dialyzer --plt
+
+      # ── Dialyzer 本体 ──
+      - name: Dialyzer
+        run: mix dialyzer --format short
