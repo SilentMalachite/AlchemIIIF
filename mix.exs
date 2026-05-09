@@ -32,7 +32,10 @@ defmodule AlchemIiif.MixProject do
       dialyzer: [
         ignore_warnings: ".dialyzer_ignore.exs",
         plt_local_path: "priv/plts",
-        plt_core_path: "priv/plts"
+        plt_core_path: "priv/plts",
+        # MIX_ENV=test 配下では test/support がコンパイル対象に含まれ
+        # ExUnit.* を参照するため、PLT に :ex_unit を追加する
+        plt_add_apps: [:ex_unit]
       ]
     ]
   end
