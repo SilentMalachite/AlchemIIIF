@@ -4,6 +4,20 @@
 
 ---
 
+## [0.2.29] - 2026-05-10
+
+### 🔧 CI / 開発インフラ
+
+- **CI に `mix review` 相当の品質ゲートを追加 (`.github/workflows/ci.yml`)**
+  - `mix credo --strict`、`mix sobelow --config`、`mix dialyzer` を CI ジョブに組み込み。
+  - Dialyzer PLT を `priv/plts/` に固定し、OTP / Elixir / `mix.lock` をキーとした専用キャッシュで2回目以降の実行時間を短縮。
+  - `MIX_ENV=test` 配下で `test/support` が dialyzer 対象に含まれるため、`mix.exs` の `dialyzer` 設定に `plt_add_apps: [:ex_unit]` を追加。
+
+- **GitHub Actions の更新**
+  - `actions/checkout` と `actions/cache` を v4 → v5 に更新（Node.js 20 廃止予告対応）。
+
+---
+
 ## [0.2.28] - 2026-04-27
 
 ### 🔒 セキュリティ強化 — 公開境界・アップロード配信・PDF処理制限
