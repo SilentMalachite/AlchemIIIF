@@ -18,6 +18,9 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
     クォータや一時ファイルシステムのサイズ上限を併用すること。
   - DoS: PNG エントリ数を `max_pages` で制限
   - シンボリックリンク: 展開後 `File.lstat!` で `:regular` のみ採用
+  - macOS リソースフォーク: `__MACOSX/` 配下と `._` 始まりの AppleDouble は
+    候補から除外（PNG マジックバイトを持たないため `max_pages` 計算に
+    紛れ込むのを防ぐ）
 
   ## 命名
 
@@ -94,6 +97,7 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
 
     cond do
       String.ends_with?(path, "/") -> []
+      macos_resource_fork?(path) -> []
       not png_extension?(path) -> []
       not safe_relative?(path) -> []
       true -> [{path, size}]
@@ -101,6 +105,13 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
   end
 
   defp entry_to_candidate(_), do: []
+
+  # macOS で zip 化したアーカイブに含まれる AppleDouble メタデータ。
+  # `__MACOSX/` 配下、または basename が `._` で始まるエントリを除外する。
+  defp macos_resource_fork?(path) do
+    String.starts_with?(path, "__MACOSX/") or
+      String.starts_with?(Path.basename(path), "._")
+  end
 
   defp png_extension?(path), do: String.downcase(Path.extname(path)) == ".png"
 

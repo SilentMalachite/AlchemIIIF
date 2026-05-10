@@ -176,4 +176,55 @@ defmodule AlchemIiif.Ingestion.ZipProcessorTest do
       assert File.ls!(out) == []
     end
   end
+
+  describe "extract_pngs/3 macOS resource fork" do
+    test "__MACOSX/ 配下の .png は候補にカウントされず無視される" do
+      {src, out} = setup_dirs("macosx_dir")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"a.png", png_bytes()},
+          {"__MACOSX/._a.png", "AppleDouble metadata"},
+          {"__MACOSX/._b.png", "AppleDouble metadata"}
+        ])
+
+      assert {:ok, %{page_count: 1, image_paths: [path]}} =
+               ZipProcessor.extract_pngs(zip, out)
+
+      assert File.exists?(path)
+    end
+
+    test "._ で始まる AppleDouble エントリ（フラット配置）は候補から外す" do
+      {src, out} = setup_dirs("appledouble_flat")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"a.png", png_bytes()},
+          {"b.png", png_bytes()},
+          {"._a.png", "AppleDouble metadata"},
+          {"._b.png", "AppleDouble metadata"}
+        ])
+
+      assert {:ok, %{page_count: 2, image_paths: paths}} =
+               ZipProcessor.extract_pngs(zip, out)
+
+      assert length(paths) == 2
+    end
+
+    test "max_pages 直前の境界：resource fork 除外で本数が上限内に収まれば成功する" do
+      {src, out} = setup_dirs("macosx_boundary")
+
+      # 5 枚の PNG を Mac で zip した想定：本物 5 + AppleDouble 3 = 8 エントリ
+      files =
+        for i <- 1..5, do: {"p#{i}.png", png_bytes()}
+
+      forks =
+        for i <- 1..3, do: {"__MACOSX/._p#{i}.png", "AppleDouble metadata"}
+
+      zip = build_zip(Path.join(src, "in.zip"), files ++ forks)
+
+      assert {:ok, %{page_count: 5}} =
+               ZipProcessor.extract_pngs(zip, out, %{max_pages: 5})
+    end
+  end
 end

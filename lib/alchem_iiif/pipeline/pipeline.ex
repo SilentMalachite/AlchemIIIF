@@ -207,11 +207,40 @@ defmodule AlchemIiif.Pipeline do
     broadcast_progress(pipeline_id, %{
       event: :pipeline_error,
       phase: :extraction,
-      message: "抽出に失敗しました: #{reason}"
+      message: "抽出に失敗しました: #{format_reason(reason)}"
     })
 
     {:error, reason}
   end
+
+  # ZipProcessor / PdfProcessor が返す各種エラー理由を、
+  # ユーザー向けの日本語メッセージに整形する。
+  # タプル形式の理由を `#{}` 補間に渡すと `String.Chars` 未実装で
+  # クラッシュするため、ここで集約してフォーマットする。
+  defp format_reason({:too_many_pages, count, max}),
+    do: "ZIP 内 PNG 数 #{count} が上限 #{max} を超えています"
+
+  defp format_reason(:no_png_entries), do: "ZIP に PNG ファイルが含まれていません"
+
+  defp format_reason(:extracted_size_exceeds_limit),
+    do: "ZIP 展開後の合計サイズが上限を超えています"
+
+  defp format_reason(:no_valid_png), do: "ZIP に有効な PNG ファイルが含まれていません"
+
+  defp format_reason({:mkdir_failed, posix}), do: "出力先ディレクトリ作成に失敗しました: #{posix}"
+
+  defp format_reason({:zip_list_failed, reason}),
+    do: "ZIP の解析に失敗しました: #{inspect(reason)}"
+
+  defp format_reason({:zip_unzip_failed, reason}),
+    do: "ZIP の展開に失敗しました: #{inspect(reason)}"
+
+  defp format_reason({:rename_failed, reason, path}),
+    do: "ファイルのリネームに失敗しました（#{path}）: #{inspect(reason)}"
+
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_reason(reason), do: inspect(reason)
 
   @doc """
   複数画像の PTIF 生成を並列で実行します（メモリガード付き）。
