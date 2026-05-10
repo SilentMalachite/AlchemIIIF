@@ -230,7 +230,7 @@ defmodule AlchemIiif.Ingestion do
       end)
 
       # 2. ページ画像ディレクトリを削除
-      Enum.each(UploadStore.pages_dirs(pdf_source.id), &File.rm_rf/1)
+      Enum.each(UploadStore.pages_dirs(pdf_source), &File.rm_rf/1)
 
       # 3. PDF source のみ物理ファイルを削除（ZIP source はスキップ）
       if PdfSource.pdf?(pdf_source) do

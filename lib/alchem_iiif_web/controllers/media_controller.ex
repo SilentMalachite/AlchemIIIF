@@ -34,8 +34,8 @@ defmodule AlchemIiifWeb.MediaController do
     user = conn.assigns.current_scope.user
 
     with true <- UploadStore.safe_filename?(filename),
-         _source <- Ingestion.get_pdf_source!(pdf_source_id, user),
-         {:ok, path} <- UploadStore.existing_page_path(pdf_source_id, filename) do
+         source <- Ingestion.get_pdf_source!(pdf_source_id, user),
+         {:ok, path} <- UploadStore.existing_page_path(source, filename) do
       serve_upload(conn, path)
     else
       _ -> not_found(conn)

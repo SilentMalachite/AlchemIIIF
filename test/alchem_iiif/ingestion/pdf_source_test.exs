@@ -185,4 +185,43 @@ defmodule AlchemIiif.Ingestion.PdfSourceTest do
       refute PdfSource.zip?(%{})
     end
   end
+
+  describe "storage_key auto-generation" do
+    test "新規作成時に storage_key が未指定なら UUID が自動付与される" do
+      attrs = %{filename: "report.pdf"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+
+      assert changeset.valid?
+      key = Ecto.Changeset.get_change(changeset, :storage_key)
+      assert is_binary(key)
+      assert {:ok, _} = Ecto.UUID.cast(key)
+    end
+
+    test "明示的に渡された storage_key は維持される" do
+      attrs = %{filename: "report.pdf", storage_key: "explicit-key-123"}
+      changeset = PdfSource.changeset(%PdfSource{}, attrs)
+
+      assert Ecto.Changeset.get_field(changeset, :storage_key) == "explicit-key-123"
+    end
+
+    test "ファイル名違いの 2 ソースは異なる storage_key を持つ" do
+      cs_a =
+        PdfSource.changeset(%PdfSource{}, %{filename: "a.pdf"})
+
+      cs_b =
+        PdfSource.changeset(%PdfSource{}, %{filename: "b.pdf"})
+
+      key_a = Ecto.Changeset.get_change(cs_a, :storage_key)
+      key_b = Ecto.Changeset.get_change(cs_b, :storage_key)
+
+      refute key_a == key_b
+    end
+
+    test "更新時に既存 storage_key が空文字に上書きされない" do
+      existing = %PdfSource{storage_key: "preserve-me"}
+      changeset = PdfSource.changeset(existing, %{filename: "renamed.pdf"})
+
+      assert Ecto.Changeset.get_field(changeset, :storage_key) == "preserve-me"
+    end
+  end
 end

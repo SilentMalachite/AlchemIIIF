@@ -36,7 +36,7 @@ defmodule AlchemIiifWeb.InspectorLive.Crop do
 
     # ページ画像のパスとURLを構築
     {pages_dir, page_filename} =
-      with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source.id) do
+      with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source) do
         page_filename =
           pages_dir
           |> File.ls!()

@@ -64,7 +64,7 @@ defmodule AlchemIiif.Pipeline do
 
     job_id = Ecto.UUID.generate()
     tmp_dir = Path.join(System.tmp_dir!(), "alchemiiif_job_#{job_id}")
-    output_dir = UploadStore.pages_dir(source.id)
+    output_dir = output_dir_for(source)
     File.mkdir_p!(output_dir)
 
     Logger.info(
@@ -94,6 +94,15 @@ defmodule AlchemIiif.Pipeline do
 
   defp extraction_start_message(%{source_type: "zip"}), do: "ZIP の展開を開始します..."
   defp extraction_start_message(_), do: "PDF変換を開始します..."
+
+  # 出力ディレクトリは可能な限り storage_key 経由で解決する。
+  # `run_pdf_extraction` が source 構造体を完全に保持していない経路から
+  # 渡されることがあるため、storage_key が無ければ ID 互換パスを使う。
+  defp output_dir_for(%{storage_key: key} = _source) when is_binary(key) and key != "" do
+    UploadStore.pages_dir(key)
+  end
+
+  defp output_dir_for(%{id: id}) when is_integer(id), do: UploadStore.pages_dir(id)
 
   defp run_processor(%{source_type: "pdf"} = _source, source_path, tmp_dir, opts) do
     processor_opts = %{

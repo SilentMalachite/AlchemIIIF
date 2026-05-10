@@ -28,7 +28,7 @@ defmodule AlchemIiifWeb.InspectorLive.Browse do
     else
       # ページ画像のリストを取得
       page_images =
-        with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source.id) do
+        with {:ok, pages_dir} <- UploadStore.existing_pages_dir(pdf_source) do
           pages_dir
           |> File.ls!()
           |> Enum.filter(&String.ends_with?(&1, ".png"))

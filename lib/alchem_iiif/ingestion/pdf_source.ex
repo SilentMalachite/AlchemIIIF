@@ -19,6 +19,7 @@ defmodule AlchemIiif.Ingestion.PdfSource do
   schema "pdf_sources" do
     field :filename, :string
     field :source_type, :string, default: "pdf"
+    field :storage_key, :string
     field :page_count, :integer
     field :status, :string, default: "uploading"
 
@@ -49,6 +50,7 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> cast(attrs, [
       :filename,
       :source_type,
+      :storage_key,
       :page_count,
       :status,
       :deleted_at,
@@ -61,7 +63,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
       :license_uri,
       :site_code
     ])
-    |> validate_required([:filename, :source_type])
+    |> ensure_storage_key()
+    |> validate_required([:filename, :source_type, :storage_key])
     |> validate_inclusion(:source_type, @source_types)
     |> validate_inclusion(:status, ["uploading", "converting", "ready", "error"])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
@@ -73,6 +76,7 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_length(:report_title, max: 500)
     |> validate_license_uri()
     |> validate_length(:site_code, max: 30, message: "30文字以内で入力してください")
+    |> unique_constraint(:storage_key)
   end
 
   @doc "ワークフロー遷移専用 changeset"
@@ -92,6 +96,15 @@ defmodule AlchemIiif.Ingestion.PdfSource do
   def zip?(%__MODULE__{source_type: "zip"}), do: true
   def zip?(%{source_type: "zip"}), do: true
   def zip?(_), do: false
+
+  # 新規作成時に storage_key が未指定なら UUID を自動付与する。
+  # 永続化済みレコードに対する更新では既存値を維持する。
+  defp ensure_storage_key(changeset) do
+    case get_field(changeset, :storage_key) do
+      key when is_binary(key) and key != "" -> changeset
+      _ -> put_change(changeset, :storage_key, Ecto.UUID.generate())
+    end
+  end
 
   defp validate_license_uri(changeset) do
     validate_change(changeset, :license_uri, fn :license_uri, uri ->
