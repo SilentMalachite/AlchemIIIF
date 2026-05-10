@@ -372,10 +372,10 @@ defmodule AlchemIiifWeb.GalleryLive do
                           <defs>
                             <filter
                               id={"gallery-feather-#{image.id}"}
-                              x="-10%"
-                              y="-10%"
-                              width="120%"
-                              height="120%"
+                              x="-20%"
+                              y="-20%"
+                              width="140%"
+                              height="140%"
                             >
                               <feGaussianBlur stdDeviation={polygon_feather_radius(card_bbox)} />
                             </filter>
@@ -562,10 +562,10 @@ defmodule AlchemIiifWeb.GalleryLive do
                       <defs>
                         <filter
                           id={"gallery-modal-feather-#{@selected_image.id}"}
-                          x="-10%"
-                          y="-10%"
-                          width="120%"
-                          height="120%"
+                          x="-20%"
+                          y="-20%"
+                          width="140%"
+                          height="140%"
                         >
                           <feGaussianBlur stdDeviation={polygon_feather_radius(@selected_bbox)} />
                         </filter>
@@ -787,13 +787,13 @@ defmodule AlchemIiifWeb.GalleryLive do
   defp polygon_fill_color(_image), do: "#ffffff"
 
   # ポリゴン外周のフェザー半径を bbox サイズから決める。
-  # min(w,h) の 1.2% を基準に最低 3.0px。原寸座標系（user space）の値。
+  # min(w,h) の 2.5% を基準に最低 6.0px。原寸座標系（user space）の値。
   defp polygon_feather_radius(%{width: w, height: h})
        when is_number(w) and is_number(h) and w > 0 and h > 0 do
-    Float.round(max(3.0, min(w, h) * 0.012), 2)
+    Float.round(max(6.0, min(w, h) * 0.025), 2)
   end
 
-  defp polygon_feather_radius(_), do: 3.0
+  defp polygon_feather_radius(_), do: 6.0
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do
