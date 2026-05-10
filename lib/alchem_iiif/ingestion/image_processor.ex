@@ -252,20 +252,48 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
         fill_color = sample_border_color(rgb_img, width, height)
         {:ok, fill_bg} = build_solid_rgb(width, height, fill_color)
 
+        # 6. マスクをガウシアンぼかしでフェザー化（境界の階段状段差を解消）。
+        #    sigma は bbox 短辺の 3.0%、最低 1.5px。/gallery 側 SVG と同等。
+        sigma = polygon_feather_sigma(width, height)
+        {:ok, blurred_mask} = Operation.gaussblur(mask, sigma)
+
         Logger.info(
-          "[ImageProcessor] Polygon crop (border-color fill #{inspect(fill_color)}): " <>
+          "[ImageProcessor] Polygon crop (border-color fill #{inspect(fill_color)}, " <>
+            "feather sigma=#{Float.round(sigma, 2)}): " <>
             "bbox=#{min_x},#{min_y},#{bbox_w}x#{bbox_h} points=#{length(points)}"
         )
 
-        # 6. ifthenelse 合成:
-        #    マスクが白(>0)の箇所 → rgb_img（元画像）
-        #    マスクが黒(0)の箇所 → fill_bg（周囲色背景）
-        {:ok, final_img} = Operation.ifthenelse(mask, rgb_img, fill_bg)
+        # 7. アルファブレンド合成:
+        #    result = (mask/255) * rgb_img + (1 - mask/255) * fill_bg
+        #    マスクの中間値（フェザー領域）が滑らかに RGB と背景色を補間する。
+        {:ok, final_img} = alpha_blend(rgb_img, fill_bg, blurred_mask)
 
         {:ok, final_img}
       end
     end
   end
+
+  # マスクを 0..1 のアルファとして使い rgb_img を fill_bg の上に合成する。
+  defp alpha_blend(rgb_img, fill_bg, mask) do
+    with {:ok, mask_norm} <- Operation.linear(mask, [1.0 / 255.0], [0.0]),
+         {:ok, mask3} <- Operation.bandjoin([mask_norm, mask_norm, mask_norm]),
+         {:ok, inv_mask3} <-
+           Operation.linear(mask3, [-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]),
+         {:ok, rgb_float} <- Operation.cast(rgb_img, :VIPS_FORMAT_FLOAT),
+         {:ok, bg_float} <- Operation.cast(fill_bg, :VIPS_FORMAT_FLOAT),
+         {:ok, fg} <- Operation.multiply(rgb_float, mask3),
+         {:ok, bg} <- Operation.multiply(bg_float, inv_mask3),
+         {:ok, blend} <- Operation.add(fg, bg) do
+      Operation.cast(blend, :VIPS_FORMAT_UCHAR)
+    end
+  end
+
+  # ポリゴン外周のフェザー sigma（pixel）。bbox 短辺の 3.0%、最低 1.5px。
+  defp polygon_feather_sigma(w, h) when is_integer(w) and is_integer(h) and w > 0 and h > 0 do
+    max(1.5, min(w, h) * 0.03)
+  end
+
+  defp polygon_feather_sigma(_, _), do: 1.5
 
   # 3バンド RGB 画像の bbox 外周 8 点（四隅 + 各辺中点）の平均色を返す。
   # bbox 外周はほとんどの場合ポリゴンの外側なので、polygon の周囲色として妥当。
