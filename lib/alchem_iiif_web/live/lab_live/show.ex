@@ -65,57 +65,71 @@ defmodule AlchemIiifWeb.LabLive.Show do
         <span class="meta-tag">🖼️ {length(@images)} 画像</span>
       </div>
 
-      <%= if @images == [] do %>
-        <div class="lab-empty-state">
-          <span class="lab-empty-icon">🖼️</span>
-          <p class="lab-empty-text">画像がありません。再抽出しますか？</p>
-          <p class="lab-empty-hint">
-            「ページを見る」から手動で選択するか、「再処理」で全ページを再抽出できます。
-          </p>
-          <div class="lab-empty-actions">
-            <button
-              type="button"
-              class="btn-primary btn-large"
-              phx-click="reprocess"
-              data-confirm="PDFから画像を再抽出します。よろしいですか？"
-            >
-              🔄 再処理を実行
-            </button>
-            <.link navigate={~p"/lab/browse/#{@pdf_source.id}"} class="btn-secondary btn-large">
-              📃 ページ一覧へ
-            </.link>
-          </div>
-        </div>
-      <% else %>
-        <div class="image-grid">
-          <%= for image <- @images do %>
-            <div class="image-card" id={"image-#{image.id}"}>
-              <.link navigate={image_link(image, @pdf_source)} class="image-card-link">
-                <%= if image.image_path do %>
-                  <div class="image-card-thumbnail">
-                    <img
-                      src={~p"/lab/media/images/#{image.id}/source"}
-                      alt={image.label || "画像 #{image.page_number}"}
-                      loading="lazy"
-                    />
-                  </div>
-                <% else %>
-                  <div class="image-card-placeholder">
-                    <span>🖼️</span>
-                  </div>
-                <% end %>
-                <div class="image-card-info">
-                  <span class="image-card-label">
-                    {image.label || "P.#{image.page_number}"}
-                  </span>
-                  <span class={"image-status-badge image-status-#{image.status}"}>
-                    {image_status_label(image.status)}
-                  </span>
-                </div>
+      <%= cond do %>
+        <% @images == [] and AlchemIiif.Ingestion.PdfSource.pdf?(@pdf_source) -> %>
+          <div class="lab-empty-state">
+            <span class="lab-empty-icon">🖼️</span>
+            <p class="lab-empty-text">画像がありません。再抽出しますか？</p>
+            <p class="lab-empty-hint">
+              「ページを見る」から手動で選択するか、「再処理」で全ページを再抽出できます。
+            </p>
+            <div class="lab-empty-actions">
+              <button
+                type="button"
+                class="btn-primary btn-large"
+                phx-click="reprocess"
+                data-confirm="PDFから画像を再抽出します。よろしいですか？"
+              >
+                🔄 再処理を実行
+              </button>
+              <.link navigate={~p"/lab/browse/#{@pdf_source.id}"} class="btn-secondary btn-large">
+                📃 ページ一覧へ
               </.link>
             </div>
-          <% end %>
-        </div>
+          </div>
+        <% @images == [] and AlchemIiif.Ingestion.PdfSource.zip?(@pdf_source) -> %>
+          <div class="lab-empty-state">
+            <span class="lab-empty-icon">🖼️</span>
+            <p class="lab-empty-text">画像がありません。</p>
+            <p class="lab-empty-hint">
+              ZIP 由来のプロジェクトは再処理できません。新規アップロードからやり直してください。
+            </p>
+            <div class="lab-empty-actions">
+              <.link navigate={~p"/lab/browse/#{@pdf_source.id}"} class="btn-secondary btn-large">
+                📃 ページ一覧へ
+              </.link>
+            </div>
+          </div>
+        <% true -> %>
+          <div class="image-grid">
+            <%= for image <- @images do %>
+              <div class="image-card" id={"image-#{image.id}"}>
+                <.link navigate={image_link(image, @pdf_source)} class="image-card-link">
+                  <%= if image.image_path do %>
+                    <div class="image-card-thumbnail">
+                      <img
+                        src={~p"/lab/media/images/#{image.id}/source"}
+                        alt={image.label || "画像 #{image.page_number}"}
+                        loading="lazy"
+                      />
+                    </div>
+                  <% else %>
+                    <div class="image-card-placeholder">
+                      <span>🖼️</span>
+                    </div>
+                  <% end %>
+                  <div class="image-card-info">
+                    <span class="image-card-label">
+                      {image.label || "P.#{image.page_number}"}
+                    </span>
+                    <span class={"image-status-badge image-status-#{image.status}"}>
+                      {image_status_label(image.status)}
+                    </span>
+                  </div>
+                </.link>
+              </div>
+            <% end %>
+          </div>
       <% end %>
     </div>
     """
