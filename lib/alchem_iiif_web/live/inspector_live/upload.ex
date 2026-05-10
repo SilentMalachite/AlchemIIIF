@@ -505,7 +505,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   defp max_pdf_pages do
-    Application.get_env(:alchem_iiif, :pdf_max_pages, 200)
+    Application.get_env(:alchem_iiif, :pdf_max_pages, 1500)
     |> max(1)
   end
 

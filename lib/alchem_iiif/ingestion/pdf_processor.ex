@@ -19,7 +19,7 @@ defmodule AlchemIiif.Ingestion.PdfProcessor do
 
   # OOM 防止のためのチャンクサイズ（2GB RAM VPS 向け）
   @chunk_size 10
-  @default_max_pages 200
+  @default_max_pages 1500
   @default_command_timeout_ms 120_000
   @default_chunk_timeout_ms 125_000
 

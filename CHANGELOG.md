@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased]
+
+### 🔧 ページ上限の引き上げ — PDF / ZIP
+
+- **PDF / ZIP のページ数上限を 200 → 1500 に引き上げ (`pdf_processor.ex`, `zip_processor.ex`, `upload.ex`)**
+  - `@default_max_pages` を 1500 に更新（`AlchemIiif.Ingestion.PdfProcessor` / `AlchemIiif.Ingestion.ZipProcessor`）。
+  - Inspector の Upload 画面 (`pdf-page-limit-input`) の `max` 属性および `clamp_max_pages/1` の上限がフォールバック値（`:pdf_max_pages`）に追従。
+- **`config/runtime.exs` に env var を追加し、運用環境で個別調整可能に**
+  - `PDF_MAX_PAGES`（既定 1500、`Application.get_env(:alchem_iiif, :pdf_max_pages)`）。
+  - `ZIP_MAX_PAGES`（既定 1500、`AlchemIiif.Ingestion.ZipProcessor` の `:max_pages`）。
+
+---
+
 ## [0.2.29] - 2026-05-10
 
 ### 🔧 CI / 開発インフラ

@@ -28,7 +28,7 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
   require Logger
 
   @png_magic <<137, 80, 78, 71, 13, 10, 26, 10>>
-  @default_max_pages 200
+  @default_max_pages 1500
   @default_max_extracted_bytes 2 * 1024 * 1024 * 1024
 
   @spec extract_pngs(String.t(), String.t(), map()) ::
