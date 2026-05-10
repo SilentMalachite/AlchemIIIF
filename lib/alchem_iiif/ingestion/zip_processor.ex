@@ -12,6 +12,10 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
   - Zip Slip: `Path.safe_relative/1` と絶対パス拒否で防御
   - 拡張子偽装: PNG マジックバイト（`<<137, 80, 78, 71, 13, 10, 26, 10>>`）を検証
   - Zip bomb: `:zip.list_dir/1` で得る宣言サイズ合計を事前検証
+  - **Zip bomb の制約**: 上記サイズ検証は ZIP セントラルディレクトリが宣言する
+    非圧縮サイズの合計を見ているため、悪意ある ZIP が小さい値を申告した場合は
+    検出できない。完全な防御としては運用側で `output_dir` に対するファイルシステム
+    クォータや一時ファイルシステムのサイズ上限を併用すること。
   - DoS: PNG エントリ数を `max_pages` で制限
   - シンボリックリンク: 展開後 `File.lstat!` で `:regular` のみ採用
 
@@ -31,9 +35,8 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
           {:ok, %{page_count: pos_integer(), image_paths: [String.t()]}}
           | {:error, term()}
   def extract_pngs(zip_path, output_dir, opts \\ %{}) do
-    File.mkdir_p!(output_dir)
-
-    with {:ok, entries} <- list_entries(zip_path),
+    with :ok <- mkdir_p_safe(output_dir),
+         {:ok, entries} <- list_entries(zip_path),
          {:ok, accepted} <- filter_and_validate(entries, opts) do
       timestamp = System.system_time(:millisecond)
       extract_and_normalize(zip_path, output_dir, accepted, timestamp)
@@ -41,6 +44,13 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
   end
 
   # --- private ---
+
+  defp mkdir_p_safe(dir) do
+    case File.mkdir_p(dir) do
+      :ok -> :ok
+      {:error, posix} -> {:error, {:mkdir_failed, posix}}
+    end
+  end
 
   defp list_entries(zip_path) do
     case :zip.list_dir(String.to_charlist(zip_path)) do
@@ -131,8 +141,15 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
     end)
 
     case rename_to_pages(accepted_paths, output_dir, timestamp) do
-      [] -> {:error, :no_valid_png}
-      renamed -> {:ok, %{page_count: length(renamed), image_paths: renamed}}
+      {:error, _} = err ->
+        err
+
+      {:ok, []} ->
+        {:error, :no_valid_png}
+
+      {:ok, renamed} ->
+        cleanup_orphans(output_dir, renamed)
+        {:ok, %{page_count: length(renamed), image_paths: renamed}}
     end
   end
 
@@ -151,26 +168,50 @@ defmodule AlchemIiif.Ingestion.ZipProcessor do
   end
 
   defp rename_to_pages(paths, output_dir, timestamp) do
-    paths
-    |> Enum.with_index(1)
-    |> Enum.map(fn {original, idx} ->
-      target =
-        Path.join(
-          output_dir,
-          IO.iodata_to_binary(:io_lib.format("page-~3..0B-~B.png", [idx, timestamp]))
-        )
+    result =
+      paths
+      |> Enum.with_index(1)
+      |> Enum.reduce_while({:ok, []}, fn {original, idx}, {:ok, acc} ->
+        target =
+          Path.join(
+            output_dir,
+            IO.iodata_to_binary(:io_lib.format("page-~3..0B-~B.png", [idx, timestamp]))
+          )
 
-      File.rename!(original, target)
-      target
+        case File.rename(original, target) do
+          :ok -> {:cont, {:ok, [target | acc]}}
+          {:error, reason} -> {:halt, {:error, {:rename_failed, reason, original}}}
+        end
+      end)
+
+    case result do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, _} = err -> err
+    end
+  end
+
+  # リネーム後に output_dir に残った孤立ファイル・サブディレクトリを削除する。
+  defp cleanup_orphans(output_dir, kept_paths) do
+    kept_set = MapSet.new(kept_paths)
+
+    output_dir
+    |> File.ls!()
+    |> Enum.each(fn entry ->
+      full = Path.join(output_dir, entry)
+
+      cond do
+        File.dir?(full) -> File.rm_rf!(full)
+        MapSet.member?(kept_set, full) -> :ok
+        true -> File.rm(full)
+      end
     end)
   end
 
-  @doc false
   # `p1.png, p2.png, p10.png` を安定して順序付ける自然順ソートキー。
   # 数値部は `{0, integer}`、非数値部は `{1, string}` のタプル列で表現する。
   # `Regex.scan` は一致したグループのみ返す（非一致グループは省略される）ため、
   # 要素数で数値／非数値を判別する。
-  def natural_sort_key(path) do
+  defp natural_sort_key(path) do
     Regex.scan(~r/(\d+)|(\D+)/, path)
     |> Enum.map(fn
       # 数値グループが一致 → [full_match, digits]（要素数 2）
