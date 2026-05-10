@@ -58,5 +58,44 @@ defmodule AlchemIiif.Ingestion.ZipProcessorTest do
       assert Enum.all?(paths, &String.starts_with?(Path.basename(&1), "page-"))
       assert Enum.all?(paths, &String.ends_with?(Path.basename(&1), ".png"))
     end
+
+    test "サブディレクトリ配下の PNG も再帰的に集める" do
+      {src, out} = setup_dirs("nested")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"top.png", png_bytes()},
+          {"sub/inner.png", png_bytes()},
+          {"sub/deeper/leaf.png", png_bytes()}
+        ])
+
+      assert {:ok, %{page_count: 3, image_paths: paths}} =
+               ZipProcessor.extract_pngs(zip, out)
+
+      assert length(paths) == 3
+    end
+
+    test "p1.png, p2.png, p10.png を自然順で並べて連番を振る" do
+      {src, out} = setup_dirs("natural")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"p10.png", png_bytes(<<10>>)},
+          {"p2.png", png_bytes(<<2>>)},
+          {"p1.png", png_bytes(<<1>>)}
+        ])
+
+      assert {:ok, %{page_count: 3, image_paths: [first, second, third]}} =
+               ZipProcessor.extract_pngs(zip, out)
+
+      assert Path.basename(first) =~ ~r/^page-001-/
+      assert Path.basename(second) =~ ~r/^page-002-/
+      assert Path.basename(third) =~ ~r/^page-003-/
+
+      # 内容で順序を確認（先頭 9 バイト目に元 payload の識別バイトが入っている）
+      assert <<137, 80, 78, 71, 13, 10, 26, 10, 1>> = File.read!(first)
+      assert <<137, 80, 78, 71, 13, 10, 26, 10, 2>> = File.read!(second)
+      assert <<137, 80, 78, 71, 13, 10, 26, 10, 10>> = File.read!(third)
+    end
   end
 end
