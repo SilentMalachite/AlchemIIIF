@@ -41,6 +41,7 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:selected_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
      |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -144,6 +145,7 @@ defmodule AlchemIiifWeb.GalleryLive do
         dims = read_source_dimensions(image.image_path)
         info_url = build_iiif_info_url(image)
         {polygon_points, bbox} = extract_preview_data(image.geometry)
+        fill_color = polygon_fill_color(image)
 
         {:noreply,
          socket
@@ -151,6 +153,7 @@ defmodule AlchemIiifWeb.GalleryLive do
          |> assign(:selected_dims, dims)
          |> assign(:selected_polygon_points, polygon_points)
          |> assign(:selected_bbox, bbox)
+         |> assign(:selected_polygon_fill, fill_color)
          |> assign(:iiif_image_info_url, info_url)}
     end
   end
@@ -163,6 +166,7 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:selected_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
      |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -346,8 +350,8 @@ defmodule AlchemIiifWeb.GalleryLive do
             >
               <div class="result-card-link">
                 <%= if image.geometry do %>
-                  <% {orig_w, orig_h, poly_pts, card_bbox} =
-                    Map.get(@preview_map, image.id, {0, 0, nil, nil}) %>
+                  <% {orig_w, orig_h, poly_pts, card_bbox, poly_fill} =
+                    Map.get(@preview_map, image.id, {0, 0, nil, nil, "#ffffff"}) %>
                   <%= if card_bbox do %>
                     <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
                       <svg
@@ -355,13 +359,13 @@ defmodule AlchemIiifWeb.GalleryLive do
                         class="w-full h-auto"
                         preserveAspectRatio="xMidYMid meet"
                       >
-                        <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                        <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
                         <rect
                           x={card_bbox.x}
                           y={card_bbox.y}
                           width={card_bbox.width}
                           height={card_bbox.height}
-                          fill="white"
+                          fill={poly_fill}
                         />
                         <%= if poly_pts do %>
                           <%!-- ポリゴンデータ: clipPath でマスク --%>
@@ -519,13 +523,13 @@ defmodule AlchemIiifWeb.GalleryLive do
                     class="max-w-full max-h-[90vh] shadow-2xl"
                     preserveAspectRatio="xMidYMid meet"
                   >
-                    <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                    <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
                     <rect
                       x={@selected_bbox.x}
                       y={@selected_bbox.y}
                       width={@selected_bbox.width}
                       height={@selected_bbox.height}
-                      fill="white"
+                      fill={@selected_polygon_fill}
                     />
                     <%= if @selected_polygon_points do %>
                       <defs>
@@ -705,14 +709,28 @@ defmodule AlchemIiifWeb.GalleryLive do
   defp remaining_count(total, loaded), do: total - length(loaded)
 
   # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
-  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持
+  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox, fill_color} を保持
   defp build_preview_map(images) do
     Map.new(images, fn image ->
       {orig_w, orig_h} = read_source_dimensions(image.image_path)
       {polygon_points, bbox} = extract_preview_data(image.geometry)
-      {image.id, {orig_w, orig_h, polygon_points, bbox}}
+      fill_color = polygon_fill_color(image)
+      {image.id, {orig_w, orig_h, polygon_points, bbox, fill_color}}
     end)
   end
+
+  # ポリゴン外の塗り色を bbox 外周のサンプル平均から決定する。
+  # 画像読込やサンプリングに失敗した場合は #ffffff にフォールバックし、
+  # 旧来の挙動（白背景）を維持する。
+  defp polygon_fill_color(%{geometry: %{"points" => points}, image_path: path})
+       when is_list(points) and length(points) >= 3 do
+    case ImageProcessor.sample_polygon_border_color(path, points) do
+      {:ok, hex} -> hex
+      _ -> "#ffffff"
+    end
+  end
+
+  defp polygon_fill_color(_image), do: "#ffffff"
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do

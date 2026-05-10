@@ -48,6 +48,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
       # ジオメトリからプレビュー用データを構築
       geo = extracted_image.geometry
       {polygon_points, bbox} = extract_preview_data(geo)
+      polygon_fill = polygon_fill_color(extracted_image.image_path, geo)
 
       {:ok,
        socket
@@ -62,6 +63,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
        |> assign(:has_crop, geo != nil)
        |> assign(:polygon_points, polygon_points)
        |> assign(:bbox, bbox)
+       |> assign(:polygon_fill, polygon_fill)
        |> assign(:caption, extracted_image.caption || "")
        |> assign(:label, extracted_image.label || "")
        |> assign(:site, extracted_image.site || "")
@@ -602,6 +604,18 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   defp extract_preview_data(_), do: {nil, nil}
 
+  # ポリゴン外の塗り色を bbox 外周のサンプル平均から決定する。
+  # 失敗時は #ffffff にフォールバック。
+  defp polygon_fill_color(image_path, %{"points" => points})
+       when is_list(points) and length(points) >= 3 do
+    case AlchemIiif.Ingestion.ImageProcessor.sample_polygon_border_color(image_path, points) do
+      {:ok, hex} -> hex
+      _ -> "#ffffff"
+    end
+  end
+
+  defp polygon_fill_color(_image_path, _geo), do: "#ffffff"
+
   # 安全な整数変換
   defp safe_int(val) when is_integer(val), do: val
   defp safe_int(val) when is_float(val), do: round(val)
@@ -661,8 +675,14 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               class="label-crop-svg"
               preserveAspectRatio="xMidYMid meet"
             >
-              <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
-              <rect x={@bbox.x} y={@bbox.y} width={@bbox.width} height={@bbox.height} fill="white" />
+              <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+              <rect
+                x={@bbox.x}
+                y={@bbox.y}
+                width={@bbox.width}
+                height={@bbox.height}
+                fill={@polygon_fill}
+              />
               <%= if @polygon_points do %>
                 <%!-- ポリゴンデータ: clipPath でマスク --%>
                 <defs>

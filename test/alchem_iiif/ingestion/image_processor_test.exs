@@ -75,6 +75,48 @@ defmodule AlchemIiif.Ingestion.ImageProcessorTest do
     end
   end
 
+  describe "sample_polygon_border_color/2" do
+    test "単色背景画像の bbox 外周をサンプルすると背景色に近い #RRGGBB を返す", %{tmp_dir: tmp} do
+      src = Path.join(tmp, "src.png")
+      :ok = write_solid_rgb_png(src, 100, 100, [0, 200, 0])
+
+      points = [
+        %{"x" => 50, "y" => 10},
+        %{"x" => 90, "y" => 50},
+        %{"x" => 50, "y" => 90},
+        %{"x" => 10, "y" => 50}
+      ]
+
+      assert {:ok, "#" <> hex} = ImageProcessor.sample_polygon_border_color(src, points)
+      assert byte_size(hex) == 6
+
+      <<r::binary-size(2), g::binary-size(2), b::binary-size(2)>> = hex
+      r = String.to_integer(r, 16)
+      g = String.to_integer(g, 16)
+      b = String.to_integer(b, 16)
+
+      assert g > 150, "G が背景色から乖離: #{g}"
+      assert r < 30
+      assert b < 30
+    end
+
+    test "存在しないファイルや points 不正なら {:error, _}", %{tmp_dir: tmp} do
+      assert {:error, _} =
+               ImageProcessor.sample_polygon_border_color(
+                 Path.join(tmp, "missing.png"),
+                 [%{"x" => 0, "y" => 0}, %{"x" => 1, "y" => 1}, %{"x" => 0, "y" => 1}]
+               )
+    end
+
+    test "points が 3 点未満なら {:error, :insufficient_points}", %{tmp_dir: tmp} do
+      src = Path.join(tmp, "src.png")
+      :ok = write_solid_rgb_png(src, 10, 10, [0, 0, 0])
+
+      assert {:error, :insufficient_points} =
+               ImageProcessor.sample_polygon_border_color(src, [%{"x" => 0, "y" => 0}])
+    end
+  end
+
   describe "crop_image/3 矩形クロップ（既存挙動）" do
     test "矩形 geometry はマスクを介さず extract_area される", %{tmp_dir: tmp} do
       src = Path.join(tmp, "src.png")

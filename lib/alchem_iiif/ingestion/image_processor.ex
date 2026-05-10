@@ -120,6 +120,62 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
     end
   end
 
+  @doc """
+  ポリゴンの外周色を `#RRGGBB` 文字列で返します。
+
+  ギャラリー等のクライアント側 SVG `<clipPath>` プレビューで、
+  polygon 外を「白」ではなく「周囲色」で塗るために使用します。
+
+  bounding box 外周の 8 点（四隅 + 各辺の中点）を `getpoint` で
+  サンプリングし、各バンドの平均を 8bit RGB として返します。
+  サンプリングが完全に失敗した場合は `#ffffff` を返します。
+
+  ## 引数
+    - image_path: 元画像のパス
+    - points: ポリゴン頂点の配列 `[%{"x" => x, "y" => y} | %{x: x, y: y}, ...]`
+
+  ## 戻り値
+    - `{:ok, "#RRGGBB"}` 成功
+    - `{:error, :insufficient_points}` 頂点が 3 点未満
+    - `{:error, reason}` 画像読み込み失敗等
+  """
+  @spec sample_polygon_border_color(binary(), [map()]) ::
+          {:ok, binary()} | {:error, term()}
+  def sample_polygon_border_color(image_path, points)
+      when is_binary(image_path) and is_list(points) do
+    if length(points) < 3 do
+      {:error, :insufficient_points}
+    else
+      do_sample_polygon_border_color(image_path, points)
+    end
+  end
+
+  defp do_sample_polygon_border_color(image_path, points) do
+    with {:ok, image} <- Image.new_from_file(image_path) do
+      {min_x, min_y, bbox_w, bbox_h} = bounding_box(points)
+
+      img_w = Image.width(image)
+      img_h = Image.height(image)
+      min_x = max(0, min(min_x, img_w - 1))
+      min_y = max(0, min(min_y, img_h - 1))
+      bbox_w = max(1, min(bbox_w, img_w - min_x))
+      bbox_h = max(1, min(bbox_h, img_h - min_y))
+
+      with {:ok, cropped} <- Operation.extract_area(image, min_x, min_y, bbox_w, bbox_h),
+           {:ok, rgb} <- Operation.extract_band(cropped, 0, n: 3) do
+        [r, g, b] = sample_border_color(rgb, Image.width(rgb), Image.height(rgb))
+        {:ok, rgb_to_hex(r, g, b)}
+      end
+    end
+  end
+
+  defp rgb_to_hex(r, g, b) do
+    "#" <>
+      (r |> trunc() |> Integer.to_string(16) |> String.pad_leading(2, "0")) <>
+      (g |> trunc() |> Integer.to_string(16) |> String.pad_leading(2, "0")) <>
+      (b |> trunc() |> Integer.to_string(16) |> String.pad_leading(2, "0"))
+  end
+
   # --- プライベート関数 ---
 
   # ポリゴンクロップ: ifthenelse 白背景合成戦略
