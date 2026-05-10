@@ -22,22 +22,22 @@
   - `Pipeline.run_extraction/4` が `source_type` に応じて PDF / ZIP の抽出処理を分岐。
   - テスト用 fake も `SourceProcessingDispatcherFake` にリネーム。
 - **アップロード UI が `.pdf` と `.zip` を受理 (`upload.ex`, `upload_store.ex`)**
-  - `:source` upload 経路で MIME / 拡張子から `source_type` を判定し、適切な dispatcher へ流す。
-  - 単一の上限値 `max_source_upload_bytes`（環境変数 `MAX_SOURCE_UPLOAD_BYTES`、既定 500MB）で PDF / ZIP の入力サイズを共通管理。
+  - `:source` upload 経路でファイル名の拡張子から `source_type` を判定し、適切な dispatcher へ流す。
+  - 単一の上限値 `max_source_upload_bytes`（環境変数 `MAX_SOURCE_UPLOAD_BYTES`、既定 200,000,000 bytes）で PDF / ZIP の入力サイズを共通管理。
 - **公開境界で ZIP source の元 PDF 露出を抑制 (`gallery_live.ex`, `metadata_helper.ex`, `download_controller.ex`)**
   - ギャラリーの「元 PDF を開く」リンクとモーダル DL ボタンを ZIP source では非表示。
   - IIIF Manifest の `rendering` プロパティから ZIP source の元ファイルを除外。
   - `/download/pdf/:id` は PDF source のみ配信し、ZIP source には 404 を返す。
-- **`hard_delete` / `reprocess` を ZIP source 向けにガード (`ingestion.ex`, `review_live.ex`)**
+- **`hard_delete` / `reprocess` を ZIP source 向けにガード (`ingestion.ex`, `lab_live/show.ex`)**
   - PDF 専用のファイル削除パスを ZIP source では skip。
-  - 管理画面 (`Admin.Review`) の reprocess ボタンを source 種別に応じて切替。
+  - プロジェクト詳細画面 (`LabLive.Show`) では PDF source のみ reprocess ボタンを表示し、ZIP source では再アップロード案内を表示。
 - **ページ保存先を source ごとに分離 (`pdf_source.ex`, `upload_store.ex`, `20260510025936_add_storage_key_to_pdf_sources.exs`)**
   - `PdfSource.storage_key` を導入し、`priv/uploads/pages/:storage_key/` 単位で隔離。
-  - 既存ソースは migration で UUID ベースの `storage_key` をバックフィルし、`UploadStore` がパストラバーサル防御込みで解決。
+  - 既存ソースは migration で ID 互換の `storage_key`（`id::text`）をバックフィルし、新規作成時は schema 側で UUID ベースの `storage_key` を生成する。
 - **PDF / ZIP のページ数上限を 200 → 1500 に引き上げ (`pdf_processor.ex`, `zip_processor.ex`, `upload.ex`, `runtime.exs`)**
   - `@default_max_pages` を 1500 に統一。Inspector の Upload 画面 (`pdf-page-limit-input`) の `max` 属性と `clamp_max_pages/1` がフォールバック値に追従。
   - 環境変数 `PDF_MAX_PAGES` / `ZIP_MAX_PAGES`（既定 1500）で運用環境ごとに調整可能。
-  - `ZIP_MAX_EXTRACTED_BYTES`（ZIP 展開後の総容量、既定 1GB）を追加し、ZIP bomb を抑止。
+  - `ZIP_MAX_EXTRACTED_BYTES`（ZIP 展開後の総容量、既定 2,147,483,648 bytes）を追加し、ZIP bomb を抑止。
 
 ### 🎨 ポリゴンクロップ境界処理の自然化
 
@@ -58,8 +58,8 @@
 ### 🛡️ アップロード／抽出容量の保護
 
 - **`config/runtime.exs` にアップロード関連リミットを集約**
-  - `MAX_SOURCE_UPLOAD_BYTES`（PDF / ZIP 共通、既定 500MB）。
-  - `ZIP_MAX_EXTRACTED_BYTES`（既定 1GB）／ `PDF_MAX_PAGES` ／ `ZIP_MAX_PAGES`（いずれも既定 1500）。
+  - `MAX_SOURCE_UPLOAD_BYTES`（PDF / ZIP 共通、既定 200,000,000 bytes）。
+  - `ZIP_MAX_EXTRACTED_BYTES`（既定 2,147,483,648 bytes）／ `PDF_MAX_PAGES` ／ `ZIP_MAX_PAGES`（いずれも既定 1500）。
 - `config/test.exs` のテスト用既定値も追従。
 
 ### ✅ テスト・検証

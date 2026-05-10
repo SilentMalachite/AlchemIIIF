@@ -204,6 +204,60 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert dispatched.opts == %{color_mode: "mono", max_pages: 75}
     end
 
+    test "PDF は PDF_MAX_PAGES 相当の設定で上限を clamp する", %{conn: conn} do
+      with_page_limits([pdf: 10, zip: 1200], fn ->
+        {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+        assert has_element?(view, "#pdf-page-limit-input[max='1200']")
+
+        pdf_input =
+          file_input(view, "#upload-form", :source, [
+            %{
+              name: "pdf_limit.pdf",
+              content: <<0, 1, 2, 3, 4>>,
+              type: "application/pdf"
+            }
+          ])
+
+        render_upload(pdf_input, "pdf_limit.pdf")
+
+        render_submit(view, "upload_source", %{
+          "color_mode" => "mono",
+          "max_pages" => "1200"
+        })
+
+        assert_receive {:source_processing_dispatched, dispatched}, 1_000
+        assert dispatched.source_type == "pdf"
+        assert dispatched.opts == %{color_mode: "mono", max_pages: 10}
+      end)
+    end
+
+    test "ZIP は ZIP_MAX_PAGES 相当の設定で上限を clamp する", %{conn: conn} do
+      with_page_limits([pdf: 10, zip: 1200], fn ->
+        {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+        zip_input =
+          file_input(view, "#upload-form", :source, [
+            %{
+              name: "zip_limit.zip",
+              content: <<80, 75, 3, 4, 0>>,
+              type: "application/zip"
+            }
+          ])
+
+        render_upload(zip_input, "zip_limit.zip")
+
+        render_submit(view, "upload_source", %{
+          "color_mode" => "mono",
+          "max_pages" => "1200"
+        })
+
+        assert_receive {:source_processing_dispatched, dispatched}, 1_000
+        assert dispatched.source_type == "zip"
+        assert dispatched.opts == %{color_mode: "mono", max_pages: 1200}
+      end)
+    end
+
     test "survey_year に範囲外の値を入力するとエラーが表示される", _context do
       # changeset バリデーションを直接テスト（LiveView 経由だと HTML5 の min/max で弾かれる）
       changeset =
@@ -273,4 +327,25 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert pdf_source.source_type == "zip"
     end
   end
+
+  defp with_page_limits(limits, fun) do
+    previous_pdf = Application.get_env(:alchem_iiif, :pdf_max_pages)
+    previous_zip = Application.get_env(:alchem_iiif, AlchemIiif.Ingestion.ZipProcessor)
+
+    Application.put_env(:alchem_iiif, :pdf_max_pages, Keyword.fetch!(limits, :pdf))
+
+    Application.put_env(:alchem_iiif, AlchemIiif.Ingestion.ZipProcessor,
+      max_pages: Keyword.fetch!(limits, :zip)
+    )
+
+    try do
+      fun.()
+    after
+      restore_env(:pdf_max_pages, previous_pdf)
+      restore_env(AlchemIiif.Ingestion.ZipProcessor, previous_zip)
+    end
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:alchem_iiif, key)
+  defp restore_env(key, value), do: Application.put_env(:alchem_iiif, key, value)
 end

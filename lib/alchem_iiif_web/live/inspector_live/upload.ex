@@ -38,7 +38,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:current_page, 0)
      |> assign(:total_pages, 0)
      |> assign(:color_mode, "mono")
-     |> assign(:max_pages, max_pdf_pages())
+     |> assign(:max_pages, max_source_pages())
      |> assign(:report_title, "")
      |> assign(:investigating_org, "")
      |> assign(:survey_year, nil)
@@ -54,7 +54,9 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   @impl true
   def handle_event("validate", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
-    max_pages = parse_max_pages(get_in(params, ["max_pages"]), socket.assigns.max_pages)
+
+    max_pages =
+      parse_max_pages(get_in(params, ["max_pages"]), socket.assigns.max_pages, max_source_pages())
 
     {:noreply,
      socket
@@ -87,9 +89,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   def handle_event("upload_source", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
     max_pages_param = get_in(params, ["max_pages"])
-    max_pages = parse_max_pages(max_pages_param, socket.assigns.max_pages)
+    max_pages = parse_max_pages(max_pages_param, socket.assigns.max_pages, max_source_pages())
 
-    processing_opts = processing_options(color_mode, max_pages, max_pages_param)
     socket = assign(socket, uploading: true, color_mode: color_mode, max_pages: max_pages)
 
     uploaded =
@@ -124,6 +125,11 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
     case uploaded do
       [{source_path, source_type}] ->
+        source_max_pages =
+          parse_max_pages(max_pages_param, max_pages, max_pages_for_source(source_type))
+
+        processing_opts = processing_options(color_mode, source_max_pages, max_pages_param)
+
         case Ingestion.create_pdf_source(%{
                filename: Path.basename(source_path),
                source_type: source_type,
@@ -280,14 +286,14 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                 name="max_pages"
                 value={@max_pages}
                 min="1"
-                max={max_pdf_pages()}
+                max={max_source_pages()}
                 step="1"
                 inputmode="numeric"
                 class="input input-bordered input-sm w-28"
-                aria-label="PDFを読み込むページ数の目安"
+                aria-label="PDFまたはZIPを読み込むページ数の目安"
               />
               <span class="text-sm text-base-content/70">
-                ページまで（上限 {max_pdf_pages()} ページ）
+                ページまで（上限 {max_source_pages()} ページ）
               </span>
             </div>
 
@@ -509,26 +515,46 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
     |> max(1)
   end
 
-  defp parse_max_pages(nil, current), do: current || max_pdf_pages()
-  defp parse_max_pages("", current), do: current || max_pdf_pages()
-
-  defp parse_max_pages(value, _current) when is_integer(value) do
-    clamp_max_pages(value)
+  defp zip_max_pages do
+    :alchem_iiif
+    |> Application.get_env(AlchemIiif.Ingestion.ZipProcessor, [])
+    |> configured_max_pages(1500)
+    |> max(1)
   end
 
-  defp parse_max_pages(value, current) when is_binary(value) do
+  defp max_source_pages, do: max(max_pdf_pages(), zip_max_pages())
+
+  defp max_pages_for_source("zip"), do: zip_max_pages()
+  defp max_pages_for_source(_source_type), do: max_pdf_pages()
+
+  defp configured_max_pages(opts, default) when is_list(opts),
+    do: Keyword.get(opts, :max_pages, default)
+
+  defp configured_max_pages(opts, default) when is_map(opts),
+    do: Map.get(opts, :max_pages, default)
+
+  defp configured_max_pages(_opts, default), do: default
+
+  defp parse_max_pages(nil, current, max_pages), do: current || max_pages
+  defp parse_max_pages("", current, max_pages), do: current || max_pages
+
+  defp parse_max_pages(value, _current, max_pages) when is_integer(value) do
+    clamp_max_pages(value, max_pages)
+  end
+
+  defp parse_max_pages(value, current, max_pages) when is_binary(value) do
     case Integer.parse(value) do
-      {pages, ""} -> clamp_max_pages(pages)
-      _ -> current || max_pdf_pages()
+      {pages, ""} -> clamp_max_pages(pages, max_pages)
+      _ -> current || max_pages
     end
   end
 
-  defp parse_max_pages(_value, current), do: current || max_pdf_pages()
+  defp parse_max_pages(_value, current, max_pages), do: current || max_pages
 
-  defp clamp_max_pages(pages) do
+  defp clamp_max_pages(pages, max_pages) do
     pages
     |> max(1)
-    |> min(max_pdf_pages())
+    |> min(max_pages)
   end
 
   defp processing_options(color_mode, _max_pages, nil), do: color_mode
