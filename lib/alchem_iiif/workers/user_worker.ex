@@ -2,11 +2,11 @@ defmodule AlchemIiif.Workers.UserWorker do
   @moduledoc """
   ユーザーごとのバックグラウンドワーカー GenServer。
 
-  DynamicSupervisor 配下で起動され、PDF 抽出などの重い処理を
+  DynamicSupervisor 配下で起動され、PDF / ZIP 抽出など重い処理を
   LiveView プロセスから分離して非同期実行します。
   """
   use GenServer
-  @behaviour AlchemIiif.PdfProcessingDispatcher
+  @behaviour AlchemIiif.SourceProcessingDispatcher
   require Logger
 
   @registry AlchemIiif.UserWorkerRegistry
@@ -19,16 +19,16 @@ defmodule AlchemIiif.Workers.UserWorker do
     DynamicSupervisor.start_child(@supervisor, {__MODULE__, [user_id: user_id, name: name]})
   end
 
-  def process_pdf(user_id, pdf_source, pdf_path, pipeline_id, processing_opts \\ "mono") do
+  def process_source(user_id, source, source_path, pipeline_id, opts \\ %{}) do
     GenServer.cast(
       via_tuple(user_id),
-      {:process_pdf, pdf_source, pdf_path, pipeline_id, processing_opts}
+      {:process_source, source, source_path, pipeline_id, opts}
     )
   end
 
   @impl true
-  def dispatch_pdf_processing(user_id, pdf_source, pdf_path, pipeline_id, processing_opts) do
-    process_pdf(user_id, pdf_source, pdf_path, pipeline_id, processing_opts)
+  def dispatch_source_processing(user_id, source, source_path, pipeline_id, opts) do
+    process_source(user_id, source, source_path, pipeline_id, opts)
     :ok
   end
 
@@ -50,7 +50,7 @@ defmodule AlchemIiif.Workers.UserWorker do
 
   @impl true
   def handle_cast(
-        {:process_pdf, _pdf_source, _pdf_path, _pipeline_id, _processing_opts} = job,
+        {:process_source, _source, _source_path, _pipeline_id, _opts} = job,
         state
       ) do
     if state.current_job do
@@ -61,7 +61,7 @@ defmodule AlchemIiif.Workers.UserWorker do
   end
 
   @impl true
-  def handle_cast({:pdf_processing_finished, ref}, %{current_job: ref} = state) do
+  def handle_cast({:source_processing_finished, ref}, %{current_job: ref} = state) do
     case :queue.out(state.queue) do
       {{:value, next_job}, queue} ->
         {:noreply, start_job(next_job, %{state | current_job: nil, queue: queue})}
@@ -71,46 +71,47 @@ defmodule AlchemIiif.Workers.UserWorker do
     end
   end
 
-  def handle_cast({:pdf_processing_finished, _stale_ref}, state), do: {:noreply, state}
+  def handle_cast({:source_processing_finished, _stale_ref}, state), do: {:noreply, state}
 
-  defp start_job({:process_pdf, pdf_source, pdf_path, pipeline_id, processing_opts}, state) do
-    Logger.info("⚙️ ユーザー(#{state.user_id})のPDF(ID:#{pdf_source.id})の裏側処理を開始します...")
+  defp start_job({:process_source, source, source_path, pipeline_id, opts}, state) do
+    Logger.info(
+      "⚙️ ユーザー(#{state.user_id})の source(ID:#{source.id}, type:#{Map.get(source, :source_type, "pdf")})の裏側処理を開始します..."
+    )
 
     ref = make_ref()
     user_id = state.user_id
 
     Task.start(fn ->
       try do
-        runner().run_pdf_extraction(
-          pdf_source,
-          pdf_path,
+        runner().run_extraction(
+          source,
+          source_path,
           pipeline_id,
-          pipeline_opts(processing_opts, user_id)
+          pipeline_opts(opts, user_id)
         )
 
-        # Notify the UI that processing is complete
         Phoenix.PubSub.broadcast(
           AlchemIiif.PubSub,
-          "pdf_source_#{pdf_source.id}",
-          {:pdf_processed, pdf_source.id}
+          "source_#{source.id}",
+          {:source_processed, source.id}
         )
       after
-        GenServer.cast(via_tuple(user_id), {:pdf_processing_finished, ref})
+        GenServer.cast(via_tuple(user_id), {:source_processing_finished, ref})
       end
     end)
 
     %{state | current_job: ref}
   end
 
-  defp pipeline_opts(%{} = processing_opts, user_id) do
-    opts = %{
+  defp pipeline_opts(%{} = opts, user_id) do
+    base = %{
       owner_id: user_id,
-      color_mode: Map.get(processing_opts, :color_mode) || "mono"
+      color_mode: Map.get(opts, :color_mode) || "mono"
     }
 
-    case Map.get(processing_opts, :max_pages) do
-      max_pages when is_integer(max_pages) -> Map.put(opts, :max_pages, max_pages)
-      _ -> opts
+    case Map.get(opts, :max_pages) do
+      max_pages when is_integer(max_pages) -> Map.put(base, :max_pages, max_pages)
+      _ -> base
     end
   end
 
@@ -118,7 +119,7 @@ defmodule AlchemIiif.Workers.UserWorker do
     %{owner_id: user_id, color_mode: color_mode}
   end
 
-  defp pipeline_opts(_processing_opts, user_id) do
+  defp pipeline_opts(_opts, user_id) do
     %{owner_id: user_id, color_mode: "mono"}
   end
 
