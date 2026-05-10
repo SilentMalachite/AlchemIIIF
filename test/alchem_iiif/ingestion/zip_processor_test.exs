@@ -98,4 +98,60 @@ defmodule AlchemIiif.Ingestion.ZipProcessorTest do
       assert <<137, 80, 78, 71, 13, 10, 26, 10, 10>> = File.read!(third)
     end
   end
+
+  describe "extract_pngs/3 security guards" do
+    test "Zip Slip エントリ（../etc/passwd.png）は採用しない" do
+      {src, out} = setup_dirs("slip")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"../etc/passwd.png", png_bytes()},
+          {"ok.png", png_bytes()}
+        ])
+
+      assert {:ok, %{page_count: 1, image_paths: [path]}} =
+               ZipProcessor.extract_pngs(zip, out)
+
+      refute File.exists?(Path.join([out, "..", "etc", "passwd.png"]))
+      assert String.starts_with?(path, out)
+    end
+
+    test "絶対パスのエントリ（/tmp/foo.png）は out の外に展開されない" do
+      {src, out} = setup_dirs("abs")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"/tmp/abs.png", png_bytes()},
+          {"ok.png", png_bytes()}
+        ])
+
+      # Erlang の :zip.create/3 は絶対パスを正規化して相対パスに変換するため、
+      # エントリは out 内に留まる。どのパスも out の外に存在しないことを確認する。
+      assert {:ok, %{image_paths: paths}} = ZipProcessor.extract_pngs(zip, out)
+      assert Enum.all?(paths, &String.starts_with?(&1, out))
+      refute File.exists?("/tmp/abs.png")
+    end
+
+    test "PNG マジックバイトを持たない .png は除外され、すべて偽装なら error" do
+      {src, out} = setup_dirs("magic")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"fake.png", "not a png file"}
+        ])
+
+      assert {:error, :no_valid_png} = ZipProcessor.extract_pngs(zip, out)
+    end
+
+    test "PNG エントリが 0 件の ZIP は no_png_entries エラー" do
+      {src, out} = setup_dirs("empty")
+
+      zip =
+        build_zip(Path.join(src, "in.zip"), [
+          {"readme.txt", "hello"}
+        ])
+
+      assert {:error, :no_png_entries} = ZipProcessor.extract_pngs(zip, out)
+    end
+  end
 end
