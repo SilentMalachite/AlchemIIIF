@@ -60,7 +60,7 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
   def crop_to_binary(image_path, %{"x" => x, "y" => y, "width" => w, "height" => h}) do
     with {:ok, image} <- Image.new_from_file(image_path),
          {:ok, cropped} <- Operation.extract_area(image, round(x), round(y), round(w), round(h)) do
-      Image.write_to_buffer(cropped, ".jpg")
+      Image.write_to_buffer(cropped, ".png")
     end
   end
 
@@ -192,13 +192,14 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
     end
   end
 
-  # ポリゴンクロップを JPEG バイナリとして返す（ダウンロード用）。
-  # IIIF Image API の default format / download_controller の content_type:
-  # "image/jpeg" / build_filename の拡張子(.jpg)と整合させる。
-  # apply_polygon_mask は 3バンド RGB を返すのでアルファ欠落は発生しない。
+  # ポリゴンクロップを PNG バイナリとして返す（ダウンロード用）。
+  # 考古学レポートは線画（土器・遺物スケッチ）が多く、JPEG ではエッジに
+  # リンギングが出やすいためロスレスの PNG を採用。download_controller の
+  # content_type "image/png" / build_filename の拡張子(.png)と整合させる。
+  # IIIF Image API（iiif/image_controller）は別経路で JPEG を返している。
   defp crop_polygon_to_binary(image_path, points) do
     with {:ok, masked} <- apply_polygon_mask(image_path, points) do
-      Image.write_to_buffer(masked, ".jpg")
+      Image.write_to_buffer(masked, ".png")
     end
   end
 

@@ -70,7 +70,7 @@ defmodule AlchemIiifWeb.DownloadController do
 
         send_download(conn, {:binary, binary},
           filename: filename,
-          content_type: "image/jpeg"
+          content_type: "image/png"
         )
 
       {:error, reason} ->
@@ -88,24 +88,24 @@ defmodule AlchemIiifWeb.DownloadController do
     end
   end
 
-  # geometry がない場合は元画像をそのまま JPEG バッファとして返す
+  # geometry がない場合は元画像をそのまま PNG バッファとして返す
   defp crop_image_to_binary(%ExtractedImage{image_path: image_path}) do
     with {:ok, full_path} <- UploadStore.resolve_path(image_path),
          {:ok, image} <- Vix.Vips.Image.new_from_file(full_path) do
-      Vix.Vips.Image.write_to_buffer(image, ".jpg")
+      Vix.Vips.Image.write_to_buffer(image, ".png")
     end
   end
 
   # セマンティックファイル名の生成
-  # パターン: {遺跡名}_{ラベル}_{遺物種別}.jpg
+  # パターン: {遺跡名}_{ラベル}_{遺物種別}.png
   defp build_filename(image) do
     [image.site, image.label, image.artifact_type]
     |> Enum.reject(&is_nil/1)
     |> Enum.reject(&(String.trim(&1) == ""))
     |> Enum.map(&sanitize_segment/1)
     |> case do
-      [] -> "download.jpg"
-      parts -> Enum.join(parts, "_") <> ".jpg"
+      [] -> "download.png"
+      parts -> Enum.join(parts, "_") <> ".png"
     end
   end
 
