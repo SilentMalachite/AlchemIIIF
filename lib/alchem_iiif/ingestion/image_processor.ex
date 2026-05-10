@@ -192,10 +192,13 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
     end
   end
 
-  # ポリゴンクロップをバイナリとして返す（ダウンロード用）
+  # ポリゴンクロップを JPEG バイナリとして返す（ダウンロード用）。
+  # IIIF Image API の default format / download_controller の content_type:
+  # "image/jpeg" / build_filename の拡張子(.jpg)と整合させる。
+  # apply_polygon_mask は 3バンド RGB を返すのでアルファ欠落は発生しない。
   defp crop_polygon_to_binary(image_path, points) do
     with {:ok, masked} <- apply_polygon_mask(image_path, points) do
-      Image.write_to_buffer(masked, ".png")
+      Image.write_to_buffer(masked, ".jpg")
     end
   end
 
