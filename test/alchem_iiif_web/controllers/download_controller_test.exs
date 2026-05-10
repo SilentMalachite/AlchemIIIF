@@ -85,6 +85,26 @@ defmodule AlchemIiifWeb.DownloadControllerTest do
     end
   end
 
+  describe "GET /download/pdf/:id with zip source" do
+    setup do
+      user = AlchemIiif.AccountsFixtures.user_fixture()
+      source = AlchemIiif.Factory.insert_pdf_source(%{user_id: user.id, source_type: "zip"})
+
+      _image =
+        AlchemIiif.Factory.insert_extracted_image(%{
+          pdf_source_id: source.id,
+          status: "published"
+        })
+
+      {:ok, source: source}
+    end
+
+    test "ZIP source は 404 を返す", %{conn: conn, source: source} do
+      conn = get(conn, ~p"/download/pdf/#{source.id}")
+      assert response(conn, 404)
+    end
+  end
+
   defp write_pdf_fixture(filename, contents) do
     dir = Path.join(["priv", "uploads", "pdfs"])
     path = Path.join(dir, filename)

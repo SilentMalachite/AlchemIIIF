@@ -77,9 +77,10 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelper do
     end
   end
 
-  @doc "元 PDF への参照リンク（IIIF rendering）を生成する"
+  @doc "元 PDF への参照リンク（IIIF rendering）を生成する。ZIP 由来の source は nil を返す。"
   def build_rendering(source) do
-    with id when not is_nil(id) <- Map.get(source, :id),
+    with true <- AlchemIiif.Ingestion.PdfSource.pdf?(source),
+         id when not is_nil(id) <- Map.get(source, :id),
          filename when filename not in [nil, ""] <- Map.get(source, :filename) do
       [
         %{

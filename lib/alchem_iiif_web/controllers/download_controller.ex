@@ -48,7 +48,8 @@ defmodule AlchemIiifWeb.DownloadController do
   # --- プライベート関数 ---
 
   defp serve_pdf(conn, source) do
-    with true <- Ingestion.published?(source),
+    with true <- PdfSource.pdf?(source),
+         true <- Ingestion.published?(source),
          true <- UploadStore.safe_filename?(source.filename),
          {:ok, path} <- UploadStore.existing_pdf_path(source.filename),
          {:ok, full_path} <- UploadStore.resolve_path(path) do

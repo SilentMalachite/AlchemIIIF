@@ -655,8 +655,10 @@ defmodule AlchemIiifWeb.GalleryLive do
               </div>
             </div>
 
-            <%!-- 元 PDF ダウンロードリンク --%>
-            <%= if @selected_image.pdf_source && @selected_image.pdf_source.filename not in [nil, ""] do %>
+            <%!-- 元 PDF ダウンロードリンク（PDF 由来の source のみ） --%>
+            <%= if @selected_image.pdf_source &&
+                    AlchemIiif.Ingestion.PdfSource.pdf?(@selected_image.pdf_source) &&
+                    @selected_image.pdf_source.filename not in [nil, ""] do %>
               <div class="w-full max-w-4xl mt-2 text-center">
                 <a
                   href={pdf_url(@selected_image.pdf_source)}
