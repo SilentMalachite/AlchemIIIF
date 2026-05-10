@@ -750,13 +750,13 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   defp polygon_fill_color(_image), do: "#ffffff"
 
   # ポリゴン外周のフェザー半径を bbox サイズから決める。
-  # min(w,h) の 2.5% を基準に最低 6.0px。原寸座標系（user space）の値。
+  # min(w,h) の 3.0% を基準に最低 7.5px。原寸座標系（user space）の値。
   defp polygon_feather_radius(%{width: w, height: h})
        when is_number(w) and is_number(h) and w > 0 and h > 0 do
-    Float.round(max(6.0, min(w, h) * 0.025), 2)
+    Float.round(max(7.5, min(w, h) * 0.03), 2)
   end
 
-  defp polygon_feather_radius(_), do: 6.0
+  defp polygon_feather_radius(_), do: 7.5
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do
