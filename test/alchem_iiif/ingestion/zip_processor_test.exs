@@ -153,5 +153,27 @@ defmodule AlchemIiif.Ingestion.ZipProcessorTest do
 
       assert {:error, :no_png_entries} = ZipProcessor.extract_pngs(zip, out)
     end
+
+    test "PNG エントリ数が opts.max_pages を超えたら too_many_pages エラー" do
+      {src, out} = setup_dirs("too_many")
+      files = for i <- 1..5, do: {"p#{i}.png", png_bytes()}
+      zip = build_zip(Path.join(src, "in.zip"), files)
+
+      assert {:error, {:too_many_pages, 5, 3}} =
+               ZipProcessor.extract_pngs(zip, out, %{max_pages: 3})
+    end
+
+    test "宣言サイズ合計が opts.max_extracted_bytes を超えたら拒否（unzip しない）" do
+      {src, out} = setup_dirs("too_big")
+      bin = png_bytes(:binary.copy(<<0>>, 1024))
+      files = for i <- 1..5, do: {"p#{i}.png", bin}
+      zip = build_zip(Path.join(src, "in.zip"), files)
+
+      assert {:error, :extracted_size_exceeds_limit} =
+               ZipProcessor.extract_pngs(zip, out, %{max_extracted_bytes: 100})
+
+      # output_dir に何も書き出されていないこと
+      assert File.ls!(out) == []
+    end
   end
 end
