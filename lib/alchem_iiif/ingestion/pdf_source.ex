@@ -1,55 +1,44 @@
 defmodule AlchemIiif.Ingestion.PdfSource do
   @moduledoc """
-  PDF ソースを管理する Ecto スキーマ。
-  PDFファイルの追跡・ステータス管理を行います。
+  ソース（PDF/ZIP）を管理する Ecto スキーマ。
 
-  ## なぜこの設計か
+  ## 設計メモ
 
-  - **ステータス管理**: `uploading → converting → ready / error` の遷移を
-    追跡することで、処理途中でサーバーが再起動した場合でも、
-    どのPDFがどの段階にあるか復元できます。
-  - **ワークフロー管理**: `wip → pending_review → returned / approved` の
-    遷移で、作業完了提出・管理者差し戻し・承認のフローを管理します。
-  - **ExtractedImage との 1:N 関連**: 1つのPDFから複数のページ画像が
-    抽出されるため、親子関係で管理します。PDF単位での一括削除にも対応します。
+  - **source_type**: "pdf" / "zip" のいずれか。テーブル名・モジュール名・外部キー名は
+    既存互換のため `pdf_*` を維持しつつ、内部で source_type による分岐を行う。
+  - **status 遷移**: `uploading → converting → ready / error`（PDF・ZIP 共通）
+  - **workflow_status**: `wip → pending_review → returned / approved`
+  - **ExtractedImage との 1:N**: PDF/ZIP どちらも展開後の各ページが ExtractedImage
   """
   use Ecto.Schema
   import Ecto.Changeset
 
   @workflow_statuses ["wip", "pending_review", "returned", "approved"]
+  @source_types ["pdf", "zip"]
 
   schema "pdf_sources" do
-    # PDFファイル名
     field :filename, :string
-    # ページ数
+    field :source_type, :string, default: "pdf"
+    field :storage_key, :string
     field :page_count, :integer
-    # 処理ステータス (uploading, converting, ready, error)
     field :status, :string, default: "uploading"
 
-    # ワークフローステータス (wip, pending_review, returned, approved)
     field :workflow_status, :string, default: "wip"
-    # 差し戻し時の管理者メッセージ
     field :return_message, :string
 
-    # ソフトデリート用タイムスタンプ（nil = アクティブ、値あり = ゴミ箱内）
     field :deleted_at, :utc_datetime
 
-    # 書誌フィールド（IIIF recommended メタデータの源泉）
     field :investigating_org, :string
     field :survey_year, :integer
     field :report_title, :string
     field :license_uri, :string
-    # 遺跡コード（都道府県コード-市区町村コード-連番）
     field :site_code, :string
 
-    # プロジェクトオーナー（アクセス制御の基盤）
     belongs_to :user, AlchemIiif.Accounts.User
 
     has_many :extracted_images, AlchemIiif.Ingestion.ExtractedImage
 
-    # バーチャルフィールド（クエリの select_merge で注入）
     field :image_count, :integer, virtual: true, default: 0
-    # オーナーのメールアドレス（Admin 用、クエリの select_merge で注入）
     field :owner_email, :string, virtual: true, default: nil
 
     timestamps(type: :utc_datetime)
@@ -60,6 +49,8 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     pdf_source
     |> cast(attrs, [
       :filename,
+      :source_type,
+      :storage_key,
       :page_count,
       :status,
       :deleted_at,
@@ -72,7 +63,9 @@ defmodule AlchemIiif.Ingestion.PdfSource do
       :license_uri,
       :site_code
     ])
-    |> validate_required([:filename])
+    |> ensure_storage_key()
+    |> validate_required([:filename, :source_type, :storage_key])
+    |> validate_inclusion(:source_type, @source_types)
     |> validate_inclusion(:status, ["uploading", "converting", "ready", "error"])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
     |> validate_number(:survey_year,
@@ -83,6 +76,7 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> validate_length(:report_title, max: 500)
     |> validate_license_uri()
     |> validate_length(:site_code, max: 30, message: "30文字以内で入力してください")
+    |> unique_constraint(:storage_key)
   end
 
   @doc "ワークフロー遷移専用 changeset"
@@ -91,6 +85,25 @@ defmodule AlchemIiif.Ingestion.PdfSource do
     |> cast(attrs, [:workflow_status, :return_message])
     |> validate_required([:workflow_status])
     |> validate_inclusion(:workflow_status, @workflow_statuses)
+  end
+
+  @doc "PDF 由来の source か判定"
+  def pdf?(%__MODULE__{source_type: "pdf"}), do: true
+  def pdf?(%{source_type: "pdf"}), do: true
+  def pdf?(_), do: false
+
+  @doc "ZIP 由来の source か判定"
+  def zip?(%__MODULE__{source_type: "zip"}), do: true
+  def zip?(%{source_type: "zip"}), do: true
+  def zip?(_), do: false
+
+  # 新規作成時に storage_key が未指定なら UUID を自動付与する。
+  # 永続化済みレコードに対する更新では既存値を維持する。
+  defp ensure_storage_key(changeset) do
+    case get_field(changeset, :storage_key) do
+      key when is_binary(key) and key != "" -> changeset
+      _ -> put_change(changeset, :storage_key, Ecto.UUID.generate())
+    end
   end
 
   defp validate_license_uri(changeset) do

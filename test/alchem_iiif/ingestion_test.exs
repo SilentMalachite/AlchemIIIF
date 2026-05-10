@@ -940,4 +940,24 @@ defmodule AlchemIiif.IngestionTest do
       assert {:error, :invalid_status_transition} = Ingestion.approve_project(pdf)
     end
   end
+
+  describe "ZIP source の hard_delete / reprocess ガード" do
+    setup do
+      user = AlchemIiif.AccountsFixtures.user_fixture()
+      zip_source = AlchemIiif.Factory.insert_pdf_source(%{user_id: user.id, source_type: "zip"})
+      pdf_source = AlchemIiif.Factory.insert_pdf_source(%{user_id: user.id, source_type: "pdf"})
+      {:ok, zip_source: zip_source, pdf_source: pdf_source}
+    end
+
+    test "ZIP source の hard_delete は PDF ファイル削除をスキップする", %{zip_source: source} do
+      # 物理 PDF が存在しない状態でも hard_delete が成功する（PDF ガードでスキップされる）
+      assert {:ok, _} = AlchemIiif.Ingestion.hard_delete_pdf_source(source)
+      assert is_nil(AlchemIiif.Repo.get(AlchemIiif.Ingestion.PdfSource, source.id))
+    end
+
+    test "ZIP source の reprocess は :unsupported_source_type を返す", %{zip_source: source} do
+      assert {:error, :unsupported_source_type} =
+               AlchemIiif.Ingestion.reprocess_pdf_source(source)
+    end
+  end
 end

@@ -4,6 +4,82 @@
 
 ---
 
+## [0.3.0] - 2026-05-10
+
+### 🆕 ZIP ソース対応 — PNG 画像群を ZIP アーカイブでアップロード可能に
+
+- **`PdfSource` に `source_type` 列を追加 (`pdf_source.ex`, `20260509212254_add_source_type_to_pdf_sources.exs`)**
+  - `:pdf` / `:zip` を保持し、`pdf?/1`・`zip?/1` の判定ヘルパーを公開。
+  - 既存レコードはマイグレーションで `:pdf` にバックフィル。
+- **`ZipProcessor` モジュールを新設 (`zip_processor.ex`)**
+  - `extract_pngs/3` で ZIP 内の PNG を順次抽出し、`PdfProcessor` 互換のページ単位 PNG 列を返す。
+  - 自然ソート順 (`page-1.png` < `page-10.png`) でページ番号を割り当て、ネストディレクトリにも対応。
+  - zip-slip / 絶対パス / マジックバイト不整合 / 空アーカイブを reject。
+  - macOS の AppleDouble (`__MACOSX/`, `._*`) を除外し、抽出エラーを `{:error, atom}` に正規化。
+  - 失敗時は孤立サブディレクトリを cleanup し、`@spec` 契約を厳守。
+- **`PdfProcessingDispatcher` を `SourceProcessingDispatcher` にリネーム (`source_processing_dispatcher.ex`, `user_worker.ex`, `pipeline.ex`)**
+  - `UserWorker` の dispatch を source-aware (`process_source/2`, `run_extraction/4`) に統一し、callers を全移行。
+  - `Pipeline.run_extraction/4` が `source_type` に応じて PDF / ZIP の抽出処理を分岐。
+  - テスト用 fake も `SourceProcessingDispatcherFake` にリネーム。
+- **アップロード UI が `.pdf` と `.zip` を受理 (`upload.ex`, `upload_store.ex`)**
+  - `:source` upload 経路で MIME / 拡張子から `source_type` を判定し、適切な dispatcher へ流す。
+  - 単一の上限値 `max_source_upload_bytes`（環境変数 `MAX_SOURCE_UPLOAD_BYTES`、既定 500MB）で PDF / ZIP の入力サイズを共通管理。
+- **公開境界で ZIP source の元 PDF 露出を抑制 (`gallery_live.ex`, `metadata_helper.ex`, `download_controller.ex`)**
+  - ギャラリーの「元 PDF を開く」リンクとモーダル DL ボタンを ZIP source では非表示。
+  - IIIF Manifest の `rendering` プロパティから ZIP source の元ファイルを除外。
+  - `/download/pdf/:id` は PDF source のみ配信し、ZIP source には 404 を返す。
+- **`hard_delete` / `reprocess` を ZIP source 向けにガード (`ingestion.ex`, `review_live.ex`)**
+  - PDF 専用のファイル削除パスを ZIP source では skip。
+  - 管理画面 (`Admin.Review`) の reprocess ボタンを source 種別に応じて切替。
+- **ページ保存先を source ごとに分離 (`pdf_source.ex`, `upload_store.ex`, `20260510025936_add_storage_key_to_pdf_sources.exs`)**
+  - `PdfSource.storage_key` を導入し、`priv/uploads/pages/:storage_key/` 単位で隔離。
+  - 既存ソースは migration で UUID ベースの `storage_key` をバックフィルし、`UploadStore` がパストラバーサル防御込みで解決。
+- **PDF / ZIP のページ数上限を 200 → 1500 に引き上げ (`pdf_processor.ex`, `zip_processor.ex`, `upload.ex`, `runtime.exs`)**
+  - `@default_max_pages` を 1500 に統一。Inspector の Upload 画面 (`pdf-page-limit-input`) の `max` 属性と `clamp_max_pages/1` がフォールバック値に追従。
+  - 環境変数 `PDF_MAX_PAGES` / `ZIP_MAX_PAGES`（既定 1500）で運用環境ごとに調整可能。
+  - `ZIP_MAX_EXTRACTED_BYTES`（ZIP 展開後の総容量、既定 1GB）を追加し、ZIP bomb を抑止。
+
+### 🎨 ポリゴンクロップ境界処理の自然化
+
+- **ポリゴン外側を「サンプル境界色」で塗り替え (`image_processor.ex`, `gallery_live.ex`)**
+  - 既存の白塗りに代えて、ポリゴン縁の平均色をサンプリングして塗りつぶす。
+  - Image Processor 出力（PNG / JPEG / PTIF）と Gallery の SVG `<polygon>` プレビュー両方で同一色を適用し、見え方を統一。
+- **ポリゴン縁を Gaussian フェザー化 (`image_processor.ex`, `gallery_live.ex`)**
+  - PTIF 用 polygon マスクをフェザー化し、ジャギーと色境界の段差を緩和。
+  - Gallery プレビューでもフェザー半径を段階的にチューニング（最終値で約 4px 相当）。
+
+### 💾 ダウンロード出力形式の統一
+
+- **ポリゴンクロップ DL のバッファ形式を JPEG に統一 (`download_controller.ex`)**
+  - 中間バッファでの PNG ↔ JPEG 切替を排除し、画像処理経路を一本化。
+- **すべてのユーザー向けダウンロードを PNG ロスレス出力に統一 (`download_controller.ex`)**
+  - `image/jpeg` 経路を廃止し、DL は PNG のみに固定。再エンコード時の劣化と色情報消失を回避。
+
+### 🛡️ アップロード／抽出容量の保護
+
+- **`config/runtime.exs` にアップロード関連リミットを集約**
+  - `MAX_SOURCE_UPLOAD_BYTES`（PDF / ZIP 共通、既定 500MB）。
+  - `ZIP_MAX_EXTRACTED_BYTES`（既定 1GB）／ `PDF_MAX_PAGES` ／ `ZIP_MAX_PAGES`（いずれも既定 1500）。
+- `config/test.exs` のテスト用既定値も追従。
+
+### ✅ テスト・検証
+
+- `ZipProcessor` テスト：happy path / nested dirs / 自然ソート / zip-slip / 絶対パス / マジックバイト / 空 ZIP / `max_pages` / `max_extracted_bytes` を網羅。
+- `PdfSource` テスト：`source_type` バリデーション、`pdf?/1` / `zip?/1`、`storage_key` 制約を追加。
+- `ImageProcessor` テスト：境界色サンプリング・フェザー処理を含むポリゴンクロップを網羅。
+- `UploadStore` テスト：`storage_key` 解決、パストラバーサル防御、source ごとの隔離を追加。
+- `Pipeline` / `UserWorker` / `DownloadController` / `Inspector.Upload` / `MetadataHelper` の既存テストを source-aware 化。
+- `mix test` 全 575 件パスを確認。
+
+### 🔧 内部リファクタリング・その他
+
+- `PdfProcessingDispatcher` → `SourceProcessingDispatcher` リネーム、対応する `pdf_processing_dispatcher_fake.ex` も廃止。
+- `UserWorker` の dispatch 関数名を source-aware (`process_source` / `run_extraction`) に統一。
+- `.dialyzer_ignore.exs` に `Ecto.Multi.new()` opaque 型の誤検知（`ingestion.ex`）を追加。
+- `test/support/factory.ex` に `source_type` ファクトリオーバーライドを追加。
+
+---
+
 ## [0.2.29] - 2026-05-10
 
 ### 🔧 CI / 開発インフラ

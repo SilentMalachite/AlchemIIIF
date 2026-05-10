@@ -42,165 +42,214 @@ defmodule AlchemIiif.Pipeline do
   def pdf_pipeline_topic(user_id), do: "pdf_pipeline:#{user_id}"
 
   @doc """
-  PDF を PNG に変換し、抽出画像を並列で DB に登録します。
-
-  ## 引数
-    - pdf_source: PdfSource レコード
-    - pdf_path: PDF ファイルのパス
-    - pipeline_id: パイプライン識別子
-    - opts: オプション（owner_id など）
-
-  ## 戻り値
-    - {:ok, %{page_count: integer, images: [ExtractedImage.t()]}}
-    - {:error, reason}
+  互換用ラッパ。`source.source_type == "pdf"` 想定の旧呼び出し経路を維持する。
+  内部では `run_extraction/4` に委譲する。
   """
   def run_pdf_extraction(pdf_source, pdf_path, pipeline_id, opts \\ %{}) do
+    source = Map.put_new(pdf_source, :source_type, "pdf")
+    run_extraction(source, pdf_path, pipeline_id, opts)
+  end
+
+  @doc """
+  ソース（PDF/ZIP）から PNG を抽出し、ExtractedImage を一括登録する。
+
+  source.source_type で `PdfProcessor` / `ZipProcessor` を分岐する。
+  """
+  def run_extraction(source, source_path, pipeline_id, opts \\ %{}) do
     broadcast_progress(pipeline_id, %{
       event: :pipeline_started,
-      phase: :pdf_extraction,
-      message: "PDF変換を開始します..."
+      phase: :extraction,
+      message: extraction_start_message(source)
     })
 
-    # 並行安全: ジョブごとにユニークな一時ディレクトリを使用
     job_id = Ecto.UUID.generate()
     tmp_dir = Path.join(System.tmp_dir!(), "alchemiiif_job_#{job_id}")
-    # 最終出力先
-    output_dir = UploadStore.pages_dir(pdf_source.id)
+    output_dir = output_dir_for(source)
     File.mkdir_p!(output_dir)
 
     Logger.info(
-      "[Pipeline] PDF extraction started: #{pdf_path} -> tmp:#{tmp_dir} -> #{output_dir}"
+      "[Pipeline] extraction started: type=#{source.source_type} #{source_path} -> tmp:#{tmp_dir} -> #{output_dir}"
     )
 
     try do
-      # カラーモードとページ数上限を PdfProcessor に伝搬（デフォルト: "mono"）
-      processor_opts = %{
-        user_id: opts[:owner_id],
-        color_mode: opts[:color_mode] || "mono",
-        max_pages: opts[:max_pages]
-      }
-
-      case PdfProcessor.convert_to_images(pdf_path, tmp_dir, processor_opts) do
+      case run_processor(source, source_path, tmp_dir, opts) do
         {:ok, %{page_count: page_count, image_paths: tmp_image_paths}} ->
-          # 一時ディレクトリから最終出力先へファイルを移動
-          image_paths =
-            Enum.map(tmp_image_paths, fn tmp_path ->
-              filename = Path.basename(tmp_path)
-              final_path = Path.join(output_dir, filename)
-              File.cp!(tmp_path, final_path)
-              final_path
-            end)
-
-          case update_pdf_source_if_present(pdf_source.id, %{
-                 page_count: page_count,
-                 status: "ready"
-               }) do
-            {:ok, _updated} ->
-              :ok
-
-            {:error, :not_found} ->
-              Logger.warning(
-                "[Pipeline] PdfSource #{pdf_source.id} disappeared before ready update"
-              )
-
-              throw({:pipeline_abort, :pdf_source_not_found})
-
-            {:error, update_error} ->
-              Logger.warning(
-                "[Pipeline] Failed to update PdfSource #{pdf_source.id}: #{inspect(update_error)}"
-              )
-
-              throw({:pipeline_abort, :pdf_source_update_failed})
-          end
-
-          broadcast_progress(pipeline_id, %{
-            event: :phase_complete,
-            phase: :pdf_extraction,
-            message: "PDF変換完了: #{page_count}ページ",
-            total: page_count
-          })
-
-          # Bulk Insert で ExtractedImage レコードを一括登録
-          attrs_list =
-            image_paths
-            |> Enum.with_index(1)
-            |> Enum.map(fn {image_path, page_number} ->
-              %{
-                pdf_source_id: pdf_source.id,
-                page_number: page_number,
-                image_path: image_path
-              }
-              |> maybe_put_owner_id(opts)
-            end)
-
-          {_count, images} = Ingestion.bulk_create_extracted_images(attrs_list)
-
-          # 進捗ブロードキャスト（挿入後に一括送信）
-          Enum.each(Enum.with_index(images, 1), fn {_image, page_number} ->
-            broadcast_progress(pipeline_id, %{
-              event: :task_progress,
-              task_id: "page-#{page_number}",
-              status: :completed,
-              progress: round(page_number / page_count * 100),
-              message: "ページ #{page_number} を登録しました"
-            })
-          end)
-
-          broadcast_progress(pipeline_id, %{
-            event: :pipeline_complete,
-            phase: :pdf_extraction,
-            total: page_count,
-            succeeded: length(images),
-            failed: 0,
-            pdf_source_id: pdf_source.id
-          })
-
-          # ユーザーへの完了通知（LiveView 画面遷移用）
-          owner_id = opts[:owner_id]
-
-          if owner_id do
-            PubSub.broadcast(
-              @pubsub,
-              pdf_pipeline_topic(owner_id),
-              {:extraction_complete, pdf_source.id}
-            )
-          end
-
-          {:ok, %{page_count: page_count, images: images}}
+          finalize_extraction(source, tmp_image_paths, page_count, output_dir, pipeline_id, opts)
 
         {:error, reason} ->
-          case update_pdf_source_if_present(pdf_source.id, %{status: "error"}) do
-            {:ok, _updated} ->
-              :ok
-
-            {:error, :not_found} ->
-              Logger.warning(
-                "[Pipeline] PdfSource #{pdf_source.id} disappeared before error update"
-              )
-
-            {:error, update_error} ->
-              Logger.warning(
-                "[Pipeline] Failed to mark PdfSource #{pdf_source.id} as error: #{inspect(update_error)}"
-              )
-          end
-
-          broadcast_progress(pipeline_id, %{
-            event: :pipeline_error,
-            phase: :pdf_extraction,
-            message: "PDF変換に失敗しました: #{reason}"
-          })
-
-          {:error, reason}
+          handle_extraction_error(source, reason, pipeline_id)
       end
     catch
-      {:pipeline_abort, reason} ->
-        {:error, reason}
+      {:pipeline_abort, reason} -> {:error, reason}
     after
-      # 一時ディレクトリを確実に削除（並行安全のクリーンアップ）
       File.rm_rf(tmp_dir)
       Logger.info("[Pipeline] Cleaned up temp directory: #{tmp_dir}")
+
+      if PdfSource.zip?(source) do
+        File.rm(source_path)
+        Logger.info("[Pipeline] Cleaned up zip source: #{source_path}")
+      end
     end
   end
+
+  defp extraction_start_message(%{source_type: "zip"}), do: "ZIP の展開を開始します..."
+  defp extraction_start_message(_), do: "PDF変換を開始します..."
+
+  # 出力ディレクトリは可能な限り storage_key 経由で解決する。
+  # `run_pdf_extraction` が source 構造体を完全に保持していない経路から
+  # 渡されることがあるため、storage_key が無ければ ID 互換パスを使う。
+  defp output_dir_for(%{storage_key: key} = _source) when is_binary(key) and key != "" do
+    UploadStore.pages_dir(key)
+  end
+
+  defp output_dir_for(%{id: id}) when is_integer(id), do: UploadStore.pages_dir(id)
+
+  defp run_processor(%{source_type: "pdf"} = _source, source_path, tmp_dir, opts) do
+    processor_opts = %{
+      user_id: opts[:owner_id],
+      color_mode: opts[:color_mode] || "mono",
+      max_pages: opts[:max_pages]
+    }
+
+    PdfProcessor.convert_to_images(source_path, tmp_dir, processor_opts)
+  end
+
+  defp run_processor(%{source_type: "zip"} = _source, source_path, tmp_dir, opts) do
+    base = if max = opts[:max_pages], do: %{max_pages: max}, else: %{}
+
+    processor_opts =
+      case Application.get_env(:alchem_iiif, AlchemIiif.Ingestion.ZipProcessor, []) do
+        [] -> base
+        kw -> Map.merge(Map.new(kw), base)
+      end
+
+    AlchemIiif.Ingestion.ZipProcessor.extract_pngs(source_path, tmp_dir, processor_opts)
+  end
+
+  defp finalize_extraction(source, tmp_image_paths, page_count, output_dir, pipeline_id, opts) do
+    image_paths =
+      Enum.map(tmp_image_paths, fn tmp_path ->
+        filename = Path.basename(tmp_path)
+        final_path = Path.join(output_dir, filename)
+        File.cp!(tmp_path, final_path)
+        final_path
+      end)
+
+    case update_pdf_source_if_present(source.id, %{page_count: page_count, status: "ready"}) do
+      {:ok, _} ->
+        :ok
+
+      {:error, :not_found} ->
+        Logger.warning("[Pipeline] PdfSource #{source.id} disappeared before ready update")
+        throw({:pipeline_abort, :pdf_source_not_found})
+
+      {:error, error} ->
+        Logger.warning("[Pipeline] Failed to update PdfSource #{source.id}: #{inspect(error)}")
+        throw({:pipeline_abort, :pdf_source_update_failed})
+    end
+
+    broadcast_progress(pipeline_id, %{
+      event: :phase_complete,
+      phase: :extraction,
+      message: "抽出完了: #{page_count}ページ",
+      total: page_count
+    })
+
+    attrs_list =
+      image_paths
+      |> Enum.with_index(1)
+      |> Enum.map(fn {image_path, page_number} ->
+        %{
+          pdf_source_id: source.id,
+          page_number: page_number,
+          image_path: image_path
+        }
+        |> maybe_put_owner_id(opts)
+      end)
+
+    {_count, images} = Ingestion.bulk_create_extracted_images(attrs_list)
+
+    Enum.each(Enum.with_index(images, 1), fn {_image, page_number} ->
+      broadcast_progress(pipeline_id, %{
+        event: :task_progress,
+        task_id: "page-#{page_number}",
+        status: :completed,
+        progress: round(page_number / page_count * 100),
+        message: "ページ #{page_number} を登録しました"
+      })
+    end)
+
+    broadcast_progress(pipeline_id, %{
+      event: :pipeline_complete,
+      phase: :extraction,
+      total: page_count,
+      succeeded: length(images),
+      failed: 0,
+      pdf_source_id: source.id
+    })
+
+    if owner_id = opts[:owner_id] do
+      PubSub.broadcast(
+        @pubsub,
+        pdf_pipeline_topic(owner_id),
+        {:extraction_complete, source.id}
+      )
+    end
+
+    {:ok, %{page_count: page_count, images: images}}
+  end
+
+  defp handle_extraction_error(source, reason, pipeline_id) do
+    case update_pdf_source_if_present(source.id, %{status: "error"}) do
+      {:ok, _} ->
+        :ok
+
+      {:error, :not_found} ->
+        Logger.warning("[Pipeline] PdfSource #{source.id} disappeared before error update")
+
+      {:error, error} ->
+        Logger.warning(
+          "[Pipeline] Failed to mark PdfSource #{source.id} as error: #{inspect(error)}"
+        )
+    end
+
+    broadcast_progress(pipeline_id, %{
+      event: :pipeline_error,
+      phase: :extraction,
+      message: "抽出に失敗しました: #{format_reason(reason)}"
+    })
+
+    {:error, reason}
+  end
+
+  # ZipProcessor / PdfProcessor が返す各種エラー理由を、
+  # ユーザー向けの日本語メッセージに整形する。
+  # タプル形式の理由を `#{}` 補間に渡すと `String.Chars` 未実装で
+  # クラッシュするため、ここで集約してフォーマットする。
+  defp format_reason({:too_many_pages, count, max}),
+    do: "ZIP 内 PNG 数 #{count} が上限 #{max} を超えています"
+
+  defp format_reason(:no_png_entries), do: "ZIP に PNG ファイルが含まれていません"
+
+  defp format_reason(:extracted_size_exceeds_limit),
+    do: "ZIP 展開後の合計サイズが上限を超えています"
+
+  defp format_reason(:no_valid_png), do: "ZIP に有効な PNG ファイルが含まれていません"
+
+  defp format_reason({:mkdir_failed, posix}), do: "出力先ディレクトリ作成に失敗しました: #{posix}"
+
+  defp format_reason({:zip_list_failed, reason}),
+    do: "ZIP の解析に失敗しました: #{inspect(reason)}"
+
+  defp format_reason({:zip_unzip_failed, reason}),
+    do: "ZIP の展開に失敗しました: #{inspect(reason)}"
+
+  defp format_reason({:rename_failed, reason, path}),
+    do: "ファイルのリネームに失敗しました（#{path}）: #{inspect(reason)}"
+
+  defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(reason) when is_atom(reason), do: Atom.to_string(reason)
+  defp format_reason(reason), do: inspect(reason)
 
   @doc """
   複数画像の PTIF 生成を並列で実行します（メモリガード付き）。

@@ -59,6 +59,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
      |> assign(:selected_image_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
      |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")
      |> assign(:preview_map, preview_map)}
   end
 
@@ -78,13 +79,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
 
     # ジオメトリからポリゴン/バウンディングボックスを抽出
     {polygon_points, bbox} = extract_preview_data(selected.image.geometry)
+    fill_color = polygon_fill_color(selected.image)
 
     {:noreply,
      socket
      |> assign(:selected_image, selected)
      |> assign(:selected_image_dims, dims)
      |> assign(:selected_polygon_points, polygon_points)
-     |> assign(:selected_bbox, bbox)}
+     |> assign(:selected_bbox, bbox)
+     |> assign(:selected_polygon_fill, fill_color)}
   end
 
   @impl true
@@ -124,7 +127,8 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
      |> assign(:selected_image, nil)
      |> assign(:selected_image_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
-     |> assign(:selected_bbox, nil)}
+     |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")}
   end
 
   @impl true
@@ -305,8 +309,8 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                       </div>
                     <% else %>
                       <%= if item.image.geometry do %>
-                        <% {orig_w, orig_h, poly_pts, card_bbox} =
-                          Map.get(@preview_map, item.image.id, {0, 0, nil, nil}) %>
+                        <% {orig_w, orig_h, poly_pts, card_bbox, poly_fill} =
+                          Map.get(@preview_map, item.image.id, {0, 0, nil, nil, "#ffffff"}) %>
                         <%= if card_bbox do %>
                           <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
                             <svg
@@ -314,26 +318,53 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                               class="w-full h-auto"
                               preserveAspectRatio="xMidYMid meet"
                             >
-                              <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                              <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                               <rect
                                 x={card_bbox.x}
                                 y={card_bbox.y}
                                 width={card_bbox.width}
                                 height={card_bbox.height}
-                                fill="white"
+                                fill={poly_fill}
                               />
                               <%= if poly_pts do %>
-                                <%!-- ポリゴンデータ: clipPath でマスク --%>
+                                <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                                 <defs>
-                                  <clipPath id={"review-card-clip-#{item.image.id}"}>
-                                    <polygon points={poly_pts} />
-                                  </clipPath>
+                                  <filter
+                                    id={"review-card-feather-#{item.image.id}"}
+                                    x="-20%"
+                                    y="-20%"
+                                    width="140%"
+                                    height="140%"
+                                  >
+                                    <feGaussianBlur stdDeviation={polygon_feather_radius(card_bbox)} />
+                                  </filter>
+                                  <mask
+                                    id={"review-card-mask-#{item.image.id}"}
+                                    maskUnits="userSpaceOnUse"
+                                    x={card_bbox.x}
+                                    y={card_bbox.y}
+                                    width={card_bbox.width}
+                                    height={card_bbox.height}
+                                  >
+                                    <rect
+                                      x={card_bbox.x}
+                                      y={card_bbox.y}
+                                      width={card_bbox.width}
+                                      height={card_bbox.height}
+                                      fill="black"
+                                    />
+                                    <polygon
+                                      points={poly_pts}
+                                      fill="white"
+                                      filter={"url(#review-card-feather-#{item.image.id})"}
+                                    />
+                                  </mask>
                                 </defs>
                                 <image
                                   href={image_thumbnail_url(item.image)}
                                   width={orig_w}
                                   height={orig_h}
-                                  clip-path={"url(#review-card-clip-#{item.image.id})"}
+                                  mask={"url(#review-card-mask-#{item.image.id})"}
                                 />
                               <% else %>
                                 <%!-- 旧矩形データ: クリップなし --%>
@@ -435,7 +466,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               </button>
             </div>
 
-            <%!-- クロップ画像（SVG viewBox + ポリゴン clipPath）またはフル画像 --%>
+            <%!-- クロップ画像（SVG viewBox + ポリゴン mask）またはフル画像 --%>
             <div class="inspector-image-container">
               <%= if @selected_image.image.geometry && @selected_bbox do %>
                 <% {orig_w, orig_h} = @selected_image_dims %>
@@ -444,26 +475,53 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                   class="inspector-crop-svg"
                   preserveAspectRatio="xMidYMid meet"
                 >
-                  <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                  <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                   <rect
                     x={@selected_bbox.x}
                     y={@selected_bbox.y}
                     width={@selected_bbox.width}
                     height={@selected_bbox.height}
-                    fill="white"
+                    fill={@selected_polygon_fill}
                   />
                   <%= if @selected_polygon_points do %>
-                    <%!-- ポリゴンデータ: clipPath でマスク --%>
+                    <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                     <defs>
-                      <clipPath id={"review-polygon-clip-#{@selected_image.image.id}"}>
-                        <polygon points={@selected_polygon_points} />
-                      </clipPath>
+                      <filter
+                        id={"review-modal-feather-#{@selected_image.image.id}"}
+                        x="-20%"
+                        y="-20%"
+                        width="140%"
+                        height="140%"
+                      >
+                        <feGaussianBlur stdDeviation={polygon_feather_radius(@selected_bbox)} />
+                      </filter>
+                      <mask
+                        id={"review-polygon-mask-#{@selected_image.image.id}"}
+                        maskUnits="userSpaceOnUse"
+                        x={@selected_bbox.x}
+                        y={@selected_bbox.y}
+                        width={@selected_bbox.width}
+                        height={@selected_bbox.height}
+                      >
+                        <rect
+                          x={@selected_bbox.x}
+                          y={@selected_bbox.y}
+                          width={@selected_bbox.width}
+                          height={@selected_bbox.height}
+                          fill="black"
+                        />
+                        <polygon
+                          points={@selected_polygon_points}
+                          fill="white"
+                          filter={"url(#review-modal-feather-#{@selected_image.image.id})"}
+                        />
+                      </mask>
                     </defs>
                     <image
                       href={image_full_url(@selected_image.image)}
                       width={orig_w}
                       height={orig_h}
-                      clip-path={"url(#review-polygon-clip-#{@selected_image.image.id})"}
+                      mask={"url(#review-polygon-mask-#{@selected_image.image.id})"}
                     />
                   <% else %>
                     <%!-- 旧矩形データ: クリップなし --%>
@@ -669,14 +727,36 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   end
 
   # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
-  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持
+  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox, fill_color} を保持
   defp build_preview_map(images_with_validation) do
     Map.new(images_with_validation, fn item ->
       {orig_w, orig_h} = read_source_dimensions(item.image.image_path)
       {polygon_points, bbox} = extract_preview_data(item.image.geometry)
-      {item.image.id, {orig_w, orig_h, polygon_points, bbox}}
+      fill_color = polygon_fill_color(item.image)
+      {item.image.id, {orig_w, orig_h, polygon_points, bbox, fill_color}}
     end)
   end
+
+  # ポリゴン外の塗り色を bbox 外周のサンプル平均から決定する。
+  # 失敗時は #ffffff にフォールバック。
+  defp polygon_fill_color(%{geometry: %{"points" => points}, image_path: path})
+       when is_list(points) and length(points) >= 3 do
+    case ImageProcessor.sample_polygon_border_color(path, points) do
+      {:ok, hex} -> hex
+      _ -> "#ffffff"
+    end
+  end
+
+  defp polygon_fill_color(_image), do: "#ffffff"
+
+  # ポリゴン外周のフェザー半径を bbox サイズから決める。
+  # min(w,h) の 3.0% を基準に最低 7.5px。原寸座標系（user space）の値。
+  defp polygon_feather_radius(%{width: w, height: h})
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
+    Float.round(max(7.5, min(w, h) * 0.03), 2)
+  end
+
+  defp polygon_feather_radius(_), do: 7.5
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do

@@ -44,5 +44,5 @@ config :alchem_iiif, :ptiff_generator, AlchemIiif.Iiif.PtiffGeneratorMock
 
 # Upload LiveView テストでは実 worker を起動せず dispatch のみ検証する
 config :alchem_iiif,
-       :pdf_processing_dispatcher,
-       AlchemIiif.PdfProcessingDispatcherFake
+       :source_processing_dispatcher,
+       AlchemIiif.SourceProcessingDispatcherFake

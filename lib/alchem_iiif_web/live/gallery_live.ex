@@ -41,6 +41,7 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:selected_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
      |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -144,6 +145,7 @@ defmodule AlchemIiifWeb.GalleryLive do
         dims = read_source_dimensions(image.image_path)
         info_url = build_iiif_info_url(image)
         {polygon_points, bbox} = extract_preview_data(image.geometry)
+        fill_color = polygon_fill_color(image)
 
         {:noreply,
          socket
@@ -151,6 +153,7 @@ defmodule AlchemIiifWeb.GalleryLive do
          |> assign(:selected_dims, dims)
          |> assign(:selected_polygon_points, polygon_points)
          |> assign(:selected_bbox, bbox)
+         |> assign(:selected_polygon_fill, fill_color)
          |> assign(:iiif_image_info_url, info_url)}
     end
   end
@@ -163,6 +166,7 @@ defmodule AlchemIiifWeb.GalleryLive do
      |> assign(:selected_dims, {0, 0})
      |> assign(:selected_polygon_points, nil)
      |> assign(:selected_bbox, nil)
+     |> assign(:selected_polygon_fill, "#ffffff")
      |> assign(:iiif_image_info_url, nil)}
   end
 
@@ -346,8 +350,8 @@ defmodule AlchemIiifWeb.GalleryLive do
             >
               <div class="result-card-link">
                 <%= if image.geometry do %>
-                  <% {orig_w, orig_h, poly_pts, card_bbox} =
-                    Map.get(@preview_map, image.id, {0, 0, nil, nil}) %>
+                  <% {orig_w, orig_h, poly_pts, card_bbox, poly_fill} =
+                    Map.get(@preview_map, image.id, {0, 0, nil, nil, "#ffffff"}) %>
                   <%= if card_bbox do %>
                     <div class="relative w-full bg-[#0F1923] flex items-center justify-center rounded-t-lg overflow-hidden">
                       <svg
@@ -355,26 +359,53 @@ defmodule AlchemIiifWeb.GalleryLive do
                         class="w-full h-auto"
                         preserveAspectRatio="xMidYMid meet"
                       >
-                        <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                        <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                         <rect
                           x={card_bbox.x}
                           y={card_bbox.y}
                           width={card_bbox.width}
                           height={card_bbox.height}
-                          fill="white"
+                          fill={poly_fill}
                         />
                         <%= if poly_pts do %>
-                          <%!-- ポリゴンデータ: clipPath でマスク --%>
+                          <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                           <defs>
-                            <clipPath id={"gallery-polygon-clip-#{image.id}"}>
-                              <polygon points={poly_pts} />
-                            </clipPath>
+                            <filter
+                              id={"gallery-feather-#{image.id}"}
+                              x="-20%"
+                              y="-20%"
+                              width="140%"
+                              height="140%"
+                            >
+                              <feGaussianBlur stdDeviation={polygon_feather_radius(card_bbox)} />
+                            </filter>
+                            <mask
+                              id={"gallery-polygon-mask-#{image.id}"}
+                              maskUnits="userSpaceOnUse"
+                              x={card_bbox.x}
+                              y={card_bbox.y}
+                              width={card_bbox.width}
+                              height={card_bbox.height}
+                            >
+                              <rect
+                                x={card_bbox.x}
+                                y={card_bbox.y}
+                                width={card_bbox.width}
+                                height={card_bbox.height}
+                                fill="black"
+                              />
+                              <polygon
+                                points={poly_pts}
+                                fill="white"
+                                filter={"url(#gallery-feather-#{image.id})"}
+                              />
+                            </mask>
                           </defs>
                           <image
                             href={image_thumbnail_url(image)}
                             width={orig_w}
                             height={orig_h}
-                            clip-path={"url(#gallery-polygon-clip-#{image.id})"}
+                            mask={"url(#gallery-polygon-mask-#{image.id})"}
                           />
                         <% else %>
                           <%!-- 旧矩形データ: クリップなし --%>
@@ -519,25 +550,52 @@ defmodule AlchemIiifWeb.GalleryLive do
                     class="max-w-full max-h-[90vh] shadow-2xl"
                     preserveAspectRatio="xMidYMid meet"
                   >
-                    <%!-- 白背景: clipPath 外の透過領域を白で塗りつぶし --%>
+                    <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                     <rect
                       x={@selected_bbox.x}
                       y={@selected_bbox.y}
                       width={@selected_bbox.width}
                       height={@selected_bbox.height}
-                      fill="white"
+                      fill={@selected_polygon_fill}
                     />
                     <%= if @selected_polygon_points do %>
                       <defs>
-                        <clipPath id={"gallery-modal-clip-#{@selected_image.id}"}>
-                          <polygon points={@selected_polygon_points} />
-                        </clipPath>
+                        <filter
+                          id={"gallery-modal-feather-#{@selected_image.id}"}
+                          x="-20%"
+                          y="-20%"
+                          width="140%"
+                          height="140%"
+                        >
+                          <feGaussianBlur stdDeviation={polygon_feather_radius(@selected_bbox)} />
+                        </filter>
+                        <mask
+                          id={"gallery-modal-mask-#{@selected_image.id}"}
+                          maskUnits="userSpaceOnUse"
+                          x={@selected_bbox.x}
+                          y={@selected_bbox.y}
+                          width={@selected_bbox.width}
+                          height={@selected_bbox.height}
+                        >
+                          <rect
+                            x={@selected_bbox.x}
+                            y={@selected_bbox.y}
+                            width={@selected_bbox.width}
+                            height={@selected_bbox.height}
+                            fill="black"
+                          />
+                          <polygon
+                            points={@selected_polygon_points}
+                            fill="white"
+                            filter={"url(#gallery-modal-feather-#{@selected_image.id})"}
+                          />
+                        </mask>
                       </defs>
                       <image
                         href={image_thumbnail_url(@selected_image)}
                         width={orig_w}
                         height={orig_h}
-                        clip-path={"url(#gallery-modal-clip-#{@selected_image.id})"}
+                        mask={"url(#gallery-modal-mask-#{@selected_image.id})"}
                       />
                     <% else %>
                       <image
@@ -655,8 +713,10 @@ defmodule AlchemIiifWeb.GalleryLive do
               </div>
             </div>
 
-            <%!-- 元 PDF ダウンロードリンク --%>
-            <%= if @selected_image.pdf_source && @selected_image.pdf_source.filename not in [nil, ""] do %>
+            <%!-- 元 PDF ダウンロードリンク（PDF 由来の source のみ） --%>
+            <%= if @selected_image.pdf_source &&
+                    AlchemIiif.Ingestion.PdfSource.pdf?(@selected_image.pdf_source) &&
+                    @selected_image.pdf_source.filename not in [nil, ""] do %>
               <div class="w-full max-w-4xl mt-2 text-center">
                 <a
                   href={pdf_url(@selected_image.pdf_source)}
@@ -703,14 +763,37 @@ defmodule AlchemIiifWeb.GalleryLive do
   defp remaining_count(total, loaded), do: total - length(loaded)
 
   # 画像プレビューマップの構築（SVGカードクロップ + ポリゴン表示用）
-  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox} を保持
+  # 各画像IDに対し {dims_w, dims_h, polygon_points_str, bbox, fill_color} を保持
   defp build_preview_map(images) do
     Map.new(images, fn image ->
       {orig_w, orig_h} = read_source_dimensions(image.image_path)
       {polygon_points, bbox} = extract_preview_data(image.geometry)
-      {image.id, {orig_w, orig_h, polygon_points, bbox}}
+      fill_color = polygon_fill_color(image)
+      {image.id, {orig_w, orig_h, polygon_points, bbox, fill_color}}
     end)
   end
+
+  # ポリゴン外の塗り色を bbox 外周のサンプル平均から決定する。
+  # 画像読込やサンプリングに失敗した場合は #ffffff にフォールバックし、
+  # 旧来の挙動（白背景）を維持する。
+  defp polygon_fill_color(%{geometry: %{"points" => points}, image_path: path})
+       when is_list(points) and length(points) >= 3 do
+    case ImageProcessor.sample_polygon_border_color(path, points) do
+      {:ok, hex} -> hex
+      _ -> "#ffffff"
+    end
+  end
+
+  defp polygon_fill_color(_image), do: "#ffffff"
+
+  # ポリゴン外周のフェザー半径を bbox サイズから決める。
+  # min(w,h) の 3.0% を基準に最低 7.5px。原寸座標系（user space）の値。
+  defp polygon_feather_radius(%{width: w, height: h})
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
+    Float.round(max(7.5, min(w, h) * 0.03), 2)
+  end
+
+  defp polygon_feather_radius(_), do: 7.5
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do

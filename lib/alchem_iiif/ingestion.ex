@@ -133,21 +133,25 @@ defmodule AlchemIiif.Ingestion do
     - {:error, :file_not_found} — PDF ファイルが存在しない
   """
   def reprocess_pdf_source(%PdfSource{} = pdf_source, opts \\ %{}) do
-    case UploadStore.existing_pdf_path(pdf_source.filename) do
-      {:ok, pdf_path} ->
-        # ステータスを converting に戻す
-        {:ok, _} = update_pdf_source(pdf_source, %{status: "converting"})
+    if PdfSource.pdf?(pdf_source) do
+      case UploadStore.existing_pdf_path(pdf_source.filename) do
+        {:ok, pdf_path} ->
+          # ステータスを converting に戻す
+          {:ok, _} = update_pdf_source(pdf_source, %{status: "converting"})
 
-        pipeline_id = AlchemIiif.Pipeline.generate_pipeline_id()
+          pipeline_id = AlchemIiif.Pipeline.generate_pipeline_id()
 
-        Task.start(fn ->
-          AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, opts)
-        end)
+          Task.start(fn ->
+            AlchemIiif.Pipeline.run_pdf_extraction(pdf_source, pdf_path, pipeline_id, opts)
+          end)
 
-        {:ok, pipeline_id}
+          {:ok, pipeline_id}
 
-      {:error, _reason} ->
-        {:error, :file_not_found}
+        {:error, _reason} ->
+          {:error, :file_not_found}
+      end
+    else
+      {:error, :unsupported_source_type}
     end
   end
 
@@ -226,12 +230,14 @@ defmodule AlchemIiif.Ingestion do
       end)
 
       # 2. ページ画像ディレクトリを削除
-      Enum.each(UploadStore.pages_dirs(pdf_source.id), &File.rm_rf/1)
+      Enum.each(UploadStore.pages_dirs(pdf_source), &File.rm_rf/1)
 
-      # 3. PDF 物理ファイルを削除
-      pdf_source.filename
-      |> UploadStore.pdf_paths()
-      |> Enum.each(&delete_file/1)
+      # 3. PDF source のみ物理ファイルを削除（ZIP source はスキップ）
+      if PdfSource.pdf?(pdf_source) do
+        pdf_source.filename
+        |> UploadStore.pdf_paths()
+        |> Enum.each(&delete_file/1)
+      end
 
       # 4. 関連 ExtractedImage DB レコードを一括削除
       Repo.delete_all(from(e in ExtractedImage, where: e.pdf_source_id == ^pdf_source.id))

@@ -29,7 +29,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       # PDF ファイルを選択（file_input でエントリを登録）
       pdf_input =
-        file_input(view_a, "#upload-form", :pdf, [
+        file_input(view_a, "#upload-form", :source, [
           %{
             name: "secret_plan.pdf",
             content: <<0, 1, 2, 3, 4>>,
@@ -63,14 +63,14 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
     setup :register_and_log_in_user
 
     setup do
-      previous = Application.get_env(:alchem_iiif, :pdf_processing_dispatch_test_pid)
-      Application.put_env(:alchem_iiif, :pdf_processing_dispatch_test_pid, self())
+      previous = Application.get_env(:alchem_iiif, :source_processing_dispatch_test_pid)
+      Application.put_env(:alchem_iiif, :source_processing_dispatch_test_pid, self())
 
       on_exit(fn ->
         if previous do
-          Application.put_env(:alchem_iiif, :pdf_processing_dispatch_test_pid, previous)
+          Application.put_env(:alchem_iiif, :source_processing_dispatch_test_pid, previous)
         else
-          Application.delete_env(:alchem_iiif, :pdf_processing_dispatch_test_pid)
+          Application.delete_env(:alchem_iiif, :source_processing_dispatch_test_pid)
         end
       end)
 
@@ -93,25 +93,25 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       html = render_hook(view, "switch_tab", %{"tab" => "not-a-tab"})
 
-      assert html =~ "PDFファイルをアップロード"
+      assert html =~ "PDF または ZIP をアップロード"
     end
 
     test "設定された PDF アップロードサイズ上限を超えるファイルは拒否される", %{conn: conn} do
-      previous = Application.get_env(:alchem_iiif, :max_pdf_upload_bytes)
-      Application.put_env(:alchem_iiif, :max_pdf_upload_bytes, 10)
+      previous = Application.get_env(:alchem_iiif, :max_source_upload_bytes)
+      Application.put_env(:alchem_iiif, :max_source_upload_bytes, 10)
 
       on_exit(fn ->
         if previous do
-          Application.put_env(:alchem_iiif, :max_pdf_upload_bytes, previous)
+          Application.put_env(:alchem_iiif, :max_source_upload_bytes, previous)
         else
-          Application.delete_env(:alchem_iiif, :max_pdf_upload_bytes)
+          Application.delete_env(:alchem_iiif, :max_source_upload_bytes)
         end
       end)
 
       {:ok, view, _html} = live(conn, ~p"/lab/upload")
 
       pdf_input =
-        file_input(view, "#upload-form", :pdf, [
+        file_input(view, "#upload-form", :source, [
           %{
             name: "too_large.pdf",
             content: String.duplicate("x", 11),
@@ -139,7 +139,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       # PDF ファイルをアップロード
       pdf_input =
-        file_input(view, "#upload-form", :pdf, [
+        file_input(view, "#upload-form", :source, [
           %{
             name: "test_report.pdf",
             content: <<0, 1, 2, 3, 4>>,
@@ -149,13 +149,13 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "test_report.pdf")
 
-      render_submit(view, "upload_pdf", %{"color_mode" => "mono"})
+      render_submit(view, "upload_source", %{"color_mode" => "mono"})
 
-      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert_receive {:source_processing_dispatched, dispatched}, 1_000
       assert dispatched.user_id == user.id
-      assert dispatched.color_mode == "mono"
-      assert dispatched.pdf_source_id
-      assert String.ends_with?(dispatched.pdf_path, ".pdf")
+      assert dispatched.opts.color_mode == "mono"
+      assert dispatched.source_id
+      assert String.ends_with?(dispatched.source_path, ".pdf")
 
       # PdfSource が書誌情報付きで作成されていることを確認
       [pdf_source] =
@@ -184,7 +184,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       })
 
       pdf_input =
-        file_input(view, "#upload-form", :pdf, [
+        file_input(view, "#upload-form", :source, [
           %{
             name: "page_limit.pdf",
             content: <<0, 1, 2, 3, 4>>,
@@ -194,14 +194,14 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "page_limit.pdf")
 
-      render_submit(view, "upload_pdf", %{
+      render_submit(view, "upload_source", %{
         "color_mode" => "mono",
         "max_pages" => "75"
       })
 
-      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert_receive {:source_processing_dispatched, dispatched}, 1_000
       assert dispatched.user_id == user.id
-      assert dispatched.color_mode == %{color_mode: "mono", max_pages: 75}
+      assert dispatched.opts == %{color_mode: "mono", max_pages: 75}
     end
 
     test "survey_year に範囲外の値を入力するとエラーが表示される", _context do
@@ -221,7 +221,7 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       # 書誌フィールドは一切入力しない
       pdf_input =
-        file_input(view, "#upload-form", :pdf, [
+        file_input(view, "#upload-form", :source, [
           %{
             name: "empty_fields.pdf",
             content: <<0, 1, 2, 3, 4>>,
@@ -231,12 +231,12 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
 
       render_upload(pdf_input, "empty_fields.pdf")
 
-      render_submit(view, "upload_pdf", %{"color_mode" => "mono"})
+      render_submit(view, "upload_source", %{"color_mode" => "mono"})
 
-      assert_receive {:pdf_processing_dispatched, dispatched}, 1_000
+      assert_receive {:source_processing_dispatched, dispatched}, 1_000
       assert dispatched.user_id == user.id
-      assert dispatched.color_mode == "mono"
-      assert dispatched.pdf_source_id
+      assert dispatched.opts.color_mode == "mono"
+      assert dispatched.source_id
 
       # PdfSource が作成されている（書誌フィールドは nil）
       [pdf_source] =
@@ -245,6 +245,32 @@ defmodule AlchemIiifWeb.InspectorLive.UploadTest do
       assert pdf_source.filename =~ "empty_fields"
       assert is_nil(pdf_source.report_title)
       assert is_nil(pdf_source.investigating_org)
+    end
+
+    test "ZIP をアップロードすると source_type=zip で dispatch される", %{conn: conn, user: user} do
+      {:ok, view, _html} = live(conn, ~p"/lab/upload")
+
+      zip_input =
+        file_input(view, "#upload-form", :source, [
+          %{
+            name: "pages.zip",
+            content: <<80, 75, 3, 4, 0>>,
+            type: "application/zip"
+          }
+        ])
+
+      render_upload(zip_input, "pages.zip")
+      render_submit(view, "upload_source", %{"color_mode" => "mono"})
+
+      assert_receive {:source_processing_dispatched, dispatched}, 1_000
+      assert dispatched.user_id == user.id
+      assert dispatched.source_type == "zip"
+      assert String.ends_with?(dispatched.source_path, ".zip")
+
+      [pdf_source] =
+        Repo.all(from p in PdfSource, where: p.user_id == ^user.id, order_by: [desc: p.id])
+
+      assert pdf_source.source_type == "zip"
     end
   end
 end

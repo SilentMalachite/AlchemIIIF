@@ -149,7 +149,7 @@ defmodule AlchemIiif.PipelineTest do
           Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
         end)
 
-      assert_receive {:pipeline_progress, %{event: :pipeline_started, phase: :pdf_extraction}},
+      assert_receive {:pipeline_progress, %{event: :pipeline_started, phase: :extraction}},
                      5_000
 
       # Task の完了を待ってから Sandbox がクリーンアップされるようにする
@@ -214,6 +214,83 @@ defmodule AlchemIiif.PipelineTest do
                  from e in AlchemIiif.Ingestion.ExtractedImage,
                    where: e.pdf_source_id == ^pdf_source.id
                )
+    end
+  end
+
+  describe "run_extraction/4 ZIP error formatting" do
+    @png_magic <<137, 80, 78, 71, 13, 10, 26, 10>>
+
+    defp build_zip(zip_path, files) do
+      entries = Enum.map(files, fn {name, bin} -> {String.to_charlist(name), bin} end)
+      {:ok, _} = :zip.create(String.to_charlist(zip_path), entries)
+      zip_path
+    end
+
+    test "ZipProcessor がタプル理由 {:too_many_pages, _, _} を返してもクラッシュせず、人間可読なメッセージを broadcast する" do
+      pdf_source = insert_pdf_source(%{status: "uploading", source_type: "zip"})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      Phoenix.PubSub.subscribe(@pubsub, Pipeline.topic(pipeline_id))
+
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "pipeline_zip_too_many_#{System.unique_integer([:positive])}.zip"
+        )
+
+      build_zip(tmp, for(i <- 1..3, do: {"p#{i}.png", @png_magic}))
+      on_exit(fn -> File.rm(tmp) end)
+
+      assert {:error, {:too_many_pages, 3, 1}} =
+               Pipeline.run_extraction(
+                 Map.put(pdf_source, :source_type, "zip"),
+                 tmp,
+                 pipeline_id,
+                 %{max_pages: 1}
+               )
+
+      assert_receive {:pipeline_progress,
+                      %{event: :pipeline_error, phase: :extraction, message: message}},
+                     5_000
+
+      assert is_binary(message)
+      assert message =~ "ZIP"
+      assert message =~ "3"
+      assert message =~ "1"
+      refute message =~ "{:too_many_pages"
+
+      reloaded = Repo.reload!(pdf_source)
+      assert reloaded.status == "error"
+    end
+
+    test ":no_png_entries / :extracted_size_exceeds_limit のような atom 理由も整形される" do
+      pdf_source = insert_pdf_source(%{status: "uploading", source_type: "zip"})
+      pipeline_id = Pipeline.generate_pipeline_id()
+
+      Phoenix.PubSub.subscribe(@pubsub, Pipeline.topic(pipeline_id))
+
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "pipeline_zip_no_png_#{System.unique_integer([:positive])}.zip"
+        )
+
+      build_zip(tmp, [{"readme.txt", "hello"}])
+      on_exit(fn -> File.rm(tmp) end)
+
+      assert {:error, :no_png_entries} =
+               Pipeline.run_extraction(
+                 Map.put(pdf_source, :source_type, "zip"),
+                 tmp,
+                 pipeline_id,
+                 %{}
+               )
+
+      assert_receive {:pipeline_progress, %{event: :pipeline_error, message: message}},
+                     5_000
+
+      assert is_binary(message)
+      assert message =~ "PNG"
     end
   end
 

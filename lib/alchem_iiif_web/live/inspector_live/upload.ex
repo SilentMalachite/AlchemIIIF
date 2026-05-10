@@ -28,7 +28,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
 
     {:ok,
      socket
-     |> assign(:page_title, "PDF をアップロード")
+     |> assign(:page_title, "PDF または ZIP をアップロード")
      |> assign(:current_step, 1)
      |> assign(:uploading, false)
      |> assign(:error_message, nil)
@@ -44,10 +44,10 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
      |> assign(:survey_year, nil)
      |> assign(:site_code, "")
      |> assign(:license_uri, "")
-     |> allow_upload(:pdf,
-       accept: ~w(.pdf),
+     |> allow_upload(:source,
+       accept: ~w(.pdf .zip),
        max_entries: 1,
-       max_file_size: max_pdf_upload_bytes()
+       max_file_size: max_source_upload_bytes()
      )}
   end
 
@@ -83,9 +83,8 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   @impl true
-  # セキュリティ注記: upload_dir は固定パス（priv/uploads/pdfs）、
-  # path は Phoenix LiveView の一時ファイル、dest は内部生成で安全。
-  def handle_event("upload_pdf", params, socket) do
+  # セキュリティ注記: upload_dir は固定パス、path は LiveView の一時ファイル、dest は内部生成で安全。
+  def handle_event("upload_source", params, socket) do
     color_mode = get_in(params, ["color_mode"]) || socket.assigns.color_mode
     max_pages_param = get_in(params, ["max_pages"])
     max_pages = parse_max_pages(max_pages_param, socket.assigns.max_pages)
@@ -93,27 +92,41 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
     processing_opts = processing_options(color_mode, max_pages, max_pages_param)
     socket = assign(socket, uploading: true, color_mode: color_mode, max_pages: max_pages)
 
-    uploaded_files =
-      consume_uploaded_entries(socket, :pdf, fn %{path: path}, entry ->
-        # アップロードディレクトリの作成
-        upload_dir = UploadStore.pdfs_dir()
-        File.mkdir_p!(upload_dir)
-
-        # ファイル名にタイムスタンプを付与して衝突を防止
+    uploaded =
+      consume_uploaded_entries(socket, :source, fn %{path: path}, entry ->
         timestamp = System.system_time(:second)
-        ext = Path.extname(entry.client_name)
-        base = Path.basename(entry.client_name, ext)
+        ext = String.downcase(Path.extname(entry.client_name))
+        base = Path.basename(entry.client_name, Path.extname(entry.client_name))
         versioned_name = "#{base}-#{timestamp}#{ext}"
-        dest = Path.join(upload_dir, versioned_name)
+        source_type = source_type_for_ext(ext)
+
+        dest =
+          case source_type do
+            "pdf" ->
+              dir = UploadStore.pdfs_dir()
+              File.mkdir_p!(dir)
+              Path.join(dir, versioned_name)
+
+            "zip" ->
+              dir =
+                Path.join(
+                  System.tmp_dir!(),
+                  "alchemiiif_zip_#{System.unique_integer([:positive])}"
+                )
+
+              File.mkdir_p!(dir)
+              Path.join(dir, versioned_name)
+          end
+
         File.cp!(path, dest)
-        {:ok, dest}
+        {:ok, {dest, source_type}}
       end)
 
-    case uploaded_files do
-      [pdf_path] ->
-        # PDFソースレコードを作成
+    case uploaded do
+      [{source_path, source_type}] ->
         case Ingestion.create_pdf_source(%{
-               filename: Path.basename(pdf_path),
+               filename: Path.basename(source_path),
+               source_type: source_type,
                status: "converting",
                user_id: socket.assigns.current_user.id,
                report_title: non_empty_or_nil(socket.assigns.report_title),
@@ -122,30 +135,25 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
                site_code: non_empty_or_nil(socket.assigns.site_code),
                license_uri: non_empty_or_nil(socket.assigns.license_uri)
              }) do
-          {:ok, pdf_source} ->
-            # パイプラインIDを生成
+          {:ok, source} ->
             pipeline_id = Pipeline.generate_pipeline_id()
-
             owner_id = socket.assigns.current_user.id
 
-            # ユーザーに紐付くWorkerに処理を委譲（カラーモードを渡す）
-            AlchemIiif.PdfProcessingDispatcher.dispatch_pdf_processing(
+            AlchemIiif.SourceProcessingDispatcher.dispatch_source_processing(
               owner_id,
-              pdf_source,
-              pdf_path,
+              source,
+              source_path,
               pipeline_id,
-              processing_opts
+              normalize_dispatch_opts(processing_opts)
             )
 
-            # 完了メッセージを購読する
-            Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "pdf_source_#{pdf_source.id}")
+            Phoenix.PubSub.subscribe(AlchemIiif.PubSub, "source_#{source.id}")
 
-            # 処理中のUI状態を維持
             {:noreply,
              socket
              |> assign(:uploading, true)
-             |> assign(:processing_pdf_id, pdf_source.id)
-             |> put_flash(:info, "裏側でPDF処理を開始しました。完了するまでこの画面でお待ちください...")}
+             |> assign(:processing_source_id, source.id)
+             |> put_flash(:info, "裏側で処理を開始しました。完了するまでこの画面でお待ちください...")}
 
           {:error, changeset} ->
             errors =
@@ -162,9 +170,19 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
         {:noreply,
          socket
          |> assign(:uploading, false)
-         |> assign(:error_message, "PDFファイルを選択してください")}
+         |> assign(:error_message, "PDF または ZIP ファイルを選択してください")}
     end
   end
+
+  defp source_type_for_ext(".pdf"), do: "pdf"
+  defp source_type_for_ext(".zip"), do: "zip"
+
+  defp normalize_dispatch_opts(%{} = opts), do: opts
+
+  defp normalize_dispatch_opts(color_mode) when is_binary(color_mode),
+    do: %{color_mode: color_mode}
+
+  defp normalize_dispatch_opts(_), do: %{color_mode: "mono"}
 
   @impl true
   def handle_info({:extraction_progress, current, total}, socket) do
@@ -183,13 +201,13 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   end
 
   @impl true
-  def handle_info({:pdf_processed, pdf_source_id}, socket) do
-    if socket.assigns[:processing_pdf_id] == pdf_source_id do
+  def handle_info({:source_processed, source_id}, socket) do
+    if socket.assigns[:processing_source_id] == source_id do
       {:noreply,
        socket
        |> assign(:uploading, false)
-       |> put_flash(:info, "PDFの処理が完了しました！")
-       |> push_navigate(to: ~p"/lab/browse/#{pdf_source_id}")}
+       |> put_flash(:info, "処理が完了しました！")
+       |> push_navigate(to: ~p"/lab/browse/#{source_id}")}
     else
       {:noreply, socket}
     end
@@ -227,10 +245,10 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
       <%!-- アップロードタブ --%>
       <%= if @active_tab == :upload do %>
         <div class="upload-area">
-          <h2 class="section-title">PDFファイルをアップロード</h2>
-          <p class="section-description">考古学報告書のPDFファイルを選択してください。</p>
+          <h2 class="section-title">PDF または ZIP をアップロード</h2>
+          <p class="section-description">考古学報告書の PDF、または複数 PNG を同梱した ZIP を選択してください。</p>
 
-          <form id="upload-form" phx-submit="upload_pdf" phx-change="validate">
+          <form id="upload-form" phx-submit="upload_source" phx-change="validate">
             <%!-- カラーモード切替ラジオボタン --%>
             <div class="color-mode-selector">
               <span class="color-mode-label">変換モード:</span>
@@ -352,15 +370,15 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
               </div>
             </details>
 
-            <div class="upload-dropzone" phx-drop-target={@uploads.pdf.ref}>
-              <.live_file_input upload={@uploads.pdf} class="file-input" />
+            <div class="upload-dropzone" phx-drop-target={@uploads.source.ref}>
+              <.live_file_input upload={@uploads.source} class="file-input" />
               <div class="dropzone-content">
                 <span class="dropzone-icon">📄</span>
-                <span class="dropzone-text">ここにPDFをドラッグ、またはクリックして選択</span>
+                <span class="dropzone-text">ここに PDF または ZIP をドラッグ、またはクリックして選択</span>
               </div>
             </div>
 
-            <%= for entry <- @uploads.pdf.entries do %>
+            <%= for entry <- @uploads.source.entries do %>
               <div class="upload-entry">
                 <span class="entry-name">{entry.client_name}</span>
                 <progress value={entry.progress} max="100" class="upload-progress">
@@ -369,7 +387,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
               </div>
 
               <%!-- エントリ単位のアップロードエラー表示 --%>
-              <%= for err <- upload_errors(@uploads.pdf, entry) do %>
+              <%= for err <- upload_errors(@uploads.source, entry) do %>
                 <div class="error-message" role="alert">
                   <span class="error-icon">⚠️</span>
                   {translate_upload_error(err)}
@@ -378,7 +396,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
             <% end %>
 
             <%!-- 全体のアップロードエラー表示 --%>
-            <%= for err <- upload_errors(@uploads.pdf) do %>
+            <%= for err <- upload_errors(@uploads.source) do %>
               <div class="error-message" role="alert">
                 <span class="error-icon">⚠️</span>
                 {translate_upload_error(err)}
@@ -395,7 +413,7 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
             <button
               type="submit"
               class="btn-primary btn-large"
-              disabled={@uploading || @uploads.pdf.entries == []}
+              disabled={@uploading || @uploads.source.entries == []}
             >
               <%= if @uploading do %>
                 <span class="spinner"></span> アップロード中...
@@ -479,15 +497,15 @@ defmodule AlchemIiifWeb.InspectorLive.Upload do
   # アップロードエラーを日本語に変換するヘルパー
   defp translate_upload_error(:too_large), do: "ファイルサイズが上限を超えています。"
   defp translate_upload_error(:too_many_files), do: "アップロードできるファイルは1つだけです。"
-  defp translate_upload_error(:not_accepted), do: "PDFファイルのみアップロード可能です。"
+  defp translate_upload_error(:not_accepted), do: "PDF または ZIP ファイルのみアップロード可能です。"
   defp translate_upload_error(err), do: "アップロードエラー: #{inspect(err)}"
 
-  defp max_pdf_upload_bytes do
-    Application.get_env(:alchem_iiif, :max_pdf_upload_bytes, 100_000_000)
+  defp max_source_upload_bytes do
+    Application.get_env(:alchem_iiif, :max_source_upload_bytes, 200_000_000)
   end
 
   defp max_pdf_pages do
-    Application.get_env(:alchem_iiif, :pdf_max_pages, 200)
+    Application.get_env(:alchem_iiif, :pdf_max_pages, 1500)
     |> max(1)
   end
 

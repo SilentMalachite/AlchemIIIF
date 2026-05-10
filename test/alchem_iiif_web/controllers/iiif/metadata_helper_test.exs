@@ -81,7 +81,8 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
         report_title: "発掘調査報告書",
         survey_year: 2024,
         filename: "report.pdf",
-        id: 123
+        id: 123,
+        source_type: "pdf"
       }
 
       result = MetadataHelper.build_recommended_properties(source)
@@ -158,7 +159,7 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
 
   describe "build_rendering/1" do
     test "filename がある場合は PDF rendering 配列を返す" do
-      source = %{id: 123, filename: "report.pdf"}
+      source = %{id: 123, filename: "report.pdf", source_type: "pdf"}
       result = MetadataHelper.build_rendering(source)
 
       assert is_list(result)
@@ -173,13 +174,23 @@ defmodule AlchemIiifWeb.IIIF.MetadataHelperTest do
     end
 
     test "filename が nil の場合は nil を返す" do
-      source = %{filename: nil}
+      source = %{filename: nil, source_type: "pdf"}
       assert MetadataHelper.build_rendering(source) == nil
     end
 
     test "filename が空文字の場合は nil を返す" do
-      source = %{filename: ""}
+      source = %{filename: "", source_type: "pdf"}
       assert MetadataHelper.build_rendering(source) == nil
+    end
+
+    test "source_type が zip の場合は nil を返す" do
+      source = %{id: 123, filename: "pages.zip", source_type: "zip"}
+      assert MetadataHelper.build_rendering(source) == nil
+    end
+
+    test "source_type が pdf の場合は rendering 配列を返す" do
+      source = %{id: 123, filename: "report.pdf", source_type: "pdf"}
+      assert [%{"format" => "application/pdf"}] = MetadataHelper.build_rendering(source)
     end
   end
 

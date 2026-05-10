@@ -14,6 +14,7 @@ defmodule AlchemIiif.Factory do
     Map.merge(
       %{
         filename: "test_report_#{System.unique_integer([:positive])}.pdf",
+        source_type: "pdf",
         page_count: 10,
         status: "ready"
       },
