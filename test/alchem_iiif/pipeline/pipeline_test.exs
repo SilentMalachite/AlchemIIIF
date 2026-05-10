@@ -149,7 +149,7 @@ defmodule AlchemIiif.PipelineTest do
           Pipeline.run_pdf_extraction(pdf_source, "/nonexistent/test.pdf", pipeline_id)
         end)
 
-      assert_receive {:pipeline_progress, %{event: :pipeline_started, phase: :pdf_extraction}},
+      assert_receive {:pipeline_progress, %{event: :pipeline_started, phase: :extraction}},
                      5_000
 
       # Task の完了を待ってから Sandbox がクリーンアップされるようにする
