@@ -143,10 +143,14 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
     end
   end
 
-  # ポリゴンマスキングのコアロジック（ifthenelse 白背景合成）
+  # ポリゴンマスキングのコアロジック（ifthenelse 周囲色合成）
   #
   # JPEG はアルファチャンネルを持てないため、ポリゴン外を物理的に
-  # 純白 [255,255,255] で塗りつぶし、3バンド RGB 画像として返す。
+  # 「周囲色」で塗りつぶし、3バンド RGB 画像として返す。
+  # 周囲色は bounding box の外周 8 点（四隅 + 各辺中点）を getpoint で
+  # サンプルし、その平均 RGB を使用する。bbox の外周はほとんどの場合
+  # ポリゴンの外側であり、元画像の「ポリゴンの周囲」ピクセルに該当する。
+  # サンプリングに失敗した場合は従来通り純白にフォールバックする。
   defp apply_polygon_mask(image_path, points) do
     with {:ok, image} <- Image.new_from_file(image_path) do
       # 1. バウンディングボックスを計算
@@ -159,10 +163,6 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
       min_y = max(0, min(min_y, img_h - 1))
       bbox_w = min(bbox_w, img_w - min_x)
       bbox_h = min(bbox_h, img_h - min_y)
-
-      Logger.info(
-        "[ImageProcessor] Polygon crop (white mask): bbox=#{min_x},#{min_y},#{bbox_w}x#{bbox_h} points=#{length(points)}"
-      )
 
       # 2. バウンディングボックスで矩形クロップ（メモリ節約）
       with {:ok, cropped_img} <- Operation.extract_area(image, min_x, min_y, bbox_w, bbox_h) do
@@ -189,21 +189,88 @@ defmodule AlchemIiif.Ingestion.ImageProcessor do
         # 1バンドマスクを抽出（白=255, 黒=0）
         {:ok, mask} = Operation.extract_band(svg_img, 0)
 
-        # 4. 純白 RGB 背景画像を作成（black → invert で全ピクセル 255）
-        {:ok, black} = Operation.black(width, height)
-        {:ok, white} = Operation.invert(black)
-        {:ok, white_bg} = Operation.bandjoin([white, white, white])
-
-        # 5. クロップ画像を正確に 3バンド RGB に正規化（バンドミスマッチ防止）
+        # 4. クロップ画像を正確に 3バンド RGB に正規化（バンドミスマッチ防止）
         {:ok, rgb_img} = Operation.extract_band(cropped_img, 0, n: 3)
+
+        # 5. 周囲色をサンプリングして塗りつぶし用の単色背景を作成
+        fill_color = sample_border_color(rgb_img, width, height)
+        {:ok, fill_bg} = build_solid_rgb(width, height, fill_color)
+
+        Logger.info(
+          "[ImageProcessor] Polygon crop (border-color fill #{inspect(fill_color)}): " <>
+            "bbox=#{min_x},#{min_y},#{bbox_w}x#{bbox_h} points=#{length(points)}"
+        )
 
         # 6. ifthenelse 合成:
         #    マスクが白(>0)の箇所 → rgb_img（元画像）
-        #    マスクが黒(0)の箇所 → white_bg（純白背景）
-        {:ok, final_img} = Operation.ifthenelse(mask, rgb_img, white_bg)
+        #    マスクが黒(0)の箇所 → fill_bg（周囲色背景）
+        {:ok, final_img} = Operation.ifthenelse(mask, rgb_img, fill_bg)
 
         {:ok, final_img}
       end
+    end
+  end
+
+  # 3バンド RGB 画像の bbox 外周 8 点（四隅 + 各辺中点）の平均色を返す。
+  # bbox 外周はほとんどの場合ポリゴンの外側なので、polygon の周囲色として妥当。
+  # サンプルが取れなかった場合は純白にフォールバック。
+  @fallback_color [255, 255, 255]
+  defp sample_border_color(rgb_img, width, height)
+       when width > 0 and height > 0 do
+    sample_points = [
+      {0, 0},
+      {width - 1, 0},
+      {0, height - 1},
+      {width - 1, height - 1},
+      {div(width, 2), 0},
+      {div(width, 2), height - 1},
+      {0, div(height, 2)},
+      {width - 1, div(height, 2)}
+    ]
+
+    samples =
+      Enum.flat_map(sample_points, fn {x, y} ->
+        case Operation.getpoint(rgb_img, x, y) do
+          {:ok, [_ | _] = pixel} -> [normalize_pixel(pixel)]
+          _ -> []
+        end
+      end)
+
+    case samples do
+      [] ->
+        @fallback_color
+
+      _ ->
+        n = length(samples) * 1.0
+
+        samples
+        |> Enum.zip()
+        |> Enum.map(fn band_tuple ->
+          band_tuple
+          |> Tuple.to_list()
+          |> Enum.sum()
+          |> Kernel./(n)
+          |> round()
+          |> max(0)
+          |> min(255)
+        end)
+    end
+  end
+
+  defp sample_border_color(_rgb_img, _w, _h), do: @fallback_color
+
+  # getpoint の戻り値を [r, g, b] の 3 要素リストに正規化する。
+  # 1バンド（グレースケール）の場合は同値を 3 回複製する。
+  defp normalize_pixel([v]), do: [v, v, v]
+  defp normalize_pixel([r, g, b | _]), do: [r, g, b]
+  defp normalize_pixel(other), do: List.duplicate(hd(other ++ [255.0]), 3)
+
+  # 指定 RGB の単色 3バンド uchar 画像を生成する。
+  defp build_solid_rgb(width, height, [r, g, b]) do
+    with {:ok, black} <- Operation.black(width, height, bands: 3),
+         {:ok, colored} <-
+           Operation.linear(black, [0.0, 0.0, 0.0], [r * 1.0, g * 1.0, b * 1.0]) do
+      Operation.cast(colored, :VIPS_FORMAT_UCHAR)
     end
   end
 
