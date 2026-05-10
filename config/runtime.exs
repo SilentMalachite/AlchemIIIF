@@ -67,6 +67,16 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
+  config :alchem_iiif, AlchemIiif.Ingestion.ZipProcessor,
+    max_extracted_bytes:
+      System.get_env("ZIP_MAX_EXTRACTED_BYTES", "2147483648")
+      |> String.to_integer()
+
+  config :alchem_iiif,
+    max_source_upload_bytes:
+      System.get_env("MAX_SOURCE_UPLOAD_BYTES", "200000000")
+      |> String.to_integer()
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key
