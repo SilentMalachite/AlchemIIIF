@@ -318,7 +318,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                               class="w-full h-auto"
                               preserveAspectRatio="xMidYMid meet"
                             >
-                              <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+                              <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                               <rect
                                 x={card_bbox.x}
                                 y={card_bbox.y}
@@ -327,17 +327,44 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                                 fill={poly_fill}
                               />
                               <%= if poly_pts do %>
-                                <%!-- ポリゴンデータ: clipPath でマスク --%>
+                                <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                                 <defs>
-                                  <clipPath id={"review-card-clip-#{item.image.id}"}>
-                                    <polygon points={poly_pts} />
-                                  </clipPath>
+                                  <filter
+                                    id={"review-card-feather-#{item.image.id}"}
+                                    x="-10%"
+                                    y="-10%"
+                                    width="120%"
+                                    height="120%"
+                                  >
+                                    <feGaussianBlur stdDeviation={polygon_feather_radius(card_bbox)} />
+                                  </filter>
+                                  <mask
+                                    id={"review-card-mask-#{item.image.id}"}
+                                    maskUnits="userSpaceOnUse"
+                                    x={card_bbox.x}
+                                    y={card_bbox.y}
+                                    width={card_bbox.width}
+                                    height={card_bbox.height}
+                                  >
+                                    <rect
+                                      x={card_bbox.x}
+                                      y={card_bbox.y}
+                                      width={card_bbox.width}
+                                      height={card_bbox.height}
+                                      fill="black"
+                                    />
+                                    <polygon
+                                      points={poly_pts}
+                                      fill="white"
+                                      filter={"url(#review-card-feather-#{item.image.id})"}
+                                    />
+                                  </mask>
                                 </defs>
                                 <image
                                   href={image_thumbnail_url(item.image)}
                                   width={orig_w}
                                   height={orig_h}
-                                  clip-path={"url(#review-card-clip-#{item.image.id})"}
+                                  mask={"url(#review-card-mask-#{item.image.id})"}
                                 />
                               <% else %>
                                 <%!-- 旧矩形データ: クリップなし --%>
@@ -439,7 +466,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
               </button>
             </div>
 
-            <%!-- クロップ画像（SVG viewBox + ポリゴン clipPath）またはフル画像 --%>
+            <%!-- クロップ画像（SVG viewBox + ポリゴン mask）またはフル画像 --%>
             <div class="inspector-image-container">
               <%= if @selected_image.image.geometry && @selected_bbox do %>
                 <% {orig_w, orig_h} = @selected_image_dims %>
@@ -448,7 +475,7 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                   class="inspector-crop-svg"
                   preserveAspectRatio="xMidYMid meet"
                 >
-                  <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+                  <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                   <rect
                     x={@selected_bbox.x}
                     y={@selected_bbox.y}
@@ -457,17 +484,44 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
                     fill={@selected_polygon_fill}
                   />
                   <%= if @selected_polygon_points do %>
-                    <%!-- ポリゴンデータ: clipPath でマスク --%>
+                    <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                     <defs>
-                      <clipPath id={"review-polygon-clip-#{@selected_image.image.id}"}>
-                        <polygon points={@selected_polygon_points} />
-                      </clipPath>
+                      <filter
+                        id={"review-modal-feather-#{@selected_image.image.id}"}
+                        x="-10%"
+                        y="-10%"
+                        width="120%"
+                        height="120%"
+                      >
+                        <feGaussianBlur stdDeviation={polygon_feather_radius(@selected_bbox)} />
+                      </filter>
+                      <mask
+                        id={"review-polygon-mask-#{@selected_image.image.id}"}
+                        maskUnits="userSpaceOnUse"
+                        x={@selected_bbox.x}
+                        y={@selected_bbox.y}
+                        width={@selected_bbox.width}
+                        height={@selected_bbox.height}
+                      >
+                        <rect
+                          x={@selected_bbox.x}
+                          y={@selected_bbox.y}
+                          width={@selected_bbox.width}
+                          height={@selected_bbox.height}
+                          fill="black"
+                        />
+                        <polygon
+                          points={@selected_polygon_points}
+                          fill="white"
+                          filter={"url(#review-modal-feather-#{@selected_image.image.id})"}
+                        />
+                      </mask>
                     </defs>
                     <image
                       href={image_full_url(@selected_image.image)}
                       width={orig_w}
                       height={orig_h}
-                      clip-path={"url(#review-polygon-clip-#{@selected_image.image.id})"}
+                      mask={"url(#review-polygon-mask-#{@selected_image.image.id})"}
                     />
                   <% else %>
                     <%!-- 旧矩形データ: クリップなし --%>
@@ -694,6 +748,15 @@ defmodule AlchemIiifWeb.Admin.ReviewLive do
   end
 
   defp polygon_fill_color(_image), do: "#ffffff"
+
+  # ポリゴン外周のフェザー半径を bbox サイズから決める。
+  # min(w,h) の 0.6% を基準に最低 1.5px。原寸座標系（user space）の値。
+  defp polygon_feather_radius(%{width: w, height: h})
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
+    Float.round(max(1.5, min(w, h) * 0.006), 2)
+  end
+
+  defp polygon_feather_radius(_), do: 1.5
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do

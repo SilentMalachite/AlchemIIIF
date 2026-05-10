@@ -616,6 +616,15 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
 
   defp polygon_fill_color(_image_path, _geo), do: "#ffffff"
 
+  # ポリゴン外周のフェザー半径を bbox サイズから決める。
+  # min(w,h) の 0.6% を基準に最低 1.5px。原寸座標系（user space）の値。
+  defp polygon_feather_radius(%{width: w, height: h})
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
+    Float.round(max(1.5, min(w, h) * 0.006), 2)
+  end
+
+  defp polygon_feather_radius(_), do: 1.5
+
   # 安全な整数変換
   defp safe_int(val) when is_integer(val), do: val
   defp safe_int(val) when is_float(val), do: round(val)
@@ -675,7 +684,7 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
               class="label-crop-svg"
               preserveAspectRatio="xMidYMid meet"
             >
-              <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+              <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
               <rect
                 x={@bbox.x}
                 y={@bbox.y}
@@ -684,17 +693,34 @@ defmodule AlchemIiifWeb.InspectorLive.Label do
                 fill={@polygon_fill}
               />
               <%= if @polygon_points do %>
-                <%!-- ポリゴンデータ: clipPath でマスク --%>
+                <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                 <defs>
-                  <clipPath id="polygon-clip">
-                    <polygon points={@polygon_points} />
-                  </clipPath>
+                  <filter id="polygon-feather" x="-10%" y="-10%" width="120%" height="120%">
+                    <feGaussianBlur stdDeviation={polygon_feather_radius(@bbox)} />
+                  </filter>
+                  <mask
+                    id="polygon-mask"
+                    maskUnits="userSpaceOnUse"
+                    x={@bbox.x}
+                    y={@bbox.y}
+                    width={@bbox.width}
+                    height={@bbox.height}
+                  >
+                    <rect
+                      x={@bbox.x}
+                      y={@bbox.y}
+                      width={@bbox.width}
+                      height={@bbox.height}
+                      fill="black"
+                    />
+                    <polygon points={@polygon_points} fill="white" filter="url(#polygon-feather)" />
+                  </mask>
                 </defs>
                 <image
                   href={@image_url}
                   width={@orig_w}
                   height={@orig_h}
-                  clip-path="url(#polygon-clip)"
+                  mask="url(#polygon-mask)"
                 />
               <% else %>
                 <%!-- 旧矩形データ: クリップなし --%>

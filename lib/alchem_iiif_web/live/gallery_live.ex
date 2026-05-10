@@ -359,7 +359,7 @@ defmodule AlchemIiifWeb.GalleryLive do
                         class="w-full h-auto"
                         preserveAspectRatio="xMidYMid meet"
                       >
-                        <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+                        <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                         <rect
                           x={card_bbox.x}
                           y={card_bbox.y}
@@ -368,17 +368,44 @@ defmodule AlchemIiifWeb.GalleryLive do
                           fill={poly_fill}
                         />
                         <%= if poly_pts do %>
-                          <%!-- ポリゴンデータ: clipPath でマスク --%>
+                          <%!-- ポリゴンを mask + feGaussianBlur でフェザー化し境界を自然に --%>
                           <defs>
-                            <clipPath id={"gallery-polygon-clip-#{image.id}"}>
-                              <polygon points={poly_pts} />
-                            </clipPath>
+                            <filter
+                              id={"gallery-feather-#{image.id}"}
+                              x="-10%"
+                              y="-10%"
+                              width="120%"
+                              height="120%"
+                            >
+                              <feGaussianBlur stdDeviation={polygon_feather_radius(card_bbox)} />
+                            </filter>
+                            <mask
+                              id={"gallery-polygon-mask-#{image.id}"}
+                              maskUnits="userSpaceOnUse"
+                              x={card_bbox.x}
+                              y={card_bbox.y}
+                              width={card_bbox.width}
+                              height={card_bbox.height}
+                            >
+                              <rect
+                                x={card_bbox.x}
+                                y={card_bbox.y}
+                                width={card_bbox.width}
+                                height={card_bbox.height}
+                                fill="black"
+                              />
+                              <polygon
+                                points={poly_pts}
+                                fill="white"
+                                filter={"url(#gallery-feather-#{image.id})"}
+                              />
+                            </mask>
                           </defs>
                           <image
                             href={image_thumbnail_url(image)}
                             width={orig_w}
                             height={orig_h}
-                            clip-path={"url(#gallery-polygon-clip-#{image.id})"}
+                            mask={"url(#gallery-polygon-mask-#{image.id})"}
                           />
                         <% else %>
                           <%!-- 旧矩形データ: クリップなし --%>
@@ -523,7 +550,7 @@ defmodule AlchemIiifWeb.GalleryLive do
                     class="max-w-full max-h-[90vh] shadow-2xl"
                     preserveAspectRatio="xMidYMid meet"
                   >
-                    <%!-- 周囲色: clipPath 外の透過領域を画像の外周色で塗りつぶし --%>
+                    <%!-- 周囲色: mask 外の透過領域を画像の外周色で塗りつぶし --%>
                     <rect
                       x={@selected_bbox.x}
                       y={@selected_bbox.y}
@@ -533,15 +560,42 @@ defmodule AlchemIiifWeb.GalleryLive do
                     />
                     <%= if @selected_polygon_points do %>
                       <defs>
-                        <clipPath id={"gallery-modal-clip-#{@selected_image.id}"}>
-                          <polygon points={@selected_polygon_points} />
-                        </clipPath>
+                        <filter
+                          id={"gallery-modal-feather-#{@selected_image.id}"}
+                          x="-10%"
+                          y="-10%"
+                          width="120%"
+                          height="120%"
+                        >
+                          <feGaussianBlur stdDeviation={polygon_feather_radius(@selected_bbox)} />
+                        </filter>
+                        <mask
+                          id={"gallery-modal-mask-#{@selected_image.id}"}
+                          maskUnits="userSpaceOnUse"
+                          x={@selected_bbox.x}
+                          y={@selected_bbox.y}
+                          width={@selected_bbox.width}
+                          height={@selected_bbox.height}
+                        >
+                          <rect
+                            x={@selected_bbox.x}
+                            y={@selected_bbox.y}
+                            width={@selected_bbox.width}
+                            height={@selected_bbox.height}
+                            fill="black"
+                          />
+                          <polygon
+                            points={@selected_polygon_points}
+                            fill="white"
+                            filter={"url(#gallery-modal-feather-#{@selected_image.id})"}
+                          />
+                        </mask>
                       </defs>
                       <image
                         href={image_thumbnail_url(@selected_image)}
                         width={orig_w}
                         height={orig_h}
-                        clip-path={"url(#gallery-modal-clip-#{@selected_image.id})"}
+                        mask={"url(#gallery-modal-mask-#{@selected_image.id})"}
                       />
                     <% else %>
                       <image
@@ -731,6 +785,15 @@ defmodule AlchemIiifWeb.GalleryLive do
   end
 
   defp polygon_fill_color(_image), do: "#ffffff"
+
+  # ポリゴン外周のフェザー半径を bbox サイズから決める。
+  # min(w,h) の 0.6% を基準に最低 1.5px。原寸座標系（user space）の値。
+  defp polygon_feather_radius(%{width: w, height: h})
+       when is_number(w) and is_number(h) and w > 0 and h > 0 do
+    Float.round(max(1.5, min(w, h) * 0.006), 2)
+  end
+
+  defp polygon_feather_radius(_), do: 1.5
 
   # 元画像の寸法を Vix で読み取る（ヘッダーのみ遅延読み込みなので軽量）
   defp read_source_dimensions(image_path) do
